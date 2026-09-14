@@ -23,7 +23,7 @@ Checkbox legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [ ] Twerva-prefixed secrets in AWS SM/SSM — **parked**; Phase 1 secrets stay on-box (`/opt/twerva/*.env` mode 600)
 - [x] Choose stack for ops console + workers: FastAPI + React/Vite/TS + Postgres (Celery/Redis later) — Spotmu-aligned
 - [x] Empty app shells: `apps/server` (FastAPI healthcheck) + `apps/ops` (Vite React stub)
-- [ ] Healthcheck endpoint on the Twerva URL
+- [x] Healthcheck endpoint on the Twerva URL (`https://twerva.com/health` → systemd `twerva-api` / uvicorn on `127.0.0.1:8000`)
 
 ### 1.2 Domain model (minimal)
 - [ ] Persist Brand/Source (Spotmu interest as first source type), Cluster, Account, Artifact, Post job, Metric snapshot
