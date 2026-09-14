@@ -16,8 +16,8 @@ Checkbox legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ### 1.1 Repo, home & skeleton
 - [x] Confirm Twerva repo layout (`apps/` `packages/` `tools/` `docs/`); README pointing at project/product/task docs
 - [x] Copy Spotmu `style_guide.md` + Twerva `.cursorrules` + `directory.md` (coding discipline)
-- [x] Register Twerva domain
-- [ ] Public URL + TLS on Spotmu AWS (DNS → service)
+- [x] Register Twerva domain (`twerva.com`)
+- [x] Public URL + TLS on Spotmu AWS (EC2 `twerva-server`, EIP `3.19.233.237`, Spaceship A → nginx + Let's Encrypt)
 - [ ] Provision on Spotmu AWS: compute service + managed Postgres (own DB/schema) + S3 bucket/prefix for artifacts
 - [ ] Twerva-prefixed secrets in AWS SM/SSM
 - [ ] Choose stack for ops console + workers (keep boring; prefer Spotmu-aligned)
