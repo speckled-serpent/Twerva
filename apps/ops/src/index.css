@@ -1,0 +1,32 @@
+:root {
+  color: #1a1a1a;
+  background-color: #f4f4f1;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.ops-console-shell {
+  min-height: 100vh;
+  padding: 3rem 1.5rem;
+}
+
+.ops-console-shell h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.ops-console-shell p {
+  margin: 0;
+  max-width: 36rem;
+  color: #4a4a4a;
+}

@@ -21,7 +21,7 @@ Checkbox legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [ ] Provision on Spotmu AWS: compute service + managed Postgres (own DB/schema) + S3 bucket/prefix for artifacts
 - [ ] Twerva-prefixed secrets in AWS SM/SSM
 - [x] Choose stack for ops console + workers: FastAPI + React/Vite/TS + Postgres (Celery/Redis later) — Spotmu-aligned
-- [ ] Empty app shells: `apps/server` (FastAPI healthcheck) + `apps/ops` (Vite React stub)
+- [x] Empty app shells: `apps/server` (FastAPI healthcheck) + `apps/ops` (Vite React stub)
 - [ ] Healthcheck endpoint on the Twerva URL
 
 ### 1.2 Domain model (minimal)
