@@ -18,8 +18,9 @@ Checkbox legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Copy Spotmu `style_guide.md` + Twerva `.cursorrules` + `directory.md` (coding discipline)
 - [x] Register Twerva domain (`twerva.com`)
 - [x] Public URL + TLS on Spotmu AWS (EC2 `twerva-server`, EIP `3.19.233.237`, Spaceship A → nginx + Let's Encrypt)
-- [ ] Provision on Spotmu AWS: compute service + managed Postgres (own DB/schema) + S3 bucket/prefix for artifacts
-- [ ] Twerva-prefixed secrets in AWS SM/SSM
+- [x] Compute + Postgres on EC2 `twerva-server` (Docker Postgres 16, localhost-only `:5432`; DB URL in `/opt/twerva/database_url.env`) — RDS deferred
+- [ ] S3 bucket/prefix for artifacts — **parked** until carousel/media generate needs object storage
+- [ ] Twerva-prefixed secrets in AWS SM/SSM — **parked**; Phase 1 secrets stay on-box (`/opt/twerva/*.env` mode 600)
 - [x] Choose stack for ops console + workers: FastAPI + React/Vite/TS + Postgres (Celery/Redis later) — Spotmu-aligned
 - [x] Empty app shells: `apps/server` (FastAPI healthcheck) + `apps/ops` (Vite React stub)
 - [ ] Healthcheck endpoint on the Twerva URL
@@ -146,6 +147,8 @@ Checkbox legend: `[ ]` todo · `[~]` in progress · `[x]` done
 ---
 
 ## Parking lot (do not pull forward early)
+- S3 / object storage for generated media (create when carousel/video pipeline needs it)
+- AWS Secrets Manager / SSM (Phase 1 uses on-box env files)
 
 - Character / mascot universes
 - Outfy-class “post only to seller’s own empty accounts” as the product
