@@ -224,6 +224,20 @@ Wire a thin `PublishAdapter` so swapping vendor ↔ native Meta/TikTok later doe
 
 **Rent pipes. Build the brain.** Hosting, storage, and “post this media to account X” are pipes. Source → generate → gate → measure → steer is the brain.
 
+### Stack (locked for Phase 1)
+
+Prefer Spotmu alignment to reduce friction:
+
+| Layer | Choice |
+|---|---|
+| **Ops UI** | React + TypeScript + Vite (+ Tailwind as needed) |
+| **API** | Python 3.11+ / FastAPI |
+| **DB** | PostgreSQL (SQLAlchemy) — own DB on Spotmu AWS |
+| **Jobs** | Celery + Redis when we need async render/publish/metrics (not day-one blocking) |
+| **Layout** | Monorepo: `apps/server`, `apps/ops` (console), `packages/`, `tools/` |
+
+Do not invent a third stack without revisiting this table.
+
 ---
 
 ## XI. Open product questions
@@ -236,7 +250,7 @@ Wire a thin `PublishAdapter` so swapping vendor ↔ native Meta/TikTok later doe
 - Brand content engine design (Phase 3)
 - Storefront MVP shape (Phase 3+)
 - Cut vs sub instrumentation
-- Domain name choice; exact AWS service shape on Spotmu account (ECS vs App Runner vs etc.)
+- Exact AWS service shape beyond current EC2+nginx (RDS vs Postgres-on-box for early Phase 1; S3 bucket name)
 - Publish adapter: Ayrshare vs Zernio vs Postiz vs native APIs first
 
 ---

@@ -43,7 +43,15 @@ See `docs/prompts/directory.md`.
 
 - Domain: registered.
 - Docs: strategy + product + task sheet in place.
-- App skeleton / AWS service: not yet (task sheet §1.1).
+- App host: EC2 `twerva-server` + `https://twerva.com` (stub).
+- Stack (Phase 1): FastAPI + React/Vite/TypeScript + Postgres — Spotmu-aligned.
+- App skeleton: in progress (task sheet §1.1).
+
+## Stack (Phase 1)
+
+- **Ops UI:** `apps/ops` — React, TypeScript, Vite
+- **API:** `apps/server` — FastAPI, SQLAlchemy, PostgreSQL
+- **Jobs (later):** Celery + Redis for render/publish/metrics
 
 ## Development discipline
 

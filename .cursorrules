@@ -10,8 +10,11 @@ Twerva is NOT a social network, ads bidder, or Outfy-class “post to the seller
 Authoritative docs: `docs/prompts/project.md` (strategy), `docs/prompts/product.md` (product design), `docs/planning/task_sheet.md` (build order). Prefer those over chat memory when they conflict.
 
 # Tech Stack
-- **TBD for first app skeleton** — prefer alignment with Spotmu where it reduces friction: React/TypeScript/Vite and/or FastAPI/Postgres on AWS. Do not invent a third stack without an explicit decision in the task sheet / README.
-- **Architecture target:** Monorepo (`/apps`, `/packages`, `/tools`, `/docs`). Modular services; thin API handlers; workers for slow jobs (render, publish, metric pull).
+- **Frontend (ops console):** React, TypeScript, Vite, Tailwind as needed — `apps/ops`.
+- **Backend:** Python 3.11+, FastAPI, SQLAlchemy (PostgreSQL) — `apps/server`.
+- **Jobs (when needed):** Celery + Redis for render/publish/metric pull.
+- **Architecture:** Monorepo (`/apps`, `/packages`, `/tools`, `/docs`). Thin API handlers; workers for slow jobs.
+- Do not invent a third stack without updating `docs/prompts/product.md` and this file.
 
 # Global Coding Standards
 - **Monorepo Rules:** Apps cannot depend on other apps. Shared logic belongs in `/packages`.
