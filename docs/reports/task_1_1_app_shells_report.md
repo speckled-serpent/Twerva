@@ -17,6 +17,12 @@
 - Python install path is `pip install -r requirements.txt` (Spotmu-familiar); `pyproject.toml` is there for the same pins and `pip install -e .`.
 - Ops UI is utilitarian CSS, no Tailwind yet.
 
+## Verified
+
+- README server path: venv + `pip install -r requirements.txt` + uvicorn → `GET /health` is `200` `{"status":"ok"}`. `pip install -e .` also imports.
+- README ops path: `npm install` + `npm run build` (tsc + vite) succeeds; `npm run dev` serves the stub at `http://127.0.0.1:5173`.
+- Browser: heading **Twerva ops console stub**, title **Twerva ops**.
+
 ## Scripts touched
 
 - `apps/server/app/main.py` — health route
