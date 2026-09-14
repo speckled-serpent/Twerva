@@ -1,7 +1,7 @@
 # Twerva
 
 *Pronunciation: TWER-vuh*  
-*Status: Seed note — 2026-09-13*  
+*Status: Seed note — 2026-09-13. Strategic spine: `docs/prompts/project.md`. Product: `docs/prompts/product.md`. Tasks: `docs/planning/task_sheet.md`.*  
 *Relation: Sibling to Spotmu. Spotmu marketing owns the *what* to say; Twerva owns the *how* to package, push, and measure it across social platforms.*
 
 ---
@@ -27,11 +27,12 @@ Spotmu is **customer zero**. Twerva should stay general enough that another prod
   - Supports kill / double-down by vertical cluster
 
 ### Later (possible product)
-- A founder-facing tool for **marketing with no ad budget**: test a product cheaply via owned content distribution; if it returns, “upgrade” into traditional paid ads that scale better at volume.
-- Multi-source inputs (not only Spotmu): paste a brief, RSS, CMS, Notion, etc.
+- The unique money model: sellers hook a product in; Twerva pushes and sells; **take a cut of each sale, $0 upfront** (never a paid-ads bidder). See `docs/prompts/project.md`.
+- Sellers who graduate to buying platform ads directly are healthy churn — there are always more Kevins.
+- Multi-source inputs (not only Spotmu); basic storefront when checkout must live in-path.
 - Multi-brand / multi-account ops with warm-up rules and cadence caps
 
-Whether Twerva ever outgrows Spotmu as a *business* is an open question. Design as if another founder could use it; don’t build multi-tenant billing until Spotmu’s loop works.
+Design as if another seller could plug in later; don’t build self-serve seller ops until Spotmu’s distribution loop works.
 
 ---
 

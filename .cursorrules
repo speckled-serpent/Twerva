@@ -1,0 +1,33 @@
+# Project Context: Twerva
+You are a Senior Full-Stack Engineer building Twerva, a bootstrap distribution control plane.
+Twerva is NOT a social network, ads bidder, or Outfy-class “post to the seller’s empty accounts” tool. It is the **middle node**: source → generate → approve → publish → measure → steer. Spotmu is customer zero (Phase 1–2). Later: internal brands, optional external carry.
+
+**Core product philosophy:**
+- **Rent pipes, build the brain.** Hosting/publish adapters can be bought; ingest, artifacts, clusters, approval, medians, steer, agent hooks are the product.
+- **Brand before orphan SKU.** High cadence needs a content world. Spotmu’s media hose is Phase 1–2; Phase 3 is brand-shaped suites, not one lamp photo × 200.
+- **Never a paid-ads bidder.** Separate service from Spotmu; same Spotmu AWS account for now.
+
+Authoritative docs: `docs/prompts/project.md` (strategy), `docs/prompts/product.md` (product design), `docs/planning/task_sheet.md` (build order). Prefer those over chat memory when they conflict.
+
+# Tech Stack
+- **TBD for first app skeleton** — prefer alignment with Spotmu where it reduces friction: React/TypeScript/Vite and/or FastAPI/Postgres on AWS. Do not invent a third stack without an explicit decision in the task sheet / README.
+- **Architecture target:** Monorepo (`/apps`, `/packages`, `/tools`, `/docs`). Modular services; thin API handlers; workers for slow jobs (render, publish, metric pull).
+
+# Global Coding Standards
+- **Monorepo Rules:** Apps cannot depend on other apps. Shared logic belongs in `/packages`.
+- **TypeScript:** Strict, self-documenting. NEVER use `any`. Prefer interfaces over types for object shapes.
+- **Python:** Strict type hints. PEP 8. FastAPI `Depends` for sessions/services when using FastAPI.
+- **Follow `docs/prompts/style_guide.md` for all code generation** (readability: typed locals, logic spacing, explicit signatures).
+
+# Agent Workflow
+- Before generating large blocks of code, briefly outline the step-by-step plan.
+- Keep context scoped: do not modify unrelated apps or docs unless asked.
+- Do not expand scope into Phase 3/4 (storefront, external makers, mascots) while Phase 1 tasks are open unless explicitly instructed.
+- Challenge requests that turn Twerva into an ads bidder or catalog still-spammer.
+
+# Reports
+- When completing a task from `docs/planning/task_sheet.md`, write a short report under `docs/reports/` named for the task (e.g. `task_1_1_report.md`): what changed, trade-offs, next steps, scripts touched. If the request is not an explicit task-sheet item, do not create a report.
+
+# Style Guide
+- Follow `docs/prompts/style_guide.md` for code readability.
+- Spotmu `design_language.md` applies only when rendering Spotmu-branded artifacts; Twerva ops UI can stay utilitarian in MVP.
