@@ -7,7 +7,7 @@ Adapted from Spotmu’s `directory.md`. Same discipline: separate apps, shared p
 - **`/apps`** — Deployable applications and services (e.g. `ops` console, `server` / workers).
 - **`/packages`** — Shared internal libraries and types used across apps.
 - **`/tools`** — Build scripts, deploy helpers, repo-wide tooling.
-- **`/docs`** — Strategy, product, planning, reports (`docs/prompts/`, `docs/planning/`, `docs/reports/`).
+- **`/docs`** — Strategy, product, planning, ops runbooks, reports (`docs/prompts/`, `docs/planning/`, `docs/ops/`, `docs/reports/`).
 
 ## Rules
 

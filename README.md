@@ -23,6 +23,7 @@ Sibling to Spotmu: **separate service and URL**, same Spotmu AWS account for bil
 | [`docs/prompts/project.md`](docs/prompts/project.md) | Strategy, SWOT, roadmap |
 | [`docs/prompts/product.md`](docs/prompts/product.md) | Product design, build vs buy |
 | [`docs/planning/task_sheet.md`](docs/planning/task_sheet.md) | Build tasks |
+| [`docs/ops/README.md`](docs/ops/README.md) | Production deploy / rollback (Badger) |
 | [`docs/overview.md`](docs/overview.md) | Spotmu handoff seed |
 | [`docs/prompts/style_guide.md`](docs/prompts/style_guide.md) | Code style (from Spotmu) |
 | [`docs/prompts/directory.md`](docs/prompts/directory.md) | Monorepo layout rules |
@@ -35,7 +36,7 @@ apps/server    # FastAPI API (health check shell)
 apps/ops       # React / Vite / TypeScript ops console (stub)
 packages/      # shared libraries
 tools/         # scripts and deploy helpers
-docs/          # project, product, planning, reports
+docs/          # project, product, planning, ops, reports
 ```
 
 See `docs/prompts/directory.md`.
