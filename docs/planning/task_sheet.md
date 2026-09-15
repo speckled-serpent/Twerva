@@ -172,9 +172,45 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 
 ### 1.4 Carousel generate
-- [ ] Carousel template (cover → heading → bullets → CTA + mark)
-- [ ] Render pipeline to platform-ready images + caption
-- [ ] Generate job: source item → artifact draft in review queue
+
+**Exit:** Given a Spotmu-shaped `source_item`, Twerva can produce an `artifact` in status `draft` with: ordered `slides` JSON (cover → heading → bullets → CTA), rendered PNG (or JPEG) files on disk, `caption` + hashtags text, and `cta_url`. Callable via API and a small CLI/smoke script.
+
+**Out of scope:** approval UI (1.5), publish (1.6), Celery/Redis (sync generate OK), short video, S3 (still parked — use **local filesystem** artifact store), fancy brand-kit design parity beyond a calm text-led MVP template.
+
+**Parallelism:** **serial** (template → render → persist artifact → API). No Engineer N.
+
+**Storage lock for MVP:** `ARTIFACT_STORAGE_DIR` (default `/opt/twerva/artifacts` on server, local `./data/artifacts` in README). `slides[].asset_ref` = relative path under that dir. Revisit S3 when volume or multi-host needs it.
+
+#### 1.4a — Template spec
+- [ ] **1.4a-i** Write `docs/planning/carousel_template_v1.md`: slide roles (`cover`, `heading`, `bullet`, `cta`), canvas size (lock **1080×1080** IG-friendly unless spike says otherwise), typography/color tokens (calm, text-led; cite Spotmu palette lightly or neutrals), CTA rules (`cta_url` = source `canonical_url` or `https://spotmu.com/interest/{slug}`).
+- [ ] **1.4a-ii** Caption/hashtag rules: short caption from title/heading + 3–8 generic/safe hashtags; no scraped spam tags.
+- [ ] **1.4a-iii** Bullet slide policy: 1 bullet per slide (or max N chars); overflow → extra slides; empty bullets skipped.
+
+#### 1.4b — Local artifact storage
+- [ ] **1.4b-i** Settings: `ARTIFACT_STORAGE_DIR`; ensure directory creatable; document in README + `docs/ops/deploy.md` note for Badger.
+- [ ] **1.4b-ii** Helper to write bytes → `{artifact_id}/{slide_index}_{role}.png` and return `asset_ref` relative path.
+- [ ] **1.4b-iii** Do **not** create AWS S3 in this section.
+
+#### 1.4c — Render pipeline
+- [ ] **1.4c-i** Add render deps (e.g. `Pillow`) pinned like other requirements.
+- [ ] **1.4c-ii** `app/generate/carousel.py` (or similar): input = source fields → list of slide specs + rendered images on disk + caption string + cta_url.
+- [ ] **1.4c-iii** Unit test: render from a fake source payload produces ≥3 PNG files and a non-empty caption (tmp dir).
+
+#### 1.4d — Persist as Artifact draft
+- [ ] **1.4d-i** Service: create `Artifact` with `format=carousel`, `status=draft`, `slides` JSON including `role`, `text`, `asset_ref`, link `brand_id`/`source_item_id`/`cluster_id` when provided.
+- [ ] **1.4d-ii** Idempotency: optional — if re-generate, new artifact row (keep history) unless you document replace-in-place; prefer **new draft each generate** for MVP.
+- [ ] **1.4d-iii** Test: generate persists artifact readable via existing GET schema.
+
+#### 1.4e — API + CLI
+- [ ] **1.4e-i** `POST /api/v1/generate/carousel` body: `source_item_id` (required), optional `cluster_id`; returns Artifact read schema.
+- [ ] **1.4e-ii** CLI: `python -m app.generate.carousel_cli <source_item_id>` documented in README.
+- [ ] **1.4e-iii** Smoke script `tools/smoke_1_4_carousel.sh`: use seeded or ingested source → generate → GET artifact; works offline from Spotmu (DB source only).
+
+#### 1.4f — Report & deploy notes
+- [ ] **1.4f-i** `docs/reports/task_1_4_report.md`; tick leaves on this sheet.
+- [ ] **1.4f-ii** Badger notes: create `ARTIFACT_STORAGE_DIR`, pip install, restart; disk growth watch; still no public `/api` nginx.
+
+**1.4 done when:** draft carousel artifact with on-disk slides + caption from a source_item via API.
 
 ### 1.5 Approval & schedule
 - [ ] Review queue UI (or CLI acceptable for first cut) — approve / reject / edit caption
@@ -284,7 +320,7 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 ---
 
 ## Parking lot (do not pull forward early)
-- **DEFERRED from 1.1** — S3 / object storage for generated media (create when carousel/video pipeline needs it)
+- **DEFERRED from 1.1** — S3 / object storage for generated media (create when multi-host/volume needs it; **1.4 uses local `ARTIFACT_STORAGE_DIR`**)
 - **DEFERRED from 1.1** — AWS Secrets Manager / SSM with Twerva-prefixed secrets (Phase 1 uses on-box `/opt/twerva/*.env` mode 600)
 
 - Character / mascot universes
@@ -299,7 +335,7 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 ## Suggested next coding slice
 
-**§1.3 done** (public JSON + sitemap ingest, manual cluster attach). **Start at 1.4** carousel generate.
+**§1.3 done** on main + box (live Spotmu smoke may wait on Spotmu uptime). **Start at 1.4a** (carousel template), then 1.4b–f serial. No Engineer subs. Local artifact disk, not S3.
 
 After 1.4: 1.5 approve → 1.6 publish adapter → 1.7 measure/steer stubs → 1.8 thin ops console.
 
