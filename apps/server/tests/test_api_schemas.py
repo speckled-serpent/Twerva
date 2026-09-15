@@ -20,6 +20,7 @@ from app.api.v1.schemas import (
     PostJobReadResponse,
     SourceItemCreateRequest,
     SourceItemReadResponse,
+    SpotmuSyncRequest,
 )
 from app.models.enums import (
     AccountStatus,
@@ -142,6 +143,7 @@ class ApiSchemaTests(unittest.TestCase):
         )
 
         self.assertTrue(cluster_read_response.is_active)
+        self.assertEqual(cluster_read_response.source_item_ids, [])
         self.assertEqual(account_read_response.platform, Platform.INSTAGRAM)
 
     def test_artifact_and_post_job_include_status(self) -> None:
@@ -217,6 +219,20 @@ class ApiSchemaTests(unittest.TestCase):
 
         self.assertEqual(snapshot_create_request.views, 100)
         self.assertEqual(snapshot_read_response.post_job_id, FIXED_POST_JOB_ID)
+
+    def test_spotmu_sync_request_defaults_limit_to_twenty(self) -> None:
+        """1.3d: sync body accepts optional slugs and a small default limit."""
+
+        default_sync_request: SpotmuSyncRequest = SpotmuSyncRequest()
+        limited_sync_request: SpotmuSyncRequest = SpotmuSyncRequest(
+            slugs=["ai-agents", "amazon"],
+            limit=5,
+        )
+
+        self.assertIsNone(default_sync_request.slugs)
+        self.assertEqual(default_sync_request.limit, 20)
+        self.assertEqual(limited_sync_request.slugs, ["ai-agents", "amazon"])
+        self.assertEqual(limited_sync_request.limit, 5)
 
 
 if __name__ == "__main__":

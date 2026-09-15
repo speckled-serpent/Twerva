@@ -81,7 +81,7 @@ class ClusterCreateRequest(BaseModel):
 
 
 class ClusterReadResponse(BaseModel):
-    """Serialized Cluster row."""
+    """Serialized Cluster row, including linked source item ids (1.3e)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,8 +91,32 @@ class ClusterReadResponse(BaseModel):
     name: str
     description: str | None
     is_active: bool
+    source_item_ids: list[uuid.UUID] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
+
+
+class SpotmuSyncRequest(BaseModel):
+    """Body for `POST /api/v1/ingest/spotmu/sync`."""
+
+    slugs: list[str] | None = None
+    limit: int = Field(default=20, ge=1, le=200)
+
+
+class SpotmuIngestSlugError(BaseModel):
+    """One failed slug from a sync run."""
+
+    slug: str
+    error: str
+
+
+class SpotmuSyncResponse(BaseModel):
+    """Counts and per-slug errors from an on-demand Spotmu sync."""
+
+    created_count: int
+    updated_count: int
+    failed_count: int
+    errors: list[SpotmuIngestSlugError]
 
 
 class AccountCreateRequest(BaseModel):

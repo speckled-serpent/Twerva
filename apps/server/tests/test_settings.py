@@ -4,6 +4,7 @@ import os
 import unittest
 
 from app.settings import (
+    DEFAULT_SPOTMU_API_BASE_URL,
     TEST_PLACEHOLDER_DATABASE_URL,
     MissingDatabaseUrlError,
     clear_settings_cache,
@@ -18,6 +19,10 @@ class SettingsTests(unittest.TestCase):
         """Snapshot environment keys that settings tests mutate."""
 
         self.previous_database_url: str | None = os.environ.pop("DATABASE_URL", None)
+        self.previous_spotmu_api_base_url: str | None = os.environ.pop(
+            "SPOTMU_API_BASE_URL",
+            None,
+        )
         self.previous_twerva_environment: str | None = os.environ.pop("TWERVA_ENV", None)
         self.previous_twerva_testing: str | None = os.environ.pop("TWERVA_TESTING", None)
         self.previous_pytest_current_test: str | None = os.environ.pop(
@@ -30,6 +35,10 @@ class SettingsTests(unittest.TestCase):
         """Restore the process environment and drop the settings cache."""
 
         self._restore_environment_variable("DATABASE_URL", self.previous_database_url)
+        self._restore_environment_variable(
+            "SPOTMU_API_BASE_URL",
+            self.previous_spotmu_api_base_url,
+        )
         self._restore_environment_variable("TWERVA_ENV", self.previous_twerva_environment)
         self._restore_environment_variable("TWERVA_TESTING", self.previous_twerva_testing)
         self._restore_environment_variable(
@@ -73,6 +82,14 @@ class SettingsTests(unittest.TestCase):
         loaded_database_url: str = get_settings().database_url
 
         self.assertEqual(loaded_database_url, explicit_database_url)
+
+    def test_spotmu_api_base_url_defaults_to_public_origin(self) -> None:
+        """SPOTMU_API_BASE_URL defaults to the locked https://spotmu.com origin."""
+
+        os.environ["TWERVA_ENV"] = "test"
+        loaded_spotmu_api_base_url: str = get_settings().spotmu_api_base_url
+
+        self.assertEqual(loaded_spotmu_api_base_url, DEFAULT_SPOTMU_API_BASE_URL)
 
     def _restore_environment_variable(self, variable_name: str, previous_value: str | None,
     ) -> None:

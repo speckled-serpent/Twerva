@@ -20,7 +20,12 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.v1.accounts import create_account, get_account_by_id
 from app.api.v1.artifacts import create_artifact, get_artifact_by_id
 from app.api.v1.brands import create_brand, get_brand_by_id, list_brands
-from app.api.v1.clusters import create_cluster, get_cluster_by_id
+from app.api.v1.clusters import (
+    attach_source_item_to_cluster,
+    create_cluster,
+    detach_source_item_from_cluster,
+    get_cluster_by_id,
+)
 from app.api.v1.post_jobs import create_post_job, get_post_job_by_id
 from app.api.v1.schemas import (
     AccountCreateRequest,
@@ -195,6 +200,39 @@ class ApiPersistTests(unittest.TestCase):
         self.assertEqual(fetched_source_item.brand_id, created_brand.id)
         self.assertEqual(len(fetched_source_item.overview_bullets), 3)
         self.assertEqual(fetched_cluster.slug, f"persist-lane-{run_suffix}")
+        self.assertEqual(fetched_cluster.source_item_ids, [])
+        attached_cluster = attach_source_item_to_cluster(
+            created_cluster.id,
+            created_source_item.id,
+            self.our_database_session,
+        )
+        reattached_cluster = attach_source_item_to_cluster(
+            created_cluster.id,
+            created_source_item.id,
+            self.our_database_session,
+        )
+        fetched_cluster_after_attach = get_cluster_by_id(
+            created_cluster.id,
+            self.our_database_session,
+        )
+
+        self.assertEqual(attached_cluster.source_item_ids, [created_source_item.id])
+        self.assertEqual(reattached_cluster.source_item_ids, [created_source_item.id])
+        self.assertEqual(
+            fetched_cluster_after_attach.source_item_ids,
+            [created_source_item.id],
+        )
+        detach_source_item_from_cluster(
+            created_cluster.id,
+            created_source_item.id,
+            self.our_database_session,
+        )
+        fetched_cluster_after_detach = get_cluster_by_id(
+            created_cluster.id,
+            self.our_database_session,
+        )
+
+        self.assertEqual(fetched_cluster_after_detach.source_item_ids, [])
         self.assertEqual(fetched_account.platform, Platform.INSTAGRAM)
         self.assertEqual(fetched_artifact.status, ArtifactStatus.DRAFT)
         self.assertEqual(fetched_post_job.status, PostJobStatus.SCHEDULED)

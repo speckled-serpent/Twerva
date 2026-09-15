@@ -81,6 +81,23 @@ Mode **600**. **Never** commit, print, or paste these files.
 | `/opt/twerva/database_url.env` | `DATABASE_URL` for the API and Alembic |
 | `/opt/twerva/postgres.env` | Docker Postgres credentials |
 
+### Phase 1.3 env vars (Spotmu ingest)
+
+`SPOTMU_API_BASE_URL` is **optional** and **not a secret**. Default is
+`https://spotmu.com` (locked in
+[`docs/reports/task_1_3_ingest_spike.md`](../reports/task_1_3_ingest_spike.md)).
+The API process uses it to GET public JSON
+`/api/v1/interests/slug/{slug}` and `/sitemap.xml`. Production can rely
+on the default. To set it explicitly, add a line to an existing mode-600
+env file systemd already loads, or a second `EnvironmentFile=` — do not
+invent a new nginx location.
+
+**Do not** add public nginx `/api/` (or `/docs`) for ingest. `/api/v1`
+stays loopback / SSH tunnel. `GET /health` is still the only public
+path. No new Alembic revision in 1.3 (`12bk_domain_schema` remains
+head). After sync, `pip install -r requirements.txt` so **httpx** lands
+in `.venv`, then restart `twerva-api`.
+
 The app does not open `database_url.env` itself. systemd may load it as
 `EnvironmentFile=`, or a shell must `source` it before Alembic. Local
 override and URL rewrite rules: [`apps/server/README.md`](../../apps/server/README.md).
@@ -123,6 +140,8 @@ pip install -r requirements.txt
 
 Recreate `.venv` only when the Python version or dependency set has
 changed. After recreate, `pip install -r requirements.txt` again.
+**1.3 adds `httpx`** — a routine `pip install -r requirements.txt` is
+enough; no venv recreate required.
 
 ### 3. Migrate (when revisions exist)
 
