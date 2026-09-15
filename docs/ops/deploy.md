@@ -66,7 +66,8 @@ private: on-box loopback, or an SSH tunnel. Same for FastAPI `/docs`.
 
 The Phase 1.8 ops console (`apps/ops`) is **local Vite only**. A later
 private nginx `dist/` host is optional. Do **not** add public locations
-for the ops UI tonight (same rule as `/api`).
+for the ops UI tonight (same rule as `/api`). Phase 1.9 is docs +
+`tools/agent_batch_generate.sh` (loopback dry-run). No nginx change.
 
 Off-box API access is a tunnel to loopback, not a new nginx location:
 

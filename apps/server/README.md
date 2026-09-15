@@ -136,7 +136,8 @@ scheduled job (Phase 1.6; default `PUBLISH_ADAPTER=mock`). Measure &
 steer (Phase 1.7): `POST /api/v1/post-jobs/{id}/metrics`, cluster
 median summary, steer, agent-summary. Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 when the process has a database URL. Thin ops UI: [`apps/ops/README.md`](../ops/README.md)
-(Vite proxy `/api` → this process).
+(Vite proxy `/api` → this process). Agent hooks (draft / human gate /
+propose steer): [`docs/agents/README.md`](../../docs/agents/README.md).
 
 ### Seed (1.2m)
 
@@ -449,6 +450,21 @@ curl -sS "http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/agent-summary?forma
 JSON (default) or markdown: cluster flag, median block, recent
 artifacts / post jobs / steer actions.
 
+## Agent hooks (1.9)
+
+Docs only (plus a thin localhost script). No new routes.
+
+- Operator/agent: [`docs/agents/README.md`](../../docs/agents/README.md)
+- Dry-run playbook: [`docs/agents/playbook_batch_generate_spotmu_cluster.md`](../../docs/agents/playbook_batch_generate_spotmu_cluster.md)
+- Script: `tools/agent_batch_generate.sh` (generate drafts, **stop
+  before approve**)
+- Phase 1 close: [`docs/reports/phase_1_exit_report.md`](../../docs/reports/phase_1_exit_report.md)
+
+```bash
+# from the repo root; API already running with DATABASE_URL
+tools/agent_batch_generate.sh
+```
+
 ### Measure & steer smoke (1.7d-ii)
 
 With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted).
@@ -541,6 +557,9 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
     agent-summary; no analytics vendor).
 14. **1.8:** ops console is local Vite (`apps/ops`). Do **not** add
     nginx for `dist/` or `/api` tonight. See `apps/ops/README.md`.
+15. **1.9:** docs + `tools/agent_batch_generate.sh` only. No new host
+    deps, no Alembic, no nginx `/api`. Optional loopback dry-run after
+    generate storage is writable.
 
 `GET /health` must keep working if the unit is ever started without
 `DATABASE_URL` (health-only). Production must keep the env file so

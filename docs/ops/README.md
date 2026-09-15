@@ -26,3 +26,6 @@ Measure & steer (1.7): manual/stub metrics, median, steer;
 [`docs/reports/task_1_7_report.md`](../reports/task_1_7_report.md).
 Ops console (1.8): local Vite UI only; do **not** expose on public nginx;
 [`docs/reports/task_1_8_report.md`](../reports/task_1_8_report.md).
+Agent hooks (1.9): docs + localhost dry-run; no nginx change;
+[`docs/agents/README.md`](../agents/README.md),
+[`docs/reports/phase_1_exit_report.md`](../reports/phase_1_exit_report.md).

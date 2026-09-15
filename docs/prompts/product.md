@@ -177,7 +177,10 @@ Twerva is built to be run with agents:
 - Summarize metrics and recommend steer actions
 - Humans keep approval gate until trust is earned
 
-Agent prompts and runbooks live alongside the app; product must expose clean artifacts and metrics for them.
+Agent prompts and runbooks live alongside the app; product must expose clean artifacts and metrics for them. Phase 1 hooks:
+[`docs/agents/README.md`](../agents/README.md) (draft generate, human
+approve gate, propose steer). Dry-run:
+[`docs/agents/playbook_batch_generate_spotmu_cluster.md`](../agents/playbook_batch_generate_spotmu_cluster.md).
 
 ---
 
