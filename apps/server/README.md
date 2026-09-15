@@ -135,7 +135,8 @@ are Phase 1.5. `POST /api/v1/publish/run/{post_job_id}` mock-publishes a
 scheduled job (Phase 1.6; default `PUBLISH_ADAPTER=mock`). Measure &
 steer (Phase 1.7): `POST /api/v1/post-jobs/{id}/metrics`, cluster
 median summary, steer, agent-summary. Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-when the process has a database URL.
+when the process has a database URL. Thin ops UI: [`apps/ops/README.md`](../ops/README.md)
+(Vite proxy `/api` → this process).
 
 ### Seed (1.2m)
 
@@ -286,7 +287,7 @@ TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_4_carousel.sh
 
 ## Approval & schedule (1.5)
 
-Thin API; no ops UI (1.8) and no real publish (1.6). Sync schedule create
+Thin API plus ops console (`apps/ops`, 1.8). No real publish (1.6). Sync schedule create
 (no Celery). Cadence day is **UTC**. `GET /health` still starts without
 `DATABASE_URL`.
 
@@ -339,7 +340,7 @@ TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_5_approve_schedule.sh
 
 ## Publish (1.6)
 
-Thin API; no ops UI (1.8) and no live vendor HTTP. Default adapter is
+Thin API plus ops console (`apps/ops`, 1.8). No live vendor HTTP. Default adapter is
 **mock** (`PUBLISH_ADAPTER=mock`). Sync publish (no Celery).
 `GET /health` still starts without `DATABASE_URL`. Spike lock:
 [`docs/reports/task_1_6_publish_spike.md`](../../docs/reports/task_1_6_publish_spike.md).
@@ -386,7 +387,7 @@ TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_6_publish.sh
 
 ## Measure & steer (1.7)
 
-Thin API; no ops UI (1.8), no Celery, **no** real analytics vendor.
+Thin API plus ops console (`apps/ops`, 1.8). No Celery, **no** real analytics vendor.
 `GET /health` still starts without `DATABASE_URL`. Reuses
 `metric_snapshots` + `steer_actions` (no new Alembic revision).
 
@@ -538,6 +539,8 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
     Restart `twerva-api` after sync. Optional loopback:
     `tools/smoke_1_7_measure_steer.sh` (metrics → median → steer →
     agent-summary; no analytics vendor).
+14. **1.8:** ops console is local Vite (`apps/ops`). Do **not** add
+    nginx for `dist/` or `/api` tonight. See `apps/ops/README.md`.
 
 `GET /health` must keep working if the unit is ever started without
 `DATABASE_URL` (health-only). Production must keep the env file so
