@@ -31,7 +31,7 @@ Sibling to Spotmu: **separate service and URL**, same Spotmu AWS account for bil
 ## Repo layout
 
 ```
-apps/server    # FastAPI API (health check shell)
+apps/server    # FastAPI API (health + /api/v1 persist-proof)
 apps/ops       # React / Vite / TypeScript ops console (stub)
 packages/      # shared libraries
 tools/         # scripts and deploy helpers
@@ -46,7 +46,7 @@ See `docs/prompts/directory.md`.
 - Docs: strategy + product + task sheet in place.
 - App host: EC2 `twerva-server` + `https://twerva.com` (stub).
 - Stack (Phase 1): FastAPI + React/Vite/TypeScript + Postgres — Spotmu-aligned.
-- App shells: `apps/server` and `apps/ops` run locally (task sheet §1.1). Product loop not built yet.
+- App shells: `apps/server` and `apps/ops` run locally (task sheet §1.1). Domain schema + `/api/v1` persist-proof API and Spotmu seed are in (1.2). Ingest / generate / ops UI are not built yet.
 
 ## Stack (Phase 1)
 
@@ -56,7 +56,7 @@ See `docs/prompts/directory.md`.
 
 ## Run locally
 
-Shells only — no Postgres or workers required yet.
+`GET /health` does not need Postgres. `/api/v1` and `python -m app.seed` do.
 
 **API** (Python 3.11+):
 
@@ -68,7 +68,10 @@ pip install -r requirements.txt
 uvicorn app.main:application --reload --host 127.0.0.1 --port 8000
 ```
 
-`GET http://127.0.0.1:8000/health` returns `{"status":"ok"}`. Details: [`apps/server/README.md`](apps/server/README.md).
+`GET http://127.0.0.1:8000/health` returns `{"status":"ok"}` without
+`DATABASE_URL`. With a URL, `/api/v1` mounts and `python -m app.seed`
+loads the Spotmu brand + example source item. Smoke:
+`tools/smoke_1_2l_api.sh`. Details: [`apps/server/README.md`](apps/server/README.md).
 
 **Ops console** (Node.js 20+):
 

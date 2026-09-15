@@ -111,16 +111,16 @@ Enough to attach later agent/human decisions; no UI.
 #### 1.2l — Minimal HTTP API (persist proof)
 Thin FastAPI routes — enough to prove the model; not the ops console (1.8).
 
-- [ ] **1.2l-i** Pydantic schemas for create/read of Brand, SourceItem, Cluster, Account, Artifact, PostJob (MetricSnapshot create optional).
-- [ ] **1.2l-ii** `POST/GET` (list + by id) for Brand, SourceItem, Cluster, Account under a prefix e.g. `/api/v1/...`. No auth.
-- [ ] **1.2l-iii** `POST/GET` Artifact including status field; `POST/GET` PostJob including status field.
-- [ ] **1.2l-iv** Keep `GET /health` working; deploy updated API to `twerva-api` on EC2 (or document local-only until deploy task — prefer deploy so Badger’s `/health` monitors the same process that has models).
-- [ ] **1.2l-v** Smoke script or README curl recipe: create Brand `spotmu` → SourceItem → Cluster → Account → Artifact `draft` → PostJob `scheduled`, then GET each. Commit script under `tools/` if non-trivial.
+- [x] **1.2l-i** Pydantic schemas for create/read of Brand, SourceItem, Cluster, Account, Artifact, PostJob (MetricSnapshot create optional).
+- [x] **1.2l-ii** `POST/GET` (list + by id) for Brand, SourceItem, Cluster, Account under a prefix e.g. `/api/v1/...`. No auth.
+- [x] **1.2l-iii** `POST/GET` Artifact including status field; `POST/GET` PostJob including status field.
+- [x] **1.2l-iv** Keep `GET /health` working; deploy updated API to `twerva-api` on EC2 (or document local-only until deploy task — prefer deploy so Badger’s `/health` monitors the same process that has models).
+- [x] **1.2l-v** Smoke script or README curl recipe: create Brand `spotmu` → SourceItem → Cluster → Account → Artifact `draft` → PostJob `scheduled`, then GET each. Commit script under `tools/` if non-trivial.
 
 #### 1.2m — Seed data
-- [ ] **1.2m-i** Idempotent seed: Brand `slug=spotmu`, `name=Spotmu`.
-- [ ] **1.2m-ii** One example SourceItem (fake Spotmu-shaped fields: title, interest_heading, 3 overview_bullets, canonical_url `https://spotmu.com/interest/example`). Not real ingest.
-- [ ] **1.2m-iii** Seed runnable via `python -m ...` or Alembic data migration — document in README.
+- [x] **1.2m-i** Idempotent seed: Brand `slug=spotmu`, `name=Spotmu`.
+- [x] **1.2m-ii** One example SourceItem (fake Spotmu-shaped fields: title, interest_heading, 3 overview_bullets, canonical_url `https://spotmu.com/interest/example`). Not real ingest.
+- [x] **1.2m-iii** Seed runnable via `python -m ...` or Alembic data migration — document in README.
 
 **1.2 done when:** all leaves above `[x]`; migration on server; curl (or script) round-trip documented; short `docs/reports/task_1_2_report.md` written.
 
