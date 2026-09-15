@@ -63,6 +63,12 @@ public nginx `/api` change. `GET /health` still starts without
   module load.
 - Spike curls: sitemap 436 interest URLs; `ai-agents` and `amazon`
   public JSON 200; unknown slug 404 `Interest not found`.
+- Live typed client (no DB): `fetch_spotmu_interest_by_slug("ai-agents")`
+  → title/heading/5 bullets/canonical
+  `https://spotmu.com/interest/ai-agents`; sitemap helper returned the
+  first five locs. `GET /health` via TestClient **without**
+  `DATABASE_URL` → `200 {"status":"ok"}`; `/api/v1/brands` is `404` in
+  that health-only process.
 
 ## Out of scope (as specified)
 
