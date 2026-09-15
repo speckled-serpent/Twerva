@@ -11,6 +11,7 @@ from app.api.v1.schemas import (
     ArtifactReadResponse,
     ArtifactSlideSchema,
     BrandCreateRequest,
+    CarouselGenerateRequest,
     BrandReadResponse,
     ClusterCreateRequest,
     ClusterReadResponse,
@@ -233,6 +234,21 @@ class ApiSchemaTests(unittest.TestCase):
         self.assertEqual(default_sync_request.limit, 20)
         self.assertEqual(limited_sync_request.slugs, ["ai-agents", "amazon"])
         self.assertEqual(limited_sync_request.limit, 5)
+
+    def test_carousel_generate_request_requires_source_item_id(self) -> None:
+        """1.4e-i: generate body is source_item_id plus optional cluster_id."""
+
+        generate_request: CarouselGenerateRequest = CarouselGenerateRequest(
+            source_item_id=FIXED_SOURCE_ITEM_ID,
+        )
+        generate_request_with_cluster: CarouselGenerateRequest = CarouselGenerateRequest(
+            source_item_id=FIXED_SOURCE_ITEM_ID,
+            cluster_id=FIXED_CLUSTER_ID,
+        )
+
+        self.assertEqual(generate_request.source_item_id, FIXED_SOURCE_ITEM_ID)
+        self.assertIsNone(generate_request.cluster_id)
+        self.assertEqual(generate_request_with_cluster.cluster_id, FIXED_CLUSTER_ID)
 
 
 if __name__ == "__main__":

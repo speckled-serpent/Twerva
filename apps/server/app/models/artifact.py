@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 class ArtifactSlide(TypedDict):
     """One ordered slide in `artifacts.slides`.
 
-    `asset_ref` is unused until object storage (S3) is un-parked.
+    `asset_ref` is a path relative to local `ARTIFACT_STORAGE_DIR`.
     """
 
     role: str

@@ -16,3 +16,5 @@ Local API run, `DATABASE_URL`, and Alembic smoke stay in
 notes stay in [`docs/reports/task_1_2_report.md`](../reports/task_1_2_report.md).
 Spotmu ingest (1.3) env default and `/health`-only reminder:
 [`docs/reports/task_1_3_report.md`](../reports/task_1_3_report.md).
+Carousel generate (1.4) local artifacts dir / Pillow:
+[`docs/reports/task_1_4_report.md`](../reports/task_1_4_report.md).

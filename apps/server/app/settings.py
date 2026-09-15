@@ -3,6 +3,10 @@
 `DATABASE_URL` is required outside tests. Local override: `apps/server/.env`
 or an exported shell variable. On `twerva-server`, systemd / the operator
 loads `/opt/twerva/database_url.env` into the process environment.
+
+`ARTIFACT_STORAGE_DIR` is the local carousel PNG root (default
+`/opt/twerva/artifacts`). Local README path is `./data/artifacts`.
+S3 is not used.
 """
 
 import os
@@ -15,6 +19,7 @@ TEST_PLACEHOLDER_DATABASE_URL: str = (
     "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva_test"
 )
 DEFAULT_SPOTMU_API_BASE_URL: str = "https://spotmu.com"
+DEFAULT_ARTIFACT_STORAGE_DIR: str = "/opt/twerva/artifacts"
 MISSING_DATABASE_URL_MESSAGE: str = (
     "DATABASE_URL is required outside tests. Export DATABASE_URL, place it in "
     "apps/server/.env, or on twerva-server load /opt/twerva/database_url.env."
@@ -39,6 +44,7 @@ class Settings(BaseSettings):
 
     database_url: str = Field(default="")
     spotmu_api_base_url: str = Field(default=DEFAULT_SPOTMU_API_BASE_URL)
+    artifact_storage_dir: str = Field(default=DEFAULT_ARTIFACT_STORAGE_DIR)
 
 
 _cached_settings: Settings | None = None
@@ -81,12 +87,18 @@ def _load_settings() -> Settings:
 
     loaded_settings: Settings = Settings()
     stripped_database_url: str = loaded_settings.database_url.strip()
+    stripped_artifact_storage_dir: str = loaded_settings.artifact_storage_dir.strip()
+
+    if stripped_artifact_storage_dir == "":
+        stripped_artifact_storage_dir = DEFAULT_ARTIFACT_STORAGE_DIR
 
     if stripped_database_url == "":
 
         if _running_in_test_environment():
             placeholder_settings: Settings = Settings(
                 database_url=TEST_PLACEHOLDER_DATABASE_URL,
+                artifact_storage_dir=stripped_artifact_storage_dir,
+                spotmu_api_base_url=loaded_settings.spotmu_api_base_url,
             )
 
             return placeholder_settings
@@ -95,7 +107,11 @@ def _load_settings() -> Settings:
 
     normalized_database_url: str = _normalize_database_url(stripped_database_url)
 
-    return Settings(database_url=normalized_database_url)
+    return Settings(
+        database_url=normalized_database_url,
+        artifact_storage_dir=stripped_artifact_storage_dir,
+        spotmu_api_base_url=loaded_settings.spotmu_api_base_url,
+    )
 
 
 def _running_in_test_environment() -> bool:

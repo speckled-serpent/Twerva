@@ -39,6 +39,7 @@ git `main` (rsync or tar). Preserve the on-box `.venv`.
 | nginx + Let’s Encrypt | TLS for `twerva.com`; **public** `location = /health` only → uvicorn |
 | `/opt/twerva/docker-compose.postgres.yml` | Docker Postgres 16 |
 | `/opt/twerva/postgres/` | Postgres data directory |
+| `/opt/twerva/artifacts` | Local carousel PNG store (1.4). `ARTIFACT_STORAGE_DIR`. Not public. |
 | Postgres bind | `127.0.0.1:5432` only (not public) |
 
 ## Public surface (`/health` only)
@@ -98,6 +99,27 @@ path. No new Alembic revision in 1.3 (`12bk_domain_schema` remains
 head). After sync, `pip install -r requirements.txt` so **httpx** lands
 in `.venv`, then restart `twerva-api`.
 
+### Phase 1.4 env vars (carousel generate)
+
+`ARTIFACT_STORAGE_DIR` is **optional** and **not a secret**. Default is
+`/opt/twerva/artifacts`. Before first generate:
+
+```bash
+sudo mkdir -p /opt/twerva/artifacts
+sudo chown ubuntu:ubuntu /opt/twerva/artifacts
+```
+
+Match ownership to whichever user runs `twerva-api` if that is not
+`ubuntu`. Disk will grow: each generate keeps a new Artifact row **and**
+a new PNG folder (history on purpose). Watch free space next to the
+Postgres data volume.
+
+**Do not** add public nginx `/api/` (or `/docs`, or `/artifacts`).
+`/api/v1` stays loopback / SSH tunnel. `GET /health` is still the only
+public path. No new Alembic revision in 1.4 (`12bk_domain_schema`
+remains head). After sync, `pip install -r requirements.txt` so
+**Pillow** lands in `.venv`, then restart `twerva-api`.
+
 The app does not open `database_url.env` itself. systemd may load it as
 `EnvironmentFile=`, or a shell must `source` it before Alembic. Local
 override and URL rewrite rules: [`apps/server/README.md`](../../apps/server/README.md).
@@ -142,6 +164,9 @@ Recreate `.venv` only when the Python version or dependency set has
 changed. After recreate, `pip install -r requirements.txt` again.
 **1.3 adds `httpx`** — a routine `pip install -r requirements.txt` is
 enough; no venv recreate required.
+**1.4 adds `pillow`** — same: routine `pip install -r requirements.txt`,
+then restart. Also `mkdir -p /opt/twerva/artifacts` (writable by the
+API user). Do not recreate the venv just for Pillow.
 
 ### 3. Migrate (when revisions exist)
 
@@ -224,7 +249,7 @@ Also watch:
 |---|---|
 | systemd `twerva-api` | active after restart; review `journalctl -u twerva-api` on failure |
 | Postgres 16 container | healthy; compose file `/opt/twerva/docker-compose.postgres.yml`; data in `/opt/twerva/postgres/`; listen `127.0.0.1:5432` only |
-| Disk | box has free space (data volume under `/opt/twerva/postgres/` grows) |
+| Disk | box has free space (data volume under `/opt/twerva/postgres/` grows; carousel PNGs under `/opt/twerva/artifacts` grow on each generate) |
 | TLS | Let’s Encrypt cert for `twerva.com`; **alert if expiry is under 14 days** |
 
 nginx `location = /health` must keep proxying to uvicorn. A public
@@ -259,7 +284,7 @@ Never:
 
 Deferred (do not provision in this runbook): RDS, S3, Secrets Manager /
 SSM. Same Spotmu AWS account is fine; this file does not describe
-console setup.
+console setup. **1.4 uses local disk**, not S3.
 
 ## Related notes
 
@@ -272,5 +297,9 @@ detail:
   revision `12bk_domain_schema`, apply commands, live apply status
 - [`docs/reports/task_1_2a_report.md`](../reports/task_1_2a_report.md) —
   DB plumbing (settings, engine, empty Alembic chain at 1.2a)
+- [`docs/reports/task_1_3_report.md`](../reports/task_1_3_report.md) —
+  Spotmu ingest, `httpx`, `/health`-only reminder
+- [`docs/reports/task_1_4_report.md`](../reports/task_1_4_report.md) —
+  carousel generate, local `ARTIFACT_STORAGE_DIR`, Pillow
 - [`docs/planning/task_sheet.md`](../planning/task_sheet.md) — §1.1 host
   facts; parking lot for S3 and Secrets Manager
