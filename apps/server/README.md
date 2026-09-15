@@ -130,7 +130,8 @@ alembic current
 No auth. `POST` + `GET` list + `GET` by id for Brand, SourceItem, Cluster,
 Account, Artifact (includes `status`), and PostJob (includes `status`).
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
-SourceItem. Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
+are Phase 1.5 (no publish). Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 when the process has a database URL.
 
 ### Seed (1.2m)
@@ -280,6 +281,59 @@ tools/smoke_1_4_carousel.sh
 TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_4_carousel.sh
 ```
 
+## Approval & schedule (1.5)
+
+Thin API; no ops UI (1.8) and no real publish (1.6). Sync schedule create
+(no Celery). Cadence day is **UTC**. `GET /health` still starts without
+`DATABASE_URL`.
+
+### Review queue
+
+```bash
+# drafts
+curl -sS 'http://127.0.0.1:8000/api/v1/artifacts?status=draft'
+# edit caption / cta_url while draft or approved
+curl -sS -X PATCH http://127.0.0.1:8000/api/v1/artifacts/<artifact-id> \
+  -H 'Content-Type: application/json' \
+  -d '{"caption":"edited caption"}'
+# approve (optional caption at approve)
+curl -sS -X POST http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"caption":"approved caption"}'
+# reject (terminal; optional reason is accepted and ignored — no column)
+curl -sS -X POST http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>/reject \
+  -H 'Content-Type: application/json' \
+  -d '{"reason":"off-brand"}'
+```
+
+Rejected cannot be re-approved; generate a new Artifact.
+
+### Schedule
+
+Artifact must be `approved`. Account cluster brand must match the
+Artifact brand. When the Artifact has `cluster_id`, the Account must
+belong to that cluster. `accounts.cadence_cap_per_day` null = no cap;
+otherwise non-failed `post_jobs` on that UTC day must stay under the cap
+(HTTP **409** when at/over).
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/schedule \
+  -H 'Content-Type: application/json' \
+  -d '{"artifact_id":"<artifact-id>","account_id":"<account-id>","scheduled_for":"2026-09-16T15:00:00Z"}'
+```
+
+### Approve + schedule smoke (1.5c-iii)
+
+With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted).
+Uses the seeded/example SourceItem + generate (no Spotmu HTTP):
+
+```bash
+# from the repo root
+tools/smoke_1_5_approve_schedule.sh
+# or
+TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_5_approve_schedule.sh
+```
+
 ### Persist-proof smoke (1.2l-v)
 
 With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted):
@@ -343,6 +397,10 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
     `/opt/twerva/artifacts`). Restart `twerva-api`. Do **not** add
     nginx `/api` or a public artifacts location. Optional loopback:
     `tools/smoke_1_4_carousel.sh` (DB source only; no Spotmu).
+11. **1.5:** no new host deps, no Alembic revision, no nginx `/api`.
+    Restart `twerva-api` after sync. Optional loopback:
+    `tools/smoke_1_5_approve_schedule.sh` (seed/generate path; no Spotmu,
+    no real publish).
 
 `GET /health` must keep working if the unit is ever started without
 `DATABASE_URL` (health-only). Production must keep the env file so

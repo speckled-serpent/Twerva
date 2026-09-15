@@ -1,10 +1,14 @@
-"""Artifact create/list/get routes (status is part of the payload)."""
+"""Artifact create/list/get plus review-queue approve/reject/patch (1.5a)."""
+
+from __future__ import annotations
 
 import uuid
+from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import Select
 
 from app.api.v1.lookups import (
     fetch_artifact_by_id_or_raise,
@@ -13,9 +17,26 @@ from app.api.v1.lookups import (
     fetch_source_item_by_id_or_raise,
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
-from app.api.v1.schemas import ArtifactCreateRequest, ArtifactReadResponse
+from app.api.v1.schemas import (
+    ArtifactApproveRequest,
+    ArtifactCreateRequest,
+    ArtifactPatchRequest,
+    ArtifactReadResponse,
+    ArtifactRejectRequest,
+)
+from app.approval.errors import (
+    ApprovalError,
+    ArtifactApprovalTransitionError,
+    ArtifactCaptionPatchNotAllowedError,
+)
+from app.approval.service import (
+    approve_artifact,
+    patch_artifact_caption_and_cta_url,
+    reject_artifact,
+)
 from app.db import get_our_database_session
 from app.models import Artifact
+from app.models.enums import ArtifactStatus
 
 
 artifacts_router: APIRouter = APIRouter(prefix="/artifacts", tags=["artifacts"])
@@ -70,12 +91,24 @@ def create_artifact(
 
 @artifacts_router.get("", response_model=list[ArtifactReadResponse])
 def list_artifacts(
+    artifact_status: Annotated[ArtifactStatus | None, Query(alias="status")] = None,
     our_database_session: Session = Depends(get_our_database_session),
 ) -> list[ArtifactReadResponse]:
-    """Return every Artifact, newest first."""
+    """Return Artifacts, newest first. Optional `status` is the review queue filter."""
 
-    artifact_selection = select(Artifact).order_by(Artifact.created_at.desc())
-    artifact_scalars = our_database_session.scalars(artifact_selection)
+    artifact_selection: Select[tuple[Artifact]] = select(Artifact)
+    ordered_artifact_selection: Select[tuple[Artifact]] = artifact_selection.order_by(
+        Artifact.created_at.desc(),
+    )
+    filtered_artifact_selection: Select[tuple[Artifact]]
+
+    if artifact_status is None:
+        filtered_artifact_selection = ordered_artifact_selection
+    else:
+        status_filter = Artifact.status == artifact_status
+        filtered_artifact_selection = ordered_artifact_selection.where(status_filter)
+
+    artifact_scalars = our_database_session.scalars(filtered_artifact_selection)
     artifacts: list[Artifact] = list(artifact_scalars.all())
     artifact_read_responses: list[ArtifactReadResponse] = [
         ArtifactReadResponse.model_validate(artifact) for artifact in artifacts
@@ -95,6 +128,108 @@ def get_artifact_by_id(
         artifact_id,
         our_database_session,
     )
+    artifact_read_response: ArtifactReadResponse = ArtifactReadResponse.model_validate(
+        found_artifact,
+    )
+
+    return artifact_read_response
+
+
+@artifacts_router.post("/{artifact_id}/approve", response_model=ArtifactReadResponse)
+def approve_artifact_by_id(
+    artifact_id: uuid.UUID,
+    artifact_approve_request: ArtifactApproveRequest | None = None,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> ArtifactReadResponse:
+    """Approve a draft Artifact; optional caption edit at approve time."""
+
+    found_artifact: Artifact = fetch_artifact_by_id_or_raise(
+        artifact_id,
+        our_database_session,
+    )
+    caption_to_apply: str | None = None
+
+    if artifact_approve_request is not None:
+        caption_to_apply = artifact_approve_request.caption
+
+    try:
+        approve_artifact(found_artifact, caption=caption_to_apply)
+    except ApprovalError as approval_error:
+        _raise_http_exception_for_approval_error(approval_error)
+
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Artifact could not be approved (conflict).",
+    )
+    our_database_session.refresh(found_artifact)
+    artifact_read_response: ArtifactReadResponse = ArtifactReadResponse.model_validate(
+        found_artifact,
+    )
+
+    return artifact_read_response
+
+
+@artifacts_router.post("/{artifact_id}/reject", response_model=ArtifactReadResponse)
+def reject_artifact_by_id(
+    artifact_id: uuid.UUID,
+    artifact_reject_request: ArtifactRejectRequest | None = None,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> ArtifactReadResponse:
+    """Reject a draft or approved Artifact (terminal). `reason` is ignored in MVP."""
+
+    found_artifact: Artifact = fetch_artifact_by_id_or_raise(
+        artifact_id,
+        our_database_session,
+    )
+    _ = artifact_reject_request
+
+    try:
+        reject_artifact(found_artifact)
+    except ApprovalError as approval_error:
+        _raise_http_exception_for_approval_error(approval_error)
+
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Artifact could not be rejected (conflict).",
+    )
+    our_database_session.refresh(found_artifact)
+    artifact_read_response: ArtifactReadResponse = ArtifactReadResponse.model_validate(
+        found_artifact,
+    )
+
+    return artifact_read_response
+
+
+@artifacts_router.patch("/{artifact_id}", response_model=ArtifactReadResponse)
+def patch_artifact_by_id(
+    artifact_id: uuid.UUID,
+    artifact_patch_request: ArtifactPatchRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> ArtifactReadResponse:
+    """Patch caption and/or cta_url while draft or approved (not rejected)."""
+
+    found_artifact: Artifact = fetch_artifact_by_id_or_raise(
+        artifact_id,
+        our_database_session,
+    )
+    assigned_fields: set[str] = artifact_patch_request.model_fields_set
+
+    try:
+        patch_artifact_caption_and_cta_url(
+            found_artifact,
+            caption=artifact_patch_request.caption,
+            cta_url=artifact_patch_request.cta_url,
+            caption_is_set="caption" in assigned_fields,
+            cta_url_is_set="cta_url" in assigned_fields,
+        )
+    except ApprovalError as approval_error:
+        _raise_http_exception_for_approval_error(approval_error)
+
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Artifact could not be patched (conflict).",
+    )
+    our_database_session.refresh(found_artifact)
     artifact_read_response: ArtifactReadResponse = ArtifactReadResponse.model_validate(
         found_artifact,
     )
@@ -136,3 +271,24 @@ def _serialize_artifact_slides(
     ]
 
     return serialized_slides
+
+
+def _raise_http_exception_for_approval_error(approval_error: ApprovalError) -> NoReturn:
+    """Map review-queue domain errors to HTTP 409."""
+
+    if isinstance(approval_error, ArtifactApprovalTransitionError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(approval_error),
+        ) from approval_error
+
+    if isinstance(approval_error, ArtifactCaptionPatchNotAllowedError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(approval_error),
+        ) from approval_error
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=str(approval_error),
+    ) from approval_error

@@ -7,8 +7,11 @@ from datetime import datetime, timezone
 from app.api.v1.schemas import (
     AccountCreateRequest,
     AccountReadResponse,
+    ArtifactApproveRequest,
     ArtifactCreateRequest,
+    ArtifactPatchRequest,
     ArtifactReadResponse,
+    ArtifactRejectRequest,
     ArtifactSlideSchema,
     BrandCreateRequest,
     CarouselGenerateRequest,
@@ -19,6 +22,7 @@ from app.api.v1.schemas import (
     MetricSnapshotReadResponse,
     PostJobCreateRequest,
     PostJobReadResponse,
+    SchedulePostJobRequest,
     SourceItemCreateRequest,
     SourceItemReadResponse,
     SpotmuSyncRequest,
@@ -249,6 +253,31 @@ class ApiSchemaTests(unittest.TestCase):
         self.assertEqual(generate_request.source_item_id, FIXED_SOURCE_ITEM_ID)
         self.assertIsNone(generate_request.cluster_id)
         self.assertEqual(generate_request_with_cluster.cluster_id, FIXED_CLUSTER_ID)
+
+    def test_approve_reject_patch_and_schedule_request_schemas(self) -> None:
+        """1.5: review-queue and schedule bodies accept the locked fields."""
+
+        approve_request: ArtifactApproveRequest = ArtifactApproveRequest(
+            caption="edited caption",
+        )
+        reject_request: ArtifactRejectRequest = ArtifactRejectRequest(
+            reason="off-brand",
+        )
+        patch_request: ArtifactPatchRequest = ArtifactPatchRequest(
+            caption="patched",
+            cta_url="https://spotmu.com/interest/example",
+        )
+        schedule_request: SchedulePostJobRequest = SchedulePostJobRequest(
+            artifact_id=FIXED_ARTIFACT_ID,
+            account_id=FIXED_ACCOUNT_ID,
+            scheduled_for=FIXED_TIMESTAMP,
+        )
+
+        self.assertEqual(approve_request.caption, "edited caption")
+        self.assertEqual(reject_request.reason, "off-brand")
+        self.assertEqual(patch_request.caption, "patched")
+        self.assertEqual(schedule_request.scheduled_for, FIXED_TIMESTAMP)
+        self.assertEqual(schedule_request.artifact_id, FIXED_ARTIFACT_ID)
 
 
 if __name__ == "__main__":

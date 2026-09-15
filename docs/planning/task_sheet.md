@@ -221,24 +221,24 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 **Parallelism:** serial.
 
 #### 1.5a — Review queue API
-- [ ] **1.5a-i** `GET /api/v1/artifacts?status=draft` (and by id already exists) — review queue list.
-- [ ] **1.5a-ii** `POST /api/v1/artifacts/{id}/approve` → status `approved`, set `approved_at`; optional body `{caption}` to edit caption before/at approve.
-- [ ] **1.5a-iii** `POST /api/v1/artifacts/{id}/reject` → status `rejected` (terminal); optional `{reason}` stored only if easy (else ignore).
-- [ ] **1.5a-iv** `PATCH /api/v1/artifacts/{id}` for caption (and maybe cta_url) while `draft` or `approved` (not `rejected`).
-- [ ] **1.5a-v** Tests for transitions; reject cannot re-approve without new artifact.
+- [x] **1.5a-i** `GET /api/v1/artifacts?status=draft` (and by id already exists) — review queue list.
+- [x] **1.5a-ii** `POST /api/v1/artifacts/{id}/approve` → status `approved`, set `approved_at`; optional body `{caption}` to edit caption before/at approve.
+- [x] **1.5a-iii** `POST /api/v1/artifacts/{id}/reject` → status `rejected` (terminal); optional `{reason}` stored only if easy (else ignore).
+- [x] **1.5a-iv** `PATCH /api/v1/artifacts/{id}` for caption (and maybe cta_url) while `draft` or `approved` (not `rejected`).
+- [x] **1.5a-v** Tests for transitions; reject cannot re-approve without new artifact.
 
 #### 1.5b — Cadence caps
-- [ ] **1.5b-i** Helper: given `account_id` + proposed `scheduled_for` (day in UTC or account-local — document UTC), count existing `post_jobs` that day not in `failed` (or count all non-failed); compare to `accounts.cadence_cap_per_day` (null = no cap).
-- [ ] **1.5b-ii** Schedule endpoint returns **409** with clear error when cap exceeded.
-- [ ] **1.5b-iii** Unit tests for under/at/over cap.
+- [x] **1.5b-i** Helper: given `account_id` + proposed `scheduled_for` (day in UTC or account-local — document UTC), count existing `post_jobs` that day not in `failed` (or count all non-failed); compare to `accounts.cadence_cap_per_day` (null = no cap).
+- [x] **1.5b-ii** Schedule endpoint returns **409** with clear error when cap exceeded.
+- [x] **1.5b-iii** Unit tests for under/at/over cap.
 
 #### 1.5c — Schedule post job
-- [ ] **1.5c-i** `POST /api/v1/schedule` body: `artifact_id`, `account_id`, `scheduled_for` (ISO timestamptz). Artifact must be `approved`. Creates `post_job` status `scheduled`.
-- [ ] **1.5c-ii** Validate account belongs to same brand/cluster coherence as artifact when cluster set (reasonable check; document).
-- [ ] **1.5c-iii** CLI: approve + schedule recipe in README; smoke `tools/smoke_1_5_approve_schedule.sh` using seed/generate path offline.
+- [x] **1.5c-i** `POST /api/v1/schedule` body: `artifact_id`, `account_id`, `scheduled_for` (ISO timestamptz). Artifact must be `approved`. Creates `post_job` status `scheduled`.
+- [x] **1.5c-ii** Validate account belongs to same brand/cluster coherence as artifact when cluster set (reasonable check; document).
+- [x] **1.5c-iii** CLI: approve + schedule recipe in README; smoke `tools/smoke_1_5_approve_schedule.sh` using seed/generate path offline.
 
 #### 1.5d — Report
-- [ ] **1.5d-i** `docs/reports/task_1_5_report.md`; tick leaves; Badger deploy note (no new host deps expected).
+- [x] **1.5d-i** `docs/reports/task_1_5_report.md`; tick leaves; Badger deploy note (no new host deps expected).
 
 **1.5 done when:** draft → approve → scheduled post_job works via API + smoke.
 
@@ -436,5 +436,5 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 Overnight mandate (Mu): finish **1.5 → 1.9**, auto-merge, deploy via Badger, then **STOP** for human review before Phase 2.
 
-Order: 1.5 approve/schedule → 1.6 mock PublishAdapter → 1.7 measure/steer → 1.8 thin ops → 1.9 agent playbooks + phase_1_exit_report.
+**§1.5 done** on this branch. **Start at 1.6a** (buy vs build publish spike), then 1.6b–d serial. Mock PublishAdapter default; no Celery.
 

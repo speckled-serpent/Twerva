@@ -33,9 +33,9 @@ class ArtifactSlide(TypedDict):
 class Artifact(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """Row in `artifacts`.
 
-    Status is stored only; transitions are enforced in the app layer later
-    (see `docs/planning/domain_statuses.md`). Media bytes stay out of
-    Postgres — `slides` holds the structured plan.
+    Status is stored only; 1.5 approval routes enforce
+    `ARTIFACT_STATUS_TRANSITIONS` (see `docs/planning/domain_statuses.md`).
+    Media bytes stay out of Postgres — `slides` holds the structured plan.
     """
 
     __tablename__ = "artifacts"

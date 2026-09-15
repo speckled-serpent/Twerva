@@ -29,6 +29,9 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/ingest/spotmu/sync",
         "/api/v1/clusters/{cluster_id}/source-items/{source_item_id}",
         "/api/v1/generate/carousel",
+        "/api/v1/artifacts/{artifact_id}/approve",
+        "/api/v1/artifacts/{artifact_id}/reject",
+        "/api/v1/schedule",
     },
 )
 COLLECTION_HTTP_METHODS: frozenset[str] = frozenset({"post", "get"})
@@ -90,6 +93,25 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         generate_carousel_methods: set[str] = methods_by_path["/api/v1/generate/carousel"]
 
         self.assertIn("post", generate_carousel_methods)
+
+    def test_review_queue_and_schedule_routes_exist(self) -> None:
+        """1.5a / 1.5c: approve, reject, PATCH caption, POST schedule."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        approve_methods: set[str] = methods_by_path[
+            "/api/v1/artifacts/{artifact_id}/approve"
+        ]
+        reject_methods: set[str] = methods_by_path[
+            "/api/v1/artifacts/{artifact_id}/reject"
+        ]
+        artifact_item_methods: set[str] = methods_by_path["/api/v1/artifacts/{artifact_id}"]
+        schedule_methods: set[str] = methods_by_path["/api/v1/schedule"]
+
+        self.assertIn("post", approve_methods)
+        self.assertIn("post", reject_methods)
+        self.assertIn("patch", artifact_item_methods)
+        self.assertIn("get", artifact_item_methods)
+        self.assertIn("post", schedule_methods)
 
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""

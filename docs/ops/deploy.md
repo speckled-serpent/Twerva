@@ -120,6 +120,13 @@ public path. No new Alembic revision in 1.4 (`12bk_domain_schema`
 remains head). After sync, `pip install -r requirements.txt` so
 **Pillow** lands in `.venv`, then restart `twerva-api`.
 
+### Phase 1.5 (approval & schedule)
+
+No new host deps, env vars, or Alembic revision. Sync the app tree and
+`sudo systemctl restart twerva-api`. Optional loopback smoke:
+`tools/smoke_1_5_approve_schedule.sh` (seed/generate; no Spotmu, no
+real publish). Still no public nginx `/api/`.
+
 The app does not open `database_url.env` itself. systemd may load it as
 `EnvironmentFile=`, or a shell must `source` it before Alembic. Local
 override and URL rewrite rules: [`apps/server/README.md`](../../apps/server/README.md).
@@ -301,5 +308,7 @@ detail:
   Spotmu ingest, `httpx`, `/health`-only reminder
 - [`docs/reports/task_1_4_report.md`](../reports/task_1_4_report.md) —
   carousel generate, local `ARTIFACT_STORAGE_DIR`, Pillow
+- [`docs/reports/task_1_5_report.md`](../reports/task_1_5_report.md) —
+  approval, UTC cadence caps, `POST /api/v1/schedule`
 - [`docs/planning/task_sheet.md`](../planning/task_sheet.md) — §1.1 host
   facts; parking lot for S3 and Secrets Manager
