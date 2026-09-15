@@ -328,13 +328,13 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 **Parallelism:** serial; docs-heavy; tiny helper scripts OK.
 
 #### 1.9a — Operator/agent docs
-- [ ] **1.9a-i** `docs/agents/README.md` — how agents draft artifacts, approve gates, propose steer; link API routes.
-- [ ] **1.9a-ii** `docs/agents/playbook_batch_generate_spotmu_cluster.md` — dry-run: ingest/sync (or use existing sources) → generate carousels for cluster X → stop before approve (human gate) → optional summary.
-- [ ] **1.9a-iii** Optional `tools/agent_batch_generate.sh` implementing the dry-run against localhost API.
+- [x] **1.9a-i** `docs/agents/README.md` — how agents draft artifacts, approve gates, propose steer; link API routes.
+- [x] **1.9a-ii** `docs/agents/playbook_batch_generate_spotmu_cluster.md` — dry-run: ingest/sync (or use existing sources) → generate carousels for cluster X → stop before approve (human gate) → optional summary.
+- [x] **1.9a-iii** Optional `tools/agent_batch_generate.sh` implementing the dry-run against localhost API.
 
 #### 1.9b — Close Phase 1 sheet
-- [ ] **1.9b-i** Tick 1.9 leaves; `docs/reports/task_1_9_report.md`.
-- [ ] **1.9b-ii** Short `docs/reports/phase_1_exit_report.md`: what works end-to-end, what’s mock (publish), Spotmu ingest smoke status, what Mu should review before Phase 2. **Do not start Phase 2.**
+- [x] **1.9b-i** Tick 1.9 leaves; `docs/reports/task_1_9_report.md`.
+- [x] **1.9b-ii** Short `docs/reports/phase_1_exit_report.md`: what works end-to-end, what’s mock (publish), Spotmu ingest smoke status, what Mu should review before Phase 2. **Do not start Phase 2.**
 
 **1.9 / Phase 1 done when:** playbook exists + phase_1_exit_report written.
 
@@ -436,7 +436,8 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 ## Suggested next coding slice
 
-Overnight mandate (Mu): finish **1.5 → 1.9**, auto-merge, deploy via Badger, then **STOP** for human review before Phase 2.
-
-**§1.8 done** on this branch. **Start at 1.9a** (operator/agent docs + batch-generate playbook), then 1.9b phase-1 exit report. Mock publish and manual/stub metrics stay the pipe until Mu adds vendor keys. Do **not** start Phase 2.
+**§1.9 / Phase 1 sheet closed** on this branch (docs + dry-run playbook).
+Read [`docs/reports/phase_1_exit_report.md`](../reports/phase_1_exit_report.md).
+Mock publish and manual/stub metrics stay the pipe until Mu adds vendor
+keys. **STOP. Do not start Phase 2** until Mu reviews.
 

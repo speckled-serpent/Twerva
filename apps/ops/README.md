@@ -61,6 +61,10 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
 API errors render as plain text under the page heading.
 
+Agent dry-run (generate drafts, **stop before approve**):
+[`docs/agents/playbook_batch_generate_spotmu_cluster.md`](../../docs/agents/playbook_batch_generate_spotmu_cluster.md)
+and `tools/agent_batch_generate.sh`.
+
 ## How the console reaches the API
 
 Two options. **Prefer the Vite proxy for local `npm run dev`.**
