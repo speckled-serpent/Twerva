@@ -213,31 +213,130 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 **1.4 done when:** draft carousel artifact with on-disk slides + caption from a source_item via API.
 
 ### 1.5 Approval & schedule
-- [ ] Review queue UI (or CLI acceptable for first cut) — approve / reject / edit caption
-- [ ] Cadence caps per account (simple rules)
-- [ ] Scheduler: attach artifact → account → time
+
+**Exit:** Operator can list draft artifacts, approve/reject/edit caption, and create a `post_job` scheduled to an account at a time, respecting simple cadence caps. CLI acceptable; thin API required. Full calendar UI can wait for 1.8.
+
+**Out of scope:** Real social publish (1.6), ops React polish (1.8), Celery beat (sync schedule create OK).
+
+**Parallelism:** serial.
+
+#### 1.5a — Review queue API
+- [ ] **1.5a-i** `GET /api/v1/artifacts?status=draft` (and by id already exists) — review queue list.
+- [ ] **1.5a-ii** `POST /api/v1/artifacts/{id}/approve` → status `approved`, set `approved_at`; optional body `{caption}` to edit caption before/at approve.
+- [ ] **1.5a-iii** `POST /api/v1/artifacts/{id}/reject` → status `rejected` (terminal); optional `{reason}` stored only if easy (else ignore).
+- [ ] **1.5a-iv** `PATCH /api/v1/artifacts/{id}` for caption (and maybe cta_url) while `draft` or `approved` (not `rejected`).
+- [ ] **1.5a-v** Tests for transitions; reject cannot re-approve without new artifact.
+
+#### 1.5b — Cadence caps
+- [ ] **1.5b-i** Helper: given `account_id` + proposed `scheduled_for` (day in UTC or account-local — document UTC), count existing `post_jobs` that day not in `failed` (or count all non-failed); compare to `accounts.cadence_cap_per_day` (null = no cap).
+- [ ] **1.5b-ii** Schedule endpoint returns **409** with clear error when cap exceeded.
+- [ ] **1.5b-iii** Unit tests for under/at/over cap.
+
+#### 1.5c — Schedule post job
+- [ ] **1.5c-i** `POST /api/v1/schedule` body: `artifact_id`, `account_id`, `scheduled_for` (ISO timestamptz). Artifact must be `approved`. Creates `post_job` status `scheduled`.
+- [ ] **1.5c-ii** Validate account belongs to same brand/cluster coherence as artifact when cluster set (reasonable check; document).
+- [ ] **1.5c-iii** CLI: approve + schedule recipe in README; smoke `tools/smoke_1_5_approve_schedule.sh` using seed/generate path offline.
+
+#### 1.5d — Report
+- [ ] **1.5d-i** `docs/reports/task_1_5_report.md`; tick leaves; Badger deploy note (no new host deps expected).
+
+**1.5 done when:** draft → approve → scheduled post_job works via API + smoke.
 
 ### 1.6 Publish (IG + TikTok)
-- [ ] Spike **buy vs build publish**: unified API (Ayrshare / Zernio / Postiz) vs native Meta + TikTok APIs — prefer adapter + vendor for MVP unless spike says otherwise
-- [ ] Implement `PublishAdapter`; connect 1–2 test accounts
-- [ ] Publish worker; record platform post id / URL on success
-- [ ] Failure handling + retry/backoff basics
+
+**Exit:** A `PublishAdapter` interface exists; MVP ships a **dry-run/mock** adapter that “publishes” scheduled jobs to `published` with fake platform ids **and** a spike lock choosing the real vendor for later. Optional live vendor only if env credentials present — do not block Phase 1 on Ayrshare signup.
+
+**Out of scope:** Paid ads, real OAuth account connection UI (store `external_account_id` manually OK), Celery required (sync publish endpoint/CLI OK).
+
+**Parallelism:** serial.
+
+#### 1.6a — Buy vs build spike
+- [ ] **1.6a-i** `docs/reports/task_1_6_publish_spike.md`: Ayrshare vs Zernio vs Postiz vs native Meta/TikTok — recommendation for Twerva MVP+Phase2.
+- [ ] **1.6a-ii** Lock: implement adapter interface now; **mock adapter default**; real vendor behind env flag when keys exist.
+
+#### 1.6b — PublishAdapter
+- [ ] **1.6b-i** Interface: `publish(post_job, artifact, account, media_paths) -> {platform_post_id, platform_post_url}`.
+- [ ] **1.6b-ii** `MockPublishAdapter`: succeeds, writes deterministic fake ids; logs media paths counted.
+- [ ] **1.6b-iii** Settings: `PUBLISH_ADAPTER=mock|ayrshare` (or similar); only mock required to work in CI.
+
+#### 1.6c — Publish worker path
+- [ ] **1.6c-i** `POST /api/v1/publish/run/{post_job_id}` (or `/publish/due`) — load scheduled job, set `publishing`, call adapter, on success `published` + platform fields + `published_at`; on failure `failed` + `last_error`.
+- [ ] **1.6c-ii** Basic retry: optional second attempt or document manual re-run; backoff note in report (no Redis required).
+- [ ] **1.6c-iii** Resolve slide `asset_ref` files from `ARTIFACT_STORAGE_DIR` for adapter input.
+- [ ] **1.6c-iv** Tests with mock adapter; smoke script offline.
+
+#### 1.6d — Report
+- [ ] **1.6d-i** `docs/reports/task_1_6_report.md`; tick leaves; note live vendor as follow-up when Mu adds keys.
+
+**1.6 done when:** scheduled job can be mock-published to `published` with platform ids recorded.
 
 ### 1.7 Measure & steer
-- [ ] Pull or enter views (automate what we can; manual OK at first)
-- [ ] Cluster rollup with **median** views
-- [ ] Kill / pause / double-down controls (even if coarse)
-- [ ] Export or agent-readable summary for feedback into next generate
+
+**Exit:** Manual (or stub) metric capture into `metric_snapshots`; cluster median views endpoint; steer actions kill/pause/double_down/resume recorded; agent-readable summary JSON/markdown endpoint or CLI.
+
+**Parallelism:** serial.
+
+#### 1.7a — Metrics in
+- [ ] **1.7a-i** `POST /api/v1/post-jobs/{id}/metrics` body views/likes/comments/shares — append `metric_snapshots` row (latest-wins already documented).
+- [ ] **1.7a-ii** Optional stub puller that no-ops or copies mock views for mock-published jobs — document.
+
+#### 1.7b — Cluster median
+- [ ] **1.7b-i** `GET /api/v1/clusters/{id}/metrics/summary` — median views across post jobs that have snapshots (document empty behavior).
+- [ ] **1.7b-ii** Unit test for median helper.
+
+#### 1.7c — Steer controls
+- [ ] **1.7c-i** `POST /api/v1/clusters/{id}/steer` body `{action, reason?}` → insert `steer_actions`; if `kill`/`pause`, set cluster `is_active=false` or account statuses paused as documented; `resume`/`double_down` documented behavior (double_down may only log for MVP).
+- [ ] **1.7c-ii** Tests for pause/resume side effects you implement.
+
+#### 1.7d — Agent summary
+- [ ] **1.7d-i** `GET /api/v1/clusters/{id}/agent-summary` (or CLI) returning markdown/JSON: recent artifacts, post jobs, medians, last steer actions.
+- [ ] **1.7d-ii** `docs/reports/task_1_7_report.md`; tick leaves; smoke script.
+
+**1.7 done when:** metrics → median → steer → summary works via API.
 
 ### 1.8 Ops console (thin)
-- [ ] Sources · Generate queue · Calendar · Accounts/clusters · Results
-- [ ] Ugly is fine; loop must be visible end-to-end
+
+**Exit:** `apps/ops` shows ugly-but-usable pages: Sources, Generate queue (drafts + approve actions), Schedule/Publish stubs, Accounts/Clusters, Results (median + steer). Can walk the loop in the browser against local API (vite proxy to API).
+
+**Out of scope:** Auth, pretty design, mobile polish.
+
+**Parallelism:** serial (one frontend PR). May depend on 1.5–1.7 APIs — implement against those routes.
+
+#### 1.8a — App shell & API client
+- [ ] **1.8a-i** Vite proxy or `VITE_API_BASE_URL` to Twerva API (default `http://127.0.0.1:8000`).
+- [ ] **1.8a-ii** Simple nav layout: Sources · Queue · Schedule · Accounts · Results.
+
+#### 1.8b — Pages
+- [ ] **1.8b-i** Sources: list source_items; button to generate carousel.
+- [ ] **1.8b-ii** Queue: list drafts; approve / reject / edit caption.
+- [ ] **1.8b-iii** Schedule: pick approved artifact + account + time; list post_jobs; button mock-publish.
+- [ ] **1.8b-iv** Accounts/Clusters: list; cadence_cap display; steer buttons.
+- [ ] **1.8b-v** Results: cluster summary + agent-summary pane (pre/plaintext OK).
+
+#### 1.8c — Ship notes
+- [ ] **1.8c-i** README how to run ops + API locally; optional static build note for later nginx (not required to expose publicly tonight).
+- [ ] **1.8c-ii** `docs/reports/task_1_8_report.md`; tick leaves.
+
+**1.8 done when:** ops UI can drive generate → approve → schedule → mock publish → metrics/steer against API.
 
 ### 1.9 Agent hooks
-- [ ] Document how agents draft artifacts and propose steer actions
-- [ ] One dry-run playbook: “batch generate from Spotmu cluster X”
 
-**Phase 1 done when:** a real Spotmu interest cluster has completed the loop at least once with human gate.
+**Exit:** Docs + one dry-run playbook so agents (Sparky/Canary/etc.) can batch-generate and propose steer without guessing APIs.
+
+**Parallelism:** serial; docs-heavy; tiny helper scripts OK.
+
+#### 1.9a — Operator/agent docs
+- [ ] **1.9a-i** `docs/agents/README.md` — how agents draft artifacts, approve gates, propose steer; link API routes.
+- [ ] **1.9a-ii** `docs/agents/playbook_batch_generate_spotmu_cluster.md` — dry-run: ingest/sync (or use existing sources) → generate carousels for cluster X → stop before approve (human gate) → optional summary.
+- [ ] **1.9a-iii** Optional `tools/agent_batch_generate.sh` implementing the dry-run against localhost API.
+
+#### 1.9b — Close Phase 1 sheet
+- [ ] **1.9b-i** Tick 1.9 leaves; `docs/reports/task_1_9_report.md`.
+- [ ] **1.9b-ii** Short `docs/reports/phase_1_exit_report.md`: what works end-to-end, what’s mock (publish), Spotmu ingest smoke status, what Mu should review before Phase 2. **Do not start Phase 2.**
+
+**1.9 / Phase 1 done when:** playbook exists + phase_1_exit_report written.
+
+**Phase 1 done when:** loop works on box with mock publish (real Spotmu ingest when Spotmu up); human gate documented; `phase_1_exit_report.md` written for Mu review. **Stop — do not start Phase 2.**
 
 ---
 
@@ -335,7 +434,7 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 ## Suggested next coding slice
 
-**§1.4 done** (local carousel generate; S3 still parked). **Start at 1.5** (approval & schedule). No Engineer subs.
+Overnight mandate (Mu): finish **1.5 → 1.9**, auto-merge, deploy via Badger, then **STOP** for human review before Phase 2.
 
-After 1.4: 1.5 approve → 1.6 publish adapter → 1.7 measure/steer stubs → 1.8 thin ops console.
+Order: 1.5 approve/schedule → 1.6 mock PublishAdapter → 1.7 measure/steer → 1.8 thin ops → 1.9 agent playbooks + phase_1_exit_report.
 
