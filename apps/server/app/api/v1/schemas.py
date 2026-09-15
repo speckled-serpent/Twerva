@@ -194,6 +194,36 @@ class ArtifactReadResponse(BaseModel):
     updated_at: datetime
 
 
+class ArtifactApproveRequest(BaseModel):
+    """Optional body for `POST /api/v1/artifacts/{id}/approve`."""
+
+    caption: str | None = None
+
+
+class ArtifactRejectRequest(BaseModel):
+    """Optional body for `POST /api/v1/artifacts/{id}/reject`.
+
+    `reason` is accepted and ignored in MVP (no reject-reason column).
+    """
+
+    reason: str | None = None
+
+
+class ArtifactPatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/artifacts/{id}` (caption / cta_url)."""
+
+    caption: str | None = None
+    cta_url: str | None = None
+
+
+class SchedulePostJobRequest(BaseModel):
+    """Body for `POST /api/v1/schedule`."""
+
+    artifact_id: uuid.UUID
+    account_id: uuid.UUID
+    scheduled_for: datetime
+
+
 class PostJobCreateRequest(BaseModel):
     """Body for `POST /api/v1/post-jobs`."""
 

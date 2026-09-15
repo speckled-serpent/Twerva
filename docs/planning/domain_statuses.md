@@ -43,8 +43,9 @@ Allowed transitions (also `ARTIFACT_STATUS_TRANSITIONS`):
 - `draft` → `rejected`
 - `approved` → `rejected`
 
-`rejected` is terminal. The database stores the string only; the API
-(1.2l) and later approval UI enforce the graph.
+`rejected` is terminal. The database stores the string only; 1.5
+review routes (`POST .../approve`, `POST .../reject`) enforce the graph.
+Re-approve of a rejected row is not allowed — generate a new Artifact.
 
 ## PostJobStatus (`post_job_status`)
 
@@ -142,3 +143,17 @@ LIMIT 1;
 
 Use index `ix_metric_snapshots_post_job_id` plus the sort. Cluster
 medians (1.7) are queries over this grain, not a second stored table.
+
+## Cadence caps (1.5b)
+
+`accounts.cadence_cap_per_day` null means no cap. The schedule helper
+counts existing `post_jobs` for that account whose `scheduled_for` falls
+on the **UTC calendar day** of the proposed time and whose status is not
+`failed`. Meeting or exceeding the cap is HTTP 409.
+
+## Schedule coherence (1.5c)
+
+`POST /api/v1/schedule` requires Artifact `approved`. The Account's
+Cluster `brand_id` must match the Artifact brand. When the Artifact has
+`cluster_id` set, the Account must belong to that cluster; when it is
+null, any Account under the same brand is allowed.
