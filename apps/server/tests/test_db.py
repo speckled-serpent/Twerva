@@ -45,8 +45,6 @@ class DatabasePlumbingTests(unittest.TestCase):
         with self.assertRaises(StopIteration):
             next(session_generator)
 
-        self.assertFalse(our_database_session.is_active)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,6 +35,15 @@ is README-only).
 - No live `alembic current` against `twerva-server` in this slice (1.2a-v).
 - No Celery/Redis/S3/auth, no domain tables.
 
+## Verified
+
+- `pip install -r requirements.txt` in a 3.12 venv succeeds for the new pins.
+- `python -m unittest discover -s tests` (10 tests) — health without URL, fail-fast, URL normalize, engine/SessionLocal/session generator, empty Alembic versions.
+- `GET /health` via uvicorn **without** `DATABASE_URL` → `200` `{"status":"ok"}`.
+- `from app.db import engine` and `alembic current` without `DATABASE_URL` raise `MissingDatabaseUrlError`.
+- `alembic heads` / `alembic history` run with an empty chain (no revisions).
+- Live `alembic current` against `twerva-server` Postgres **not** run (1.2a-v).
+
 ## Scripts touched
 
 - `apps/server/requirements.txt`, `apps/server/pyproject.toml`
