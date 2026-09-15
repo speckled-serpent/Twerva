@@ -1,7 +1,8 @@
 # Twerva server
 
 FastAPI process for the Twerva API. `GET /health` is a liveness check and does
-**not** open a database connection. Domain models start in task 1.2b+.
+**not** open a database connection (it does not import models or `app.db`).
+Domain tables land in Alembic revision `12bk_domain_schema` (task 1.2b–k).
 
 Requires **Python 3.11+**.
 
@@ -64,13 +65,19 @@ The app does not open that file itself.
 
 ## Alembic
 
-Run from this directory so `alembic.ini` and `app.settings` resolve. The
-revision chain is empty in 1.2a (ready for 1.2b+).
+Run from this directory so `alembic.ini` and `app.settings` resolve.
+Current head: **`12bk_domain_schema`** (Phase 1.2c–1.2j tables + enums).
 
 ```bash
+export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
 alembic heads
-alembic history
+alembic upgrade head
+alembic current
 ```
+
+`alembic upgrade head` is clean on an empty Postgres database. Production
+apply on `twerva-server` uses the on-box env file (below). See
+`docs/reports/task_1_2_report.md` for the 1.2k-iii note.
 
 ### Smoke (`1.2a-v`) — connect with the on-box env file
 
@@ -85,12 +92,12 @@ alembic current
 ```
 
 `alembic current` opens Postgres on `127.0.0.1:5432` using `DATABASE_URL`.
-With an empty revision chain it should connect and report no current
-revision (or `(empty)`), not a connection error.
+After `alembic upgrade head` it should report `12bk_domain_schema (head)`.
 
 Local equivalent (your own `DATABASE_URL`):
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
+alembic upgrade head
 alembic current
 ```

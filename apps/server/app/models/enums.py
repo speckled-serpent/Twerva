@@ -1,0 +1,130 @@
+"""Closed vocabularies stored as native Postgres ENUM types.
+
+See `docs/planning/domain_statuses.md` for the locked approach, allowed
+transitions, and query conventions. This module is the in-code source of
+truth for the stored strings.
+"""
+
+import enum
+
+from sqlalchemy import Enum
+
+
+class ArtifactStatus(enum.StrEnum):
+    """Lifecycle of an Artifact. Reject is terminal for MVP."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class PostJobStatus(enum.StrEnum):
+    """Lifecycle of a PostJob (schedule → publish → measure, with retry)."""
+
+    SCHEDULED = "scheduled"
+    PUBLISHING = "publishing"
+    PUBLISHED = "published"
+    FAILED = "failed"
+    MEASURED = "measured"
+
+
+class Platform(enum.StrEnum):
+    """Publish target. Phase 1 is Instagram + TikTok only."""
+
+    INSTAGRAM = "instagram"
+    TIKTOK = "tiktok"
+
+
+class SourceType(enum.StrEnum):
+    """Origin of a SourceItem.
+
+    Phase 1 uses `spotmu_interest` only. `brand_product` and
+    `editorial_brief` are reserved values so the enum does not need a
+    rewrite when those flows land; do not build those ingest paths here.
+    """
+
+    SPOTMU_INTEREST = "spotmu_interest"
+    BRAND_PRODUCT = "brand_product"
+    EDITORIAL_BRIEF = "editorial_brief"
+
+
+class AccountStatus(enum.StrEnum):
+    """Operational state of a platform Account."""
+
+    ACTIVE = "active"
+    PAUSED = "paused"
+    DISABLED = "disabled"
+
+
+class SteerActionType(enum.StrEnum):
+    """Coarse steer decision attached to a Cluster (stub table, no API)."""
+
+    KILL = "kill"
+    PAUSE = "pause"
+    DOUBLE_DOWN = "double_down"
+    RESUME = "resume"
+
+
+ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
+    ArtifactStatus.DRAFT: frozenset(
+        {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
+    ),
+    ArtifactStatus.APPROVED: frozenset({ArtifactStatus.REJECTED}),
+    ArtifactStatus.REJECTED: frozenset(),
+}
+
+POST_JOB_STATUS_TRANSITIONS: dict[PostJobStatus, frozenset[PostJobStatus]] = {
+    PostJobStatus.SCHEDULED: frozenset({PostJobStatus.PUBLISHING}),
+    PostJobStatus.PUBLISHING: frozenset(
+        {PostJobStatus.PUBLISHED, PostJobStatus.FAILED},
+    ),
+    PostJobStatus.PUBLISHED: frozenset(
+        {PostJobStatus.FAILED, PostJobStatus.MEASURED},
+    ),
+    PostJobStatus.FAILED: frozenset(
+        {
+            PostJobStatus.SCHEDULED,
+            PostJobStatus.PUBLISHING,
+            PostJobStatus.MEASURED,
+        },
+    ),
+    PostJobStatus.MEASURED: frozenset(),
+}
+
+
+def as_postgres_enum(enum_class: type[enum.StrEnum], type_name: str) -> Enum:
+    """Map a StrEnum to a native Postgres ENUM column type.
+
+    Args:
+        enum_class: Closed vocabulary whose `.value` strings are stored.
+        type_name: Stable Postgres type name (must match the migration).
+
+    Returns:
+        A SQLAlchemy Enum that persists member values, not member names.
+    """
+
+    postgres_enum: Enum = Enum(
+        enum_class,
+        name=type_name,
+        native_enum=True,
+        values_callable=_stored_enum_values,
+        validate_strings=True,
+    )
+
+    return postgres_enum
+
+
+def _stored_enum_values(enum_class: type[enum.Enum]) -> list[str]:
+    """Return lowercase stored values for a SQLAlchemy native enum."""
+
+    stored_values: list[str] = [member.value for member in enum_class]
+
+    return stored_values
+
+
+ARTIFACT_STATUS_ENUM: Enum = as_postgres_enum(ArtifactStatus, "artifact_status")
+POST_JOB_STATUS_ENUM: Enum = as_postgres_enum(PostJobStatus, "post_job_status")
+PLATFORM_ENUM: Enum = as_postgres_enum(Platform, "platform")
+SOURCE_TYPE_ENUM: Enum = as_postgres_enum(SourceType, "source_type")
+ACCOUNT_STATUS_ENUM: Enum = as_postgres_enum(AccountStatus, "account_status")
+STEER_ACTION_TYPE_ENUM: Enum = as_postgres_enum(SteerActionType, "steer_action_type")

@@ -1,7 +1,8 @@
 """Alembic environment.
 
 Uses the same `DATABASE_URL` as the FastAPI process (`app.settings`).
-No domain models yet — `target_metadata` is the empty 1.2a declarative base.
+Imports the models package (not only `Base`) so `target_metadata` includes
+every 1.2c–1.2j table.
 """
 
 from logging.config import fileConfig
@@ -12,7 +13,7 @@ from alembic.config import Config
 from sqlalchemy import engine_from_config, pool
 from sqlalchemy.engine import Connection, Engine
 
-from app.models.base import Base
+from app.models import Base
 from app.settings import Settings, get_settings
 
 

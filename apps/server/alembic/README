@@ -1,4 +1,9 @@
 Alembic revisions for the Twerva API database.
 
-The chain is empty in 1.2a (no domain tables). Domain migrations start in 1.2b+.
+Current head: `12bk_domain_schema` (1.2c–1.2j domain tables, enums, indexes).
 Run commands from `apps/server` so `alembic.ini` and `app.settings` resolve.
+
+```bash
+alembic upgrade head
+alembic current
+```

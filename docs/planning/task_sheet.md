@@ -45,68 +45,68 @@ Wire SQLAlchemy + Alembic to the existing EC2 Postgres (`DATABASE_URL` from `/op
 #### 1.2b — Shared types & status enums
 Single source of truth for IDs and lifecycle strings used by Artifact / Post job.
 
-- [ ] **1.2b-i** Define UUID primary-key convention (Postgres `UUID`, generated in DB or app — pick one, document in model module docstring).
-- [ ] **1.2b-ii** `ArtifactStatus` enum: `draft` → `approved` → `rejected` (reject terminal for MVP). Store as Postgres enum or check-constrained text; document choice.
-- [ ] **1.2b-iii** `PostJobStatus` enum: `scheduled` → `publishing` → `published` → `failed` → `measured` (allow `failed` → retry back to `scheduled` or `publishing` — document allowed transitions in a short comment or `docs/planning/domain_statuses.md`).
-- [ ] **1.2b-iv** `Platform` enum: at least `instagram`, `tiktok` (string enum). Others later.
-- [ ] **1.2b-v** `SourceType` enum: at least `spotmu_interest` (Phase 1). Leave room for `brand_product` / `editorial_brief` as unused values or comments only — do not build those flows.
+- [x] **1.2b-i** Define UUID primary-key convention (Postgres `UUID`, generated in DB or app — pick one, document in model module docstring).
+- [x] **1.2b-ii** `ArtifactStatus` enum: `draft` → `approved` → `rejected` (reject terminal for MVP). Store as Postgres enum or check-constrained text; document choice.
+- [x] **1.2b-iii** `PostJobStatus` enum: `scheduled` → `publishing` → `published` → `failed` → `measured` (allow `failed` → retry back to `scheduled` or `publishing` — document allowed transitions in a short comment or `docs/planning/domain_statuses.md`).
+- [x] **1.2b-iv** `Platform` enum: at least `instagram`, `tiktok` (string enum). Others later.
+- [x] **1.2b-v** `SourceType` enum: at least `spotmu_interest` (Phase 1). Leave room for `brand_product` / `editorial_brief` as unused values or comments only — do not build those flows.
 
 #### 1.2c — Brand
 First-class Brand row. Phase 1–2: Spotmu is the seed brand.
 
-- [ ] **1.2c-i** Table `brands`: `id`, `slug` (unique), `name`, `created_at`, `updated_at`. Optional nullable `notes` text. No Phase 3 vibe/voice columns required yet (add nullable `voice_notes` only if it costs nothing).
-- [ ] **1.2c-ii** SQLAlchemy model `Brand` mapped to `brands`.
-- [ ] **1.2c-iii** Alembic revision creating `brands` (or combined 1.2 schema revision — if combined, still list as done when migration includes this table).
+- [x] **1.2c-i** Table `brands`: `id`, `slug` (unique), `name`, `created_at`, `updated_at`. Optional nullable `notes` text. No Phase 3 vibe/voice columns required yet (add nullable `voice_notes` only if it costs nothing).
+- [x] **1.2c-ii** SQLAlchemy model `Brand` mapped to `brands`.
+- [x] **1.2c-iii** Alembic revision creating `brands` (or combined 1.2 schema revision — if combined, still list as done when migration includes this table).
 
 #### 1.2d — Source item
 Raw material unit. Phase 1 shape = Spotmu interest fields (ingest comes in 1.3; schema must be ready).
 
-- [ ] **1.2d-i** Table `source_items`: `id`, `brand_id` FK → `brands`, `source_type` (`spotmu_interest`), `external_key` (nullable unique per brand+type — e.g. Spotmu interest id/slug), `title`, `interest_heading` (nullable), `overview_bullets` (JSONB array of strings), `canonical_url` (nullable — `/interest/:slug` absolute URL), `brand_kit_refs` (JSONB nullable), `raw_payload` (JSONB nullable for forward-compat), `created_at`, `updated_at`.
-- [ ] **1.2d-ii** Unique constraint on (`brand_id`, `source_type`, `external_key`) where `external_key` is not null.
-- [ ] **1.2d-iii** SQLAlchemy model `SourceItem` + relationship to `Brand`.
+- [x] **1.2d-i** Table `source_items`: `id`, `brand_id` FK → `brands`, `source_type` (`spotmu_interest`), `external_key` (nullable unique per brand+type — e.g. Spotmu interest id/slug), `title`, `interest_heading` (nullable), `overview_bullets` (JSONB array of strings), `canonical_url` (nullable — `/interest/:slug` absolute URL), `brand_kit_refs` (JSONB nullable), `raw_payload` (JSONB nullable for forward-compat), `created_at`, `updated_at`.
+- [x] **1.2d-ii** Unique constraint on (`brand_id`, `source_type`, `external_key`) where `external_key` is not null.
+- [x] **1.2d-iii** SQLAlchemy model `SourceItem` + relationship to `Brand`.
 
 #### 1.2e — Cluster / lane
 Topical account group — steer grain and purity.
 
-- [ ] **1.2e-i** Table `clusters`: `id`, `brand_id` FK, `slug` (unique per brand), `name`, `description` (nullable), `is_active` (bool default true), `created_at`, `updated_at`.
-- [ ] **1.2e-ii** Optional join `cluster_source_items` (`cluster_id`, `source_item_id`, unique pair) — manual assignment target for 1.3. If deferred to 1.3, leave an explicit `[ ]` parked note here and do not invent another mapping path.
-- [ ] **1.2e-iii** SQLAlchemy model `Cluster` (+ association if 1.2e-ii ships).
+- [x] **1.2e-i** Table `clusters`: `id`, `brand_id` FK, `slug` (unique per brand), `name`, `description` (nullable), `is_active` (bool default true), `created_at`, `updated_at`.
+- [x] **1.2e-ii** Optional join `cluster_source_items` (`cluster_id`, `source_item_id`, unique pair) — manual assignment target for 1.3. If deferred to 1.3, leave an explicit `[ ]` parked note here and do not invent another mapping path.
+- [x] **1.2e-iii** SQLAlchemy model `Cluster` (+ association if 1.2e-ii ships).
 
 #### 1.2f — Account
 Platform identity assigned to a cluster.
 
-- [ ] **1.2f-i** Table `accounts`: `id`, `cluster_id` FK, `platform` (`instagram`/`tiktok`), `handle` (text), `external_account_id` (nullable — vendor/platform id), `status` (`active`/`paused`/`disabled`), `cadence_cap_per_day` (int nullable), `created_at`, `updated_at`.
-- [ ] **1.2f-ii** Unique (`platform`, `handle`) or (`platform`, `external_account_id`) when present — document which uniqueness rule you lock.
-- [ ] **1.2f-iii** SQLAlchemy model `Account` + relationship to `Cluster`. **Do not** store OAuth tokens in plaintext in this task; token columns deferred until publish spike (1.6) or a dedicated secrets note.
+- [x] **1.2f-i** Table `accounts`: `id`, `cluster_id` FK, `platform` (`instagram`/`tiktok`), `handle` (text), `external_account_id` (nullable — vendor/platform id), `status` (`active`/`paused`/`disabled`), `cadence_cap_per_day` (int nullable), `created_at`, `updated_at`.
+- [x] **1.2f-ii** Unique (`platform`, `handle`) or (`platform`, `external_account_id`) when present — document which uniqueness rule you lock.
+- [x] **1.2f-iii** SQLAlchemy model `Account` + relationship to `Cluster`. **Do not** store OAuth tokens in plaintext in this task; token columns deferred until publish spike (1.6) or a dedicated secrets note.
 
 #### 1.2g — Artifact
 Rendered (or draft) post asset. Media bytes stay out of DB for now (S3 parked); store metadata + caption + structured slide plan.
 
-- [ ] **1.2g-i** Table `artifacts`: `id`, `brand_id` FK, `source_item_id` FK nullable, `cluster_id` FK nullable, `status` (`ArtifactStatus`), `format` text default `carousel`, `caption` text nullable, `cta_url` text nullable, `slides` JSONB nullable (ordered list of `{role, text, asset_ref?}` — `asset_ref` unused until S3), `created_at`, `updated_at`, `approved_at` nullable.
-- [ ] **1.2g-ii** SQLAlchemy model `Artifact` + relationships. Rejected/draft transitions allowed in app layer later; DB only stores status.
+- [x] **1.2g-i** Table `artifacts`: `id`, `brand_id` FK, `source_item_id` FK nullable, `cluster_id` FK nullable, `status` (`ArtifactStatus`), `format` text default `carousel`, `caption` text nullable, `cta_url` text nullable, `slides` JSONB nullable (ordered list of `{role, text, asset_ref?}` — `asset_ref` unused until S3), `created_at`, `updated_at`, `approved_at` nullable.
+- [x] **1.2g-ii** SQLAlchemy model `Artifact` + relationships. Rejected/draft transitions allowed in app layer later; DB only stores status.
 
 #### 1.2h — Post job
 Scheduled/published instance of an artifact on an account.
 
-- [ ] **1.2h-i** Table `post_jobs`: `id`, `artifact_id` FK, `account_id` FK, `status` (`PostJobStatus`), `scheduled_for` timestamptz nullable, `published_at` timestamptz nullable, `platform_post_id` text nullable, `platform_post_url` text nullable, `last_error` text nullable, `created_at`, `updated_at`.
-- [ ] **1.2h-ii** SQLAlchemy model `PostJob` + relationships to `Artifact` and `Account`.
+- [x] **1.2h-i** Table `post_jobs`: `id`, `artifact_id` FK, `account_id` FK, `status` (`PostJobStatus`), `scheduled_for` timestamptz nullable, `published_at` timestamptz nullable, `platform_post_id` text nullable, `platform_post_url` text nullable, `last_error` text nullable, `created_at`, `updated_at`.
+- [x] **1.2h-ii** SQLAlchemy model `PostJob` + relationships to `Artifact` and `Account`.
 
 #### 1.2i — Metric snapshot
 Performance readback grain (per post job first; cluster rollups are queries later in 1.7).
 
-- [ ] **1.2i-i** Table `metric_snapshots`: `id`, `post_job_id` FK, `captured_at` timestamptz, `views` bigint nullable, `likes` bigint nullable, `comments` bigint nullable, `shares` bigint nullable, `raw` JSONB nullable, unique (`post_job_id`, `captured_at`) or allow multiple rows and always take latest in queries — **pick one and document**.
-- [ ] **1.2i-ii** SQLAlchemy model `MetricSnapshot`.
+- [x] **1.2i-i** Table `metric_snapshots`: `id`, `post_job_id` FK, `captured_at` timestamptz, `views` bigint nullable, `likes` bigint nullable, `comments` bigint nullable, `shares` bigint nullable, `raw` JSONB nullable, unique (`post_job_id`, `captured_at`) or allow multiple rows and always take latest in queries — **pick one and document**.
+- [x] **1.2i-ii** SQLAlchemy model `MetricSnapshot`.
 
 #### 1.2j — Steer action (stub table only)
 Enough to attach later agent/human decisions; no UI.
 
-- [ ] **1.2j-i** Table `steer_actions`: `id`, `cluster_id` FK, `action` text check in (`kill`, `pause`, `double_down`, `resume`), `reason` text nullable, `created_at`, `created_by` text nullable (freeform for MVP — `human` / agent name).
-- [ ] **1.2j-ii** SQLAlchemy model `SteerAction`. No API required beyond optional list in 1.2l.
+- [x] **1.2j-i** Table `steer_actions`: `id`, `cluster_id` FK, `action` text check in (`kill`, `pause`, `double_down`, `resume`), `reason` text nullable, `created_at`, `created_by` text nullable (freeform for MVP — `human` / agent name).
+- [x] **1.2j-ii** SQLAlchemy model `SteerAction`. No API required beyond optional list in 1.2l.
 
 #### 1.2k — Migration package & indexes
-- [ ] **1.2k-i** Single (or ordered) Alembic revision(s) creating all 1.2c–1.2j tables + enums/constraints. `alembic upgrade head` clean on empty DB.
-- [ ] **1.2k-ii** Indexes: FK columns; `brands.slug`; `clusters(brand_id, slug)`; `source_items(brand_id, source_type)`; `post_jobs(status, scheduled_for)`; `artifacts(status)`.
-- [ ] **1.2k-iii** Apply migration on `twerva-server` against Docker Postgres; record revision id in `docs/reports/task_1_2_report.md` when 1.2 closes (or interim note).
+- [x] **1.2k-i** Single (or ordered) Alembic revision(s) creating all 1.2c–1.2j tables + enums/constraints. `alembic upgrade head` clean on empty DB.
+- [x] **1.2k-ii** Indexes: FK columns; `brands.slug`; `clusters(brand_id, slug)`; `source_items(brand_id, source_type)`; `post_jobs(status, scheduled_for)`; `artifacts(status)`.
+- [x] **1.2k-iii** Apply migration on `twerva-server` against Docker Postgres; record revision id in `docs/reports/task_1_2_report.md` when 1.2 closes (or interim note).
 
 #### 1.2l — Minimal HTTP API (persist proof)
 Thin FastAPI routes — enough to prove the model; not the ops console (1.8).
@@ -258,6 +258,6 @@ Thin FastAPI routes — enough to prove the model; not the ops console (1.8).
 
 ## Suggested next coding slice
 
-§1.1 skeleton done (S3 + SM/SSM deferred to Parking lot). **Start at 1.2a** (DB plumbing), then walk lettered leaves in order through **1.2m**. Do not start 1.3 ingest until 1.2 exit criteria pass.
+§1.1 skeleton and **1.2a–1.2k** (DB plumbing + domain schema) are done. **Start at 1.2l** (thin HTTP API), then **1.2m** seed. Do not start 1.3 ingest until 1.2 exit criteria pass.
 
 After 1.2: 1.3 Spotmu ingest spike → 1.4 carousel → 1.5 approve → 1.6 publish adapter → 1.7 measure/steer stubs → 1.8 thin ops console.
