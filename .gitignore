@@ -18,3 +18,5 @@ build/
 .vscode/
 playwright-report/
 test-results/
+data/artifacts/
+apps/server/data/

@@ -4,6 +4,7 @@ import os
 import unittest
 
 from app.settings import (
+    DEFAULT_ARTIFACT_STORAGE_DIR,
     DEFAULT_SPOTMU_API_BASE_URL,
     TEST_PLACEHOLDER_DATABASE_URL,
     MissingDatabaseUrlError,
@@ -23,6 +24,10 @@ class SettingsTests(unittest.TestCase):
             "SPOTMU_API_BASE_URL",
             None,
         )
+        self.previous_artifact_storage_dir: str | None = os.environ.pop(
+            "ARTIFACT_STORAGE_DIR",
+            None,
+        )
         self.previous_twerva_environment: str | None = os.environ.pop("TWERVA_ENV", None)
         self.previous_twerva_testing: str | None = os.environ.pop("TWERVA_TESTING", None)
         self.previous_pytest_current_test: str | None = os.environ.pop(
@@ -38,6 +43,10 @@ class SettingsTests(unittest.TestCase):
         self._restore_environment_variable(
             "SPOTMU_API_BASE_URL",
             self.previous_spotmu_api_base_url,
+        )
+        self._restore_environment_variable(
+            "ARTIFACT_STORAGE_DIR",
+            self.previous_artifact_storage_dir,
         )
         self._restore_environment_variable("TWERVA_ENV", self.previous_twerva_environment)
         self._restore_environment_variable("TWERVA_TESTING", self.previous_twerva_testing)
@@ -90,6 +99,23 @@ class SettingsTests(unittest.TestCase):
         loaded_spotmu_api_base_url: str = get_settings().spotmu_api_base_url
 
         self.assertEqual(loaded_spotmu_api_base_url, DEFAULT_SPOTMU_API_BASE_URL)
+
+    def test_artifact_storage_dir_defaults_to_server_path(self) -> None:
+        """ARTIFACT_STORAGE_DIR defaults to /opt/twerva/artifacts."""
+
+        os.environ["TWERVA_ENV"] = "test"
+        loaded_artifact_storage_dir: str = get_settings().artifact_storage_dir
+
+        self.assertEqual(loaded_artifact_storage_dir, DEFAULT_ARTIFACT_STORAGE_DIR)
+
+    def test_artifact_storage_dir_can_be_overridden(self) -> None:
+        """Local README path ./data/artifacts is accepted from the environment."""
+
+        os.environ["TWERVA_ENV"] = "test"
+        os.environ["ARTIFACT_STORAGE_DIR"] = "./data/artifacts"
+        loaded_artifact_storage_dir: str = get_settings().artifact_storage_dir
+
+        self.assertEqual(loaded_artifact_storage_dir, "./data/artifacts")
 
     def _restore_environment_variable(self, variable_name: str, previous_value: str | None,
     ) -> None:

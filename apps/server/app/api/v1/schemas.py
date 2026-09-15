@@ -147,11 +147,18 @@ class AccountReadResponse(BaseModel):
 
 
 class ArtifactSlideSchema(BaseModel):
-    """One ordered slide in an Artifact plan. `asset_ref` unused until S3."""
+    """One ordered slide. `asset_ref` is relative to `ARTIFACT_STORAGE_DIR`."""
 
     role: str
     text: str
     asset_ref: str | None = None
+
+
+class CarouselGenerateRequest(BaseModel):
+    """Body for `POST /api/v1/generate/carousel`."""
+
+    source_item_id: uuid.UUID
+    cluster_id: uuid.UUID | None = None
 
 
 class ArtifactCreateRequest(BaseModel):

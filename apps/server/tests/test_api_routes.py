@@ -28,6 +28,7 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/ingest/spotmu/interests/{slug}",
         "/api/v1/ingest/spotmu/sync",
         "/api/v1/clusters/{cluster_id}/source-items/{source_item_id}",
+        "/api/v1/generate/carousel",
     },
 )
 COLLECTION_HTTP_METHODS: frozenset[str] = frozenset({"post", "get"})
@@ -81,6 +82,14 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         self.assertIn("post", ingest_sync_methods)
         self.assertIn("post", cluster_link_methods)
         self.assertIn("delete", cluster_link_methods)
+
+    def test_generate_carousel_route_accepts_post(self) -> None:
+        """1.4e-i: POST /api/v1/generate/carousel is registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        generate_carousel_methods: set[str] = methods_by_path["/api/v1/generate/carousel"]
+
+        self.assertIn("post", generate_carousel_methods)
 
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""

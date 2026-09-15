@@ -55,6 +55,7 @@ Outside tests, a missing or blank `DATABASE_URL` raises at settings load
 cp .env.example .env
 # edit .env, or export instead:
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
+export ARTIFACT_STORAGE_DIR=./data/artifacts
 ```
 
 `.env` is gitignored. Do not commit credentials.
@@ -68,6 +69,22 @@ The app does not open that file itself.
 
 Production deploy, migrate, verify, and rollback (Badger):
 [`docs/ops/deploy.md`](../../docs/ops/deploy.md).
+
+## Artifact storage (1.4)
+
+Carousel PNGs live on the **local filesystem**. There is no S3 in this
+slice. Settings key: `ARTIFACT_STORAGE_DIR`.
+
+| Environment | Path |
+|---|---|
+| Production (`twerva-server`) | `/opt/twerva/artifacts` (process default) |
+| Local | `./data/artifacts` (relative to this directory; set in `.env.example`) |
+
+The write helper stores `{artifact_id}/{slide_index}_{role}.png` and puts
+that relative path on each `slides[].asset_ref`. Create the directory
+before generate if the process user cannot mkdir the default.
+
+Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel_template_v1.md).
 
 ## Alembic
 
@@ -112,7 +129,8 @@ alembic current
 
 No auth. `POST` + `GET` list + `GET` by id for Brand, SourceItem, Cluster,
 Account, Artifact (includes `status`), and PostJob (includes `status`).
-Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+`POST /api/v1/generate/carousel` renders a draft Artifact from a
+SourceItem. Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 when the process has a database URL.
 
 ### Seed (1.2m)
@@ -216,6 +234,52 @@ Ingests `ai-agents`, GETs the SourceItem, creates/reuses cluster
 `spotmu-general`, attaches the pair. Same public-surface rule as 1.2:
 `https://twerva.com/api/...` stays unreachable; use loopback or a tunnel.
 
+## Carousel generate (1.4)
+
+Template lock: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel_template_v1.md).
+Sync generate (no Celery). Each call inserts a **new** `draft` Artifact
+(history kept). `GET /health` still starts without `DATABASE_URL`.
+
+### CLI
+
+From this directory, after `alembic upgrade head` and with
+`DATABASE_URL` set. Uses a SourceItem already in Postgres (seed or
+ingest) — does not call Spotmu:
+
+```bash
+python -m app.generate.carousel_cli <source_item_id>
+python -m app.generate.carousel_cli <source_item_id> --cluster-id <cluster-id>
+# optional local store override:
+python -m app.generate.carousel_cli <source_item_id> --storage-dir ./data/artifacts
+```
+
+### HTTP (loopback / SSH tunnel — not public nginx)
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/generate/carousel \
+  -H 'Content-Type: application/json' \
+  -d '{"source_item_id":"<source-item-id>"}'
+# optional:
+# -d '{"source_item_id":"<source-item-id>","cluster_id":"<cluster-id>"}'
+curl -sS http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>
+```
+
+Returns the existing Artifact read schema (`status=draft`,
+`format=carousel`, `caption`, `cta_url`, `slides` with `asset_ref`).
+
+### Carousel smoke (1.4e-iii)
+
+With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted).
+Uses the seeded/example SourceItem in the DB (creates the seed-shaped
+row via API if missing). **Does not** call Spotmu:
+
+```bash
+# from the repo root
+tools/smoke_1_4_carousel.sh
+# or
+TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_4_carousel.sh
+```
+
 ### Persist-proof smoke (1.2l-v)
 
 With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted):
@@ -273,6 +337,12 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
    Alembic revision. `SPOTMU_API_BASE_URL` is optional (default
    `https://spotmu.com`). Do **not** add nginx `/api`. Optional:
    `tools/smoke_1_3_ingest.sh` on loopback (talks to production Spotmu).
+10. **1.4:** `mkdir -p /opt/twerva/artifacts` (writable by the
+    `twerva-api` user). `pip install -r requirements.txt` picks up
+    **Pillow**. Optional `ARTIFACT_STORAGE_DIR` (default
+    `/opt/twerva/artifacts`). Restart `twerva-api`. Do **not** add
+    nginx `/api` or a public artifacts location. Optional loopback:
+    `tools/smoke_1_4_carousel.sh` (DB source only; no Spotmu).
 
 `GET /health` must keep working if the unit is ever started without
 `DATABASE_URL` (health-only). Production must keep the env file so
