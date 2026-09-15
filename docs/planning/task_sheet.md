@@ -251,22 +251,22 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 **Parallelism:** serial.
 
 #### 1.6a — Buy vs build spike
-- [ ] **1.6a-i** `docs/reports/task_1_6_publish_spike.md`: Ayrshare vs Zernio vs Postiz vs native Meta/TikTok — recommendation for Twerva MVP+Phase2.
-- [ ] **1.6a-ii** Lock: implement adapter interface now; **mock adapter default**; real vendor behind env flag when keys exist.
+- [x] **1.6a-i** `docs/reports/task_1_6_publish_spike.md`: Ayrshare vs Zernio vs Postiz vs native Meta/TikTok — recommendation for Twerva MVP+Phase2.
+- [x] **1.6a-ii** Lock: implement adapter interface now; **mock adapter default**; real vendor behind env flag when keys exist.
 
 #### 1.6b — PublishAdapter
-- [ ] **1.6b-i** Interface: `publish(post_job, artifact, account, media_paths) -> {platform_post_id, platform_post_url}`.
-- [ ] **1.6b-ii** `MockPublishAdapter`: succeeds, writes deterministic fake ids; logs media paths counted.
-- [ ] **1.6b-iii** Settings: `PUBLISH_ADAPTER=mock|ayrshare` (or similar); only mock required to work in CI.
+- [x] **1.6b-i** Interface: `publish(post_job, artifact, account, media_paths) -> {platform_post_id, platform_post_url}`.
+- [x] **1.6b-ii** `MockPublishAdapter`: succeeds, writes deterministic fake ids; logs media paths counted.
+- [x] **1.6b-iii** Settings: `PUBLISH_ADAPTER=mock|ayrshare` (or similar); only mock required to work in CI.
 
 #### 1.6c — Publish worker path
-- [ ] **1.6c-i** `POST /api/v1/publish/run/{post_job_id}` (or `/publish/due`) — load scheduled job, set `publishing`, call adapter, on success `published` + platform fields + `published_at`; on failure `failed` + `last_error`.
-- [ ] **1.6c-ii** Basic retry: optional second attempt or document manual re-run; backoff note in report (no Redis required).
-- [ ] **1.6c-iii** Resolve slide `asset_ref` files from `ARTIFACT_STORAGE_DIR` for adapter input.
-- [ ] **1.6c-iv** Tests with mock adapter; smoke script offline.
+- [x] **1.6c-i** `POST /api/v1/publish/run/{post_job_id}` (or `/publish/due`) — load scheduled job, set `publishing`, call adapter, on success `published` + platform fields + `published_at`; on failure `failed` + `last_error`.
+- [x] **1.6c-ii** Basic retry: optional second attempt or document manual re-run; backoff note in report (no Redis required).
+- [x] **1.6c-iii** Resolve slide `asset_ref` files from `ARTIFACT_STORAGE_DIR` for adapter input.
+- [x] **1.6c-iv** Tests with mock adapter; smoke script offline.
 
 #### 1.6d — Report
-- [ ] **1.6d-i** `docs/reports/task_1_6_report.md`; tick leaves; note live vendor as follow-up when Mu adds keys.
+- [x] **1.6d-i** `docs/reports/task_1_6_report.md`; tick leaves; note live vendor as follow-up when Mu adds keys.
 
 **1.6 done when:** scheduled job can be mock-published to `published` with platform ids recorded.
 
@@ -436,5 +436,5 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 Overnight mandate (Mu): finish **1.5 → 1.9**, auto-merge, deploy via Badger, then **STOP** for human review before Phase 2.
 
-**§1.5 done** on this branch. **Start at 1.6a** (buy vs build publish spike), then 1.6b–d serial. Mock PublishAdapter default; no Celery.
+**§1.6 done** on this branch. **Start at 1.7a** (metric snapshots), then 1.7b–d serial. Mock publish stays the pipe until Mu adds vendor keys.
 

@@ -5,6 +5,7 @@ import unittest
 
 from app.settings import (
     DEFAULT_ARTIFACT_STORAGE_DIR,
+    DEFAULT_PUBLISH_ADAPTER,
     DEFAULT_SPOTMU_API_BASE_URL,
     TEST_PLACEHOLDER_DATABASE_URL,
     MissingDatabaseUrlError,
@@ -28,6 +29,14 @@ class SettingsTests(unittest.TestCase):
             "ARTIFACT_STORAGE_DIR",
             None,
         )
+        self.previous_publish_adapter: str | None = os.environ.pop(
+            "PUBLISH_ADAPTER",
+            None,
+        )
+        self.previous_ayrshare_api_key: str | None = os.environ.pop(
+            "AYRSHARE_API_KEY",
+            None,
+        )
         self.previous_twerva_environment: str | None = os.environ.pop("TWERVA_ENV", None)
         self.previous_twerva_testing: str | None = os.environ.pop("TWERVA_TESTING", None)
         self.previous_pytest_current_test: str | None = os.environ.pop(
@@ -47,6 +56,14 @@ class SettingsTests(unittest.TestCase):
         self._restore_environment_variable(
             "ARTIFACT_STORAGE_DIR",
             self.previous_artifact_storage_dir,
+        )
+        self._restore_environment_variable(
+            "PUBLISH_ADAPTER",
+            self.previous_publish_adapter,
+        )
+        self._restore_environment_variable(
+            "AYRSHARE_API_KEY",
+            self.previous_ayrshare_api_key,
         )
         self._restore_environment_variable("TWERVA_ENV", self.previous_twerva_environment)
         self._restore_environment_variable("TWERVA_TESTING", self.previous_twerva_testing)
@@ -116,6 +133,23 @@ class SettingsTests(unittest.TestCase):
         loaded_artifact_storage_dir: str = get_settings().artifact_storage_dir
 
         self.assertEqual(loaded_artifact_storage_dir, "./data/artifacts")
+
+    def test_publish_adapter_defaults_to_mock(self) -> None:
+        """PUBLISH_ADAPTER defaults to mock so CI needs no vendor keys."""
+
+        os.environ["TWERVA_ENV"] = "test"
+        loaded_publish_adapter: str = get_settings().publish_adapter
+
+        self.assertEqual(loaded_publish_adapter, DEFAULT_PUBLISH_ADAPTER)
+
+    def test_publish_adapter_can_be_overridden(self) -> None:
+        """PUBLISH_ADAPTER=ayrshare is accepted from the environment."""
+
+        os.environ["TWERVA_ENV"] = "test"
+        os.environ["PUBLISH_ADAPTER"] = "ayrshare"
+        loaded_publish_adapter: str = get_settings().publish_adapter
+
+        self.assertEqual(loaded_publish_adapter, "ayrshare")
 
     def _restore_environment_variable(self, variable_name: str, previous_value: str | None,
     ) -> None:

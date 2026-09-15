@@ -7,6 +7,10 @@ loads `/opt/twerva/database_url.env` into the process environment.
 `ARTIFACT_STORAGE_DIR` is the local carousel PNG root (default
 `/opt/twerva/artifacts`). Local README path is `./data/artifacts`.
 S3 is not used.
+
+`PUBLISH_ADAPTER` selects the 1.6 publish pipe (`mock` default, or
+`ayrshare` when a live key exists). Mock is required for CI. Ayrshare
+live HTTP is not wired in this slice.
 """
 
 import os
@@ -20,6 +24,7 @@ TEST_PLACEHOLDER_DATABASE_URL: str = (
 )
 DEFAULT_SPOTMU_API_BASE_URL: str = "https://spotmu.com"
 DEFAULT_ARTIFACT_STORAGE_DIR: str = "/opt/twerva/artifacts"
+DEFAULT_PUBLISH_ADAPTER: str = "mock"
 MISSING_DATABASE_URL_MESSAGE: str = (
     "DATABASE_URL is required outside tests. Export DATABASE_URL, place it in "
     "apps/server/.env, or on twerva-server load /opt/twerva/database_url.env."
@@ -45,6 +50,8 @@ class Settings(BaseSettings):
     database_url: str = Field(default="")
     spotmu_api_base_url: str = Field(default=DEFAULT_SPOTMU_API_BASE_URL)
     artifact_storage_dir: str = Field(default=DEFAULT_ARTIFACT_STORAGE_DIR)
+    publish_adapter: str = Field(default=DEFAULT_PUBLISH_ADAPTER)
+    ayrshare_api_key: str = Field(default="")
 
 
 _cached_settings: Settings | None = None
@@ -88,9 +95,14 @@ def _load_settings() -> Settings:
     loaded_settings: Settings = Settings()
     stripped_database_url: str = loaded_settings.database_url.strip()
     stripped_artifact_storage_dir: str = loaded_settings.artifact_storage_dir.strip()
+    stripped_publish_adapter: str = loaded_settings.publish_adapter.strip().lower()
+    stripped_ayrshare_api_key: str = loaded_settings.ayrshare_api_key.strip()
 
     if stripped_artifact_storage_dir == "":
         stripped_artifact_storage_dir = DEFAULT_ARTIFACT_STORAGE_DIR
+
+    if stripped_publish_adapter == "":
+        stripped_publish_adapter = DEFAULT_PUBLISH_ADAPTER
 
     if stripped_database_url == "":
 
@@ -99,6 +111,8 @@ def _load_settings() -> Settings:
                 database_url=TEST_PLACEHOLDER_DATABASE_URL,
                 artifact_storage_dir=stripped_artifact_storage_dir,
                 spotmu_api_base_url=loaded_settings.spotmu_api_base_url,
+                publish_adapter=stripped_publish_adapter,
+                ayrshare_api_key=stripped_ayrshare_api_key,
             )
 
             return placeholder_settings
@@ -111,6 +125,8 @@ def _load_settings() -> Settings:
         database_url=normalized_database_url,
         artifact_storage_dir=stripped_artifact_storage_dir,
         spotmu_api_base_url=loaded_settings.spotmu_api_base_url,
+        publish_adapter=stripped_publish_adapter,
+        ayrshare_api_key=stripped_ayrshare_api_key,
     )
 
 

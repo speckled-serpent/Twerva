@@ -127,6 +127,16 @@ No new host deps, env vars, or Alembic revision. Sync the app tree and
 `tools/smoke_1_5_approve_schedule.sh` (seed/generate; no Spotmu, no
 real publish). Still no public nginx `/api/`.
 
+### Phase 1.6 (publish adapter)
+
+No new host deps or Alembic revision. Default `PUBLISH_ADAPTER=mock`
+(CI-safe, no vendor keys). Optional `AYRSHARE_API_KEY` is unused until
+live HTTP is wired — do **not** switch the adapter to `ayrshare` on the
+box yet. Sync the app tree and `sudo systemctl restart twerva-api`.
+Optional loopback smoke: `tools/smoke_1_6_publish.sh` (seed/generate/
+approve/schedule/mock publish; no Spotmu, no vendor signup). Still no
+public nginx `/api/`.
+
 The app does not open `database_url.env` itself. systemd may load it as
 `EnvironmentFile=`, or a shell must `source` it before Alembic. Local
 override and URL rewrite rules: [`apps/server/README.md`](../../apps/server/README.md).
@@ -310,5 +320,7 @@ detail:
   carousel generate, local `ARTIFACT_STORAGE_DIR`, Pillow
 - [`docs/reports/task_1_5_report.md`](../reports/task_1_5_report.md) —
   approval, UTC cadence caps, `POST /api/v1/schedule`
+- [`docs/reports/task_1_6_report.md`](../reports/task_1_6_report.md) —
+  mock PublishAdapter, `POST /api/v1/publish/run/{post_job_id}`
 - [`docs/planning/task_sheet.md`](../planning/task_sheet.md) — §1.1 host
   facts; parking lot for S3 and Secrets Manager

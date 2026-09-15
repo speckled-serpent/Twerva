@@ -252,14 +252,18 @@ Do not invent a third stack without revisiting this table.
 - Spotmu ingest path — **locked**: public JSON + sitemap
   (`docs/reports/task_1_3_ingest_spike.md`)
 - Carousel template ownership vs Spotmu brand kit
-- Publish connectors (API vs assisted) per platform
+- Publish connectors (API vs assisted) per platform — **locked for 1.6**:
+  adapter + **mock default**; first live vendor **Ayrshare** behind
+  `PUBLISH_ADAPTER` / `AYRSHARE_API_KEY` when keys exist (live HTTP not
+  wired in 1.6). Spike: `docs/reports/task_1_6_publish_spike.md`
 - Account ownership model
 - Metric plumbing into Spotmu analytics
 - Brand content engine design (Phase 3)
 - Storefront MVP shape (Phase 3+)
 - Cut vs sub instrumentation
 - Exact AWS service shape beyond current EC2+nginx (RDS vs Postgres-on-box for early Phase 1; S3 bucket name)
-- Publish adapter: Ayrshare vs Zernio vs Postiz vs native APIs first
+- Publish adapter: Ayrshare vs Zernio vs Postiz vs native APIs first —
+  **locked**: mock now; Ayrshare later (`task_1_6_publish_spike.md`)
 
 ---
 

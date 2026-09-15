@@ -32,6 +32,7 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/artifacts/{artifact_id}/approve",
         "/api/v1/artifacts/{artifact_id}/reject",
         "/api/v1/schedule",
+        "/api/v1/publish/run/{post_job_id}",
     },
 )
 COLLECTION_HTTP_METHODS: frozenset[str] = frozenset({"post", "get"})
@@ -112,6 +113,16 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         self.assertIn("patch", artifact_item_methods)
         self.assertIn("get", artifact_item_methods)
         self.assertIn("post", schedule_methods)
+
+    def test_publish_run_route_accepts_post(self) -> None:
+        """1.6c-i: POST /api/v1/publish/run/{post_job_id} is registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        publish_run_methods: set[str] = methods_by_path[
+            "/api/v1/publish/run/{post_job_id}"
+        ]
+
+        self.assertIn("post", publish_run_methods)
 
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""
