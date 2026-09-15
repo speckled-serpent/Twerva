@@ -55,12 +55,17 @@ Celery, video, or S3. `GET /health` still starts without
 
 ## Verified
 
-- `python -m unittest discover -s tests` from `apps/server` (render,
-  storage helper, settings default/override, route surface, health
-  without `DATABASE_URL`). Persist generate+GET runs when Postgres is
-  reachable and skips otherwise.
-- `GET /health` still does not import settings/models/`app.db` at
-  module load.
+- `python -m unittest discover -s tests` from `apps/server`: **64 tests OK**
+  (render, storage helper, settings, route surface, health without
+  `DATABASE_URL`, persist generate+GET against local Postgres 16).
+- Smoke: `tools/smoke_1_4_carousel.sh` against loopback uvicorn — seed
+  SourceItem `example` → 6-slide draft, GET matches, second generate
+  keeps a new Artifact id. PNGs are 1080×1080.
+- CLI: `python -m app.generate.carousel_cli <source_item_id>` prints a
+  new draft id.
+- `GET /health` via TestClient **without** `DATABASE_URL` →
+  `200 {"status":"ok"}`; `/api/v1` not attached in that process.
+- Live SSH deploy on `twerva-server` is documented, not run here.
 
 ## Out of scope (as specified)
 
