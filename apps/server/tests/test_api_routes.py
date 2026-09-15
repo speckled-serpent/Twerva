@@ -25,6 +25,9 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/artifacts/{artifact_id}",
         "/api/v1/post-jobs",
         "/api/v1/post-jobs/{post_job_id}",
+        "/api/v1/ingest/spotmu/interests/{slug}",
+        "/api/v1/ingest/spotmu/sync",
+        "/api/v1/clusters/{cluster_id}/source-items/{source_item_id}",
     },
 )
 COLLECTION_HTTP_METHODS: frozenset[str] = frozenset({"post", "get"})
@@ -61,6 +64,23 @@ class ApiRouteSurfaceTests(unittest.TestCase):
                 COLLECTION_HTTP_METHODS.issubset(collection_methods),
                 msg=f"{collection_path} missing POST/GET: {collection_methods}",
             )
+
+    def test_ingest_and_cluster_link_routes_exist(self) -> None:
+        """1.3c–1.3e: ingest + attach/detach paths are registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        ingest_interest_methods: set[str] = methods_by_path[
+            "/api/v1/ingest/spotmu/interests/{slug}"
+        ]
+        ingest_sync_methods: set[str] = methods_by_path["/api/v1/ingest/spotmu/sync"]
+        cluster_link_methods: set[str] = methods_by_path[
+            "/api/v1/clusters/{cluster_id}/source-items/{source_item_id}"
+        ]
+
+        self.assertIn("post", ingest_interest_methods)
+        self.assertIn("post", ingest_sync_methods)
+        self.assertIn("post", cluster_link_methods)
+        self.assertIn("delete", cluster_link_methods)
 
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""

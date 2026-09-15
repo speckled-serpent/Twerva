@@ -130,6 +130,92 @@ python -m app.seed
 
 Re-running converges on the same slug / `external_key` rows.
 
+## Spotmu ingest (1.3)
+
+Locked path (spike): public JSON + sitemap. Config:
+
+```bash
+# optional; default is the locked public origin
+export SPOTMU_API_BASE_URL=https://spotmu.com
+```
+
+The client calls:
+
+- `{SPOTMU_API_BASE_URL}/api/v1/interests/slug/{slug}`
+- `{SPOTMU_API_BASE_URL}/sitemap.xml`
+
+`GET /interests/slug/{slug}` without `/api/v1` is the Spotmu SPA shell,
+not JSON. Live curls and field mapping:
+[`docs/reports/task_1_3_ingest_spike.md`](../../docs/reports/task_1_3_ingest_spike.md).
+
+### Fetch + upsert one slug (CLI)
+
+From this directory, after `alembic upgrade head` and with
+`DATABASE_URL` set. Talks to production Spotmu:
+
+```bash
+python -m app.ingest.spotmu_interest ai-agents
+# optional origin override:
+python -m app.ingest.spotmu_interest ai-agents --base-url https://spotmu.com
+```
+
+Idempotent: Brand `slug=spotmu` is created if missing;
+`source_type=spotmu_interest` / `external_key=<slug>` updates in place
+(same id). `overview_bullets` on the wire is a newline string; we store
+`list[str]`. Brand-kit refs are `null` (not on the public payload).
+
+### HTTP (loopback / SSH tunnel — not public nginx)
+
+```bash
+# one real production slug
+curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/spotmu/interests/ai-agents
+
+# sitemap window (default limit 20) or an explicit list
+curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/spotmu/sync \
+  -H 'Content-Type: application/json' \
+  -d '{"limit": 5}'
+curl -sS -X POST http://127.0.0.1:8000/api/v1/ingest/spotmu/sync \
+  -H 'Content-Type: application/json' \
+  -d '{"slugs":["ai-agents","amazon"]}'
+```
+
+No scheduler. On-demand only.
+
+### Cluster `spotmu-general` recipe (1.3e)
+
+After ingest, assign the interest to a lane under Brand spotmu:
+
+```bash
+# BRAND_ID from GET /api/v1/brands (slug=spotmu)
+# SOURCE_ITEM_ID from the ingest POST (or GET /api/v1/source-items)
+curl -sS -X POST http://127.0.0.1:8000/api/v1/clusters \
+  -H 'Content-Type: application/json' \
+  -d '{"brand_id":"<brand-id>","slug":"spotmu-general","name":"Spotmu general"}'
+curl -sS -X POST \
+  http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/source-items/<source-item-id>
+curl -sS http://127.0.0.1:8000/api/v1/clusters/<cluster-id>
+# -> source_item_ids includes the ingested id
+curl -sS -X DELETE \
+  http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/source-items/<source-item-id>
+```
+
+### Ingest smoke (1.3f-i)
+
+With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted).
+Hits **production** Spotmu for slug `ai-agents` (override with
+`SPOTMU_SMOKE_SLUG`):
+
+```bash
+# from the repo root
+tools/smoke_1_3_ingest.sh
+# or
+TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_3_ingest.sh
+```
+
+Ingests `ai-agents`, GETs the SourceItem, creates/reuses cluster
+`spotmu-general`, attaches the pair. Same public-surface rule as 1.2:
+`https://twerva.com/api/...` stays unreachable; use loopback or a tunnel.
+
 ### Persist-proof smoke (1.2l-v)
 
 With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted):
@@ -183,6 +269,10 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
 6. `sudo systemctl restart twerva-api` (uvicorn `app.main:application` on `127.0.0.1:8000`).
 7. Confirm `curl -sS http://127.0.0.1:8000/health` and `https://twerva.com/health` return `{"status":"ok"}`.
 8. Optional: `tools/smoke_1_2l_api.sh` with `TWERVA_API_BASE_URL=http://127.0.0.1:8000`.
+9. **1.3:** `pip install -r requirements.txt` picks up `httpx`. No new
+   Alembic revision. `SPOTMU_API_BASE_URL` is optional (default
+   `https://spotmu.com`). Do **not** add nginx `/api`. Optional:
+   `tools/smoke_1_3_ingest.sh` on loopback (talks to production Spotmu).
 
 `GET /health` must keep working if the unit is ever started without
 `DATABASE_URL` (health-only). Production must keep the env file so

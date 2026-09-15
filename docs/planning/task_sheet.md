@@ -138,35 +138,35 @@ Thin FastAPI routes — enough to prove the model; not the ops console (1.8).
 #### 1.3a — Ingest path spike & lock
 Compare options; write a short lock decision; prefer the cheapest reliable path.
 
-- [ ] **1.3a-i** Spike notes in `docs/reports/task_1_3_ingest_spike.md`: (1) Spotmu **public JSON** `GET /interests/slug/{slug}` (`PublicInterestPageResponse`), (2) sitemap/`/sitemap.xml` for slug discovery, (3) authenticated Spotmu API/export, (4) HTML scrape of `/interest/:slug`. For each: auth needs, field coverage vs Twerva `source_items`, failure modes.
-- [ ] **1.3a-ii** **Lock** MVP path in that report (expected: public JSON by slug + sitemap for discovery unless spike finds a blocker). Update `docs/prompts/product.md` open ingest question to point at the lock.
-- [ ] **1.3a-iii** Document Spotmu base URL config (`SPOTMU_API_BASE_URL` or similar, default `https://spotmu.com` or the live API origin the spike confirms — record exact origin used by the SPA/API).
+- [x] **1.3a-i** Spike notes in `docs/reports/task_1_3_ingest_spike.md`: (1) Spotmu **public JSON** `GET /interests/slug/{slug}` (`PublicInterestPageResponse`), (2) sitemap/`/sitemap.xml` for slug discovery, (3) authenticated Spotmu API/export, (4) HTML scrape of `/interest/:slug`. For each: auth needs, field coverage vs Twerva `source_items`, failure modes.
+- [x] **1.3a-ii** **Lock** MVP path in that report (expected: public JSON by slug + sitemap for discovery unless spike finds a blocker). Update `docs/prompts/product.md` open ingest question to point at the lock.
+- [x] **1.3a-iii** Document Spotmu base URL config (`SPOTMU_API_BASE_URL` or similar, default `https://spotmu.com` or the live API origin the spike confirms — record exact origin used by the SPA/API).
 
 #### 1.3b — Fetch one interest by slug
-- [ ] **1.3b-i** HTTP client module under `apps/server` (e.g. `app/ingest/spotmu.py`) that GETs one slug and returns a typed structure (Pydantic) with at least: `slug`, `title`, `interest_heading`, `overview_bullets`, canonical URL, optional logo/brand kit fields if present on the public payload, plus `raw_payload`.
-- [ ] **1.3b-ii** Clear errors for 404 / non-JSON / timeout; no silent empty upserts.
-- [ ] **1.3b-iii** Unit test with mocked HTTP response shaped like Spotmu public payload.
+- [x] **1.3b-i** HTTP client module under `apps/server` (e.g. `app/ingest/spotmu.py`) that GETs one slug and returns a typed structure (Pydantic) with at least: `slug`, `title`, `interest_heading`, `overview_bullets`, canonical URL, optional logo/brand kit fields if present on the public payload, plus `raw_payload`.
+- [x] **1.3b-ii** Clear errors for 404 / non-JSON / timeout; no silent empty upserts.
+- [x] **1.3b-iii** Unit test with mocked HTTP response shaped like Spotmu public payload.
 
 #### 1.3c — Upsert into `source_items`
-- [ ] **1.3c-i** Idempotent upsert into Brand `slug=spotmu` (create brand if missing): `source_type=spotmu_interest`, `external_key=slug`, map fields onto `source_items` columns; store full JSON in `raw_payload`.
-- [ ] **1.3c-ii** `POST /api/v1/ingest/spotmu/interests/{slug}` (or equivalent under `/api/v1`) that runs fetch+upsert and returns the `SourceItem` read schema. No auth (same as other v1 routes; remains localhost-only publicly).
-- [ ] **1.3c-iii** CLI: `python -m app.ingest.spotmu_interest <slug>` (or similar) documented in README.
-- [ ] **1.3c-iv** Integration test (Postgres) or carefully mocked DB test for upsert idempotency (second pull updates fields, same id).
+- [x] **1.3c-i** Idempotent upsert into Brand `slug=spotmu` (create brand if missing): `source_type=spotmu_interest`, `external_key=slug`, map fields onto `source_items` columns; store full JSON in `raw_payload`.
+- [x] **1.3c-ii** `POST /api/v1/ingest/spotmu/interests/{slug}` (or equivalent under `/api/v1`) that runs fetch+upsert and returns the `SourceItem` read schema. No auth (same as other v1 routes; remains localhost-only publicly).
+- [x] **1.3c-iii** CLI: `python -m app.ingest.spotmu_interest <slug>` (or similar) documented in README.
+- [x] **1.3c-iv** Integration test (Postgres) or carefully mocked DB test for upsert idempotency (second pull updates fields, same id).
 
 #### 1.3d — Discover / batch pull (thin)
-- [ ] **1.3d-i** Helper to list candidate slugs from Spotmu sitemap (or public list endpoint if spike prefers it) — cap configurable (default small, e.g. 20) for MVP.
-- [ ] **1.3d-ii** `POST /api/v1/ingest/spotmu/sync` (body: optional `slugs[]` or `limit`) that upserts each; return counts created/updated/failed + errors per slug.
-- [ ] **1.3d-iii** Do **not** build a scheduler yet — on-demand only.
+- [x] **1.3d-i** Helper to list candidate slugs from Spotmu sitemap (or public list endpoint if spike prefers it) — cap configurable (default small, e.g. 20) for MVP.
+- [x] **1.3d-ii** `POST /api/v1/ingest/spotmu/sync` (body: optional `slugs[]` or `limit`) that upserts each; return counts created/updated/failed + errors per slug.
+- [x] **1.3d-iii** Do **not** build a scheduler yet — on-demand only.
 
 #### 1.3e — Map interests → clusters (manual OK)
-- [ ] **1.3e-i** API: attach/detach `source_item` ↔ `cluster` via `cluster_source_items` (e.g. `POST/DELETE /api/v1/clusters/{id}/source-items/{source_item_id}`).
-- [ ] **1.3e-ii** Ensure list cluster (or GET) can show linked source item ids (minimal — enough for ops later).
-- [ ] **1.3e-iii** Seed or README recipe: one real ingested interest assigned to a cluster `slug=default` (or `spotmu-general`) under Brand spotmu.
+- [x] **1.3e-i** API: attach/detach `source_item` ↔ `cluster` via `cluster_source_items` (e.g. `POST/DELETE /api/v1/clusters/{id}/source-items/{source_item_id}`).
+- [x] **1.3e-ii** Ensure list cluster (or GET) can show linked source item ids (minimal — enough for ops later).
+- [x] **1.3e-iii** Seed or README recipe: one real ingested interest assigned to a cluster `slug=default` (or `spotmu-general`) under Brand spotmu.
 
 #### 1.3f — Verify, report, deploy notes
-- [ ] **1.3f-i** Smoke script or README: ingest one **real** slug from production Spotmu (pick any live sitemap slug), show SourceItem via GET API.
-- [ ] **1.3f-ii** Update `docs/reports/task_1_3_report.md` + tick leaves on this sheet.
-- [ ] **1.3f-iii** Note for Badger: deploy + any new env vars; no nginx `/api` public change.
+- [x] **1.3f-i** Smoke script or README: ingest one **real** slug from production Spotmu (pick any live sitemap slug), show SourceItem via GET API.
+- [x] **1.3f-ii** Update `docs/reports/task_1_3_report.md` + tick leaves on this sheet.
+- [x] **1.3f-iii** Note for Badger: deploy + any new env vars; no nginx `/api` public change.
 
 **1.3 done when:** real Spotmu interest in DB, cluster link works, report written, Badger can deploy.
 
@@ -299,7 +299,7 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 ## Suggested next coding slice
 
-**§1.2 done** on main + box. **Start at 1.3a** (ingest path spike/lock), then 1.3b–f in order (serial). No Engineer sub-agents.
+**§1.3 done** (public JSON + sitemap ingest, manual cluster attach). **Start at 1.4** carousel generate.
 
-After 1.3: 1.4 carousel → 1.5 approve → 1.6 publish adapter → 1.7 measure/steer stubs → 1.8 thin ops console.
+After 1.4: 1.5 approve → 1.6 publish adapter → 1.7 measure/steer stubs → 1.8 thin ops console.
 

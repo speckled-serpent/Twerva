@@ -14,3 +14,5 @@ secret values.
 Local API run, `DATABASE_URL`, and Alembic smoke stay in
 [`apps/server/README.md`](../../apps/server/README.md). Schema revision
 notes stay in [`docs/reports/task_1_2_report.md`](../reports/task_1_2_report.md).
+Spotmu ingest (1.3) env default and `/health`-only reminder:
+[`docs/reports/task_1_3_report.md`](../reports/task_1_3_report.md).

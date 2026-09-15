@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 TEST_PLACEHOLDER_DATABASE_URL: str = (
     "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva_test"
 )
+DEFAULT_SPOTMU_API_BASE_URL: str = "https://spotmu.com"
 MISSING_DATABASE_URL_MESSAGE: str = (
     "DATABASE_URL is required outside tests. Export DATABASE_URL, place it in "
     "apps/server/.env, or on twerva-server load /opt/twerva/database_url.env."
@@ -37,6 +38,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = Field(default="")
+    spotmu_api_base_url: str = Field(default=DEFAULT_SPOTMU_API_BASE_URL)
 
 
 _cached_settings: Settings | None = None

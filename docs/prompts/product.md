@@ -1,6 +1,6 @@
 # Twerva — Product
 
-*Last updated: 2026-09-14*  
+*Last updated: 2026-09-15*  
 *Status: Big-stroke product design (seed). Strategy: `docs/prompts/project.md`. Build order: `docs/planning/task_sheet.md`. Spotmu handoff notes: `docs/overview.md`.*
 
 ---
@@ -63,8 +63,15 @@ Big strokes only — schemas later.
 First source: **Spotmu interest briefs**
 
 - Fields (from Spotmu Point C / public surface): `title`, `interest_heading`, `overview_bullets`, public URL `/interest/:slug`, brand kit / logo refs
-- Ingest path TBD: API vs export vs public page pull (open question)
-- Each interest maps into a **cluster/lane** (vertical topical purity)
+- Ingest path **locked** (1.3a): unauthenticated public JSON
+  `GET {SPOTMU_API_BASE_URL}/api/v1/interests/slug/{slug}` plus sitemap
+  `GET {SPOTMU_API_BASE_URL}/sitemap.xml` for slug discovery. Default
+  origin `https://spotmu.com`. Live `/interests/slug/{slug}` without the
+  `/api/v1` prefix is the SPA shell, not JSON. Brand-kit / logo refs are
+  not on the public payload today (store `null`; keep extras in
+  `raw_payload`). See `docs/reports/task_1_3_ingest_spike.md`.
+- Each interest maps into a **cluster/lane** (vertical topical purity;
+  manual `cluster_source_items` attach in 1.3e)
 
 ### Generate (Artifacts)
 
@@ -242,7 +249,8 @@ Do not invent a third stack without revisiting this table.
 
 ## XI. Open product questions
 
-- Spotmu ingest path (API / export / public)
+- Spotmu ingest path — **locked**: public JSON + sitemap
+  (`docs/reports/task_1_3_ingest_spike.md`)
 - Carousel template ownership vs Spotmu brand kit
 - Publish connectors (API vs assisted) per platform
 - Account ownership model
