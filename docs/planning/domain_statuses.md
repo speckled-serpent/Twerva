@@ -157,3 +157,19 @@ on the **UTC calendar day** of the proposed time and whose status is not
 Cluster `brand_id` must match the Artifact brand. When the Artifact has
 `cluster_id` set, the Account must belong to that cluster; when it is
 null, any Account under the same brand is allowed.
+
+## Publish (1.6)
+
+`POST /api/v1/publish/run/{post_job_id}` runs a `scheduled` or `failed`
+PostJob through `PublishAdapter` (default **mock**). In-memory
+`publishing`, then commit `published` (platform id/URL + `published_at`)
+or `failed` (`last_error`). Crash during the adapter leaves the previous
+committed status (usually `scheduled`).
+
+Retry is the same endpoint on a `failed` row (no Redis, no backoff
+sleep). Already `published` / `measured` / `publishing` is HTTP 409.
+
+`PUBLISH_ADAPTER=mock` (default) writes deterministic fake ids
+(`mock-{platform}-{post_job.id}`). `ayrshare` is selected only when
+`AYRSHARE_API_KEY` is set; live HTTP is **not** wired in 1.6 (see
+`docs/reports/task_1_6_publish_spike.md`).
