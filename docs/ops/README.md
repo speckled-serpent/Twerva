@@ -24,3 +24,5 @@ Publish (1.6): mock adapter default, no vendor keys;
 [`docs/reports/task_1_6_report.md`](../reports/task_1_6_report.md).
 Measure & steer (1.7): manual/stub metrics, median, steer;
 [`docs/reports/task_1_7_report.md`](../reports/task_1_7_report.md).
+Ops console (1.8): local Vite UI only; do **not** expose on public nginx;
+[`docs/reports/task_1_8_report.md`](../reports/task_1_8_report.md).

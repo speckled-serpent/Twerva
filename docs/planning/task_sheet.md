@@ -305,19 +305,19 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 **Parallelism:** serial (one frontend PR). May depend on 1.5–1.7 APIs — implement against those routes.
 
 #### 1.8a — App shell & API client
-- [ ] **1.8a-i** Vite proxy or `VITE_API_BASE_URL` to Twerva API (default `http://127.0.0.1:8000`).
-- [ ] **1.8a-ii** Simple nav layout: Sources · Queue · Schedule · Accounts · Results.
+- [x] **1.8a-i** Vite proxy or `VITE_API_BASE_URL` to Twerva API (default `http://127.0.0.1:8000`).
+- [x] **1.8a-ii** Simple nav layout: Sources · Queue · Schedule · Accounts · Results.
 
 #### 1.8b — Pages
-- [ ] **1.8b-i** Sources: list source_items; button to generate carousel.
-- [ ] **1.8b-ii** Queue: list drafts; approve / reject / edit caption.
-- [ ] **1.8b-iii** Schedule: pick approved artifact + account + time; list post_jobs; button mock-publish.
-- [ ] **1.8b-iv** Accounts/Clusters: list; cadence_cap display; steer buttons.
-- [ ] **1.8b-v** Results: cluster summary + agent-summary pane (pre/plaintext OK).
+- [x] **1.8b-i** Sources: list source_items; button to generate carousel.
+- [x] **1.8b-ii** Queue: list drafts; approve / reject / edit caption.
+- [x] **1.8b-iii** Schedule: pick approved artifact + account + time; list post_jobs; button mock-publish.
+- [x] **1.8b-iv** Accounts/Clusters: list; cadence_cap display; steer buttons.
+- [x] **1.8b-v** Results: cluster summary + agent-summary pane (pre/plaintext OK).
 
 #### 1.8c — Ship notes
-- [ ] **1.8c-i** README how to run ops + API locally; optional static build note for later nginx (not required to expose publicly tonight).
-- [ ] **1.8c-ii** `docs/reports/task_1_8_report.md`; tick leaves.
+- [x] **1.8c-i** README how to run ops + API locally; optional static build note for later nginx (not required to expose publicly tonight).
+- [x] **1.8c-ii** `docs/reports/task_1_8_report.md`; tick leaves.
 
 **1.8 done when:** ops UI can drive generate → approve → schedule → mock publish → metrics/steer against API.
 
@@ -438,5 +438,5 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 Overnight mandate (Mu): finish **1.5 → 1.9**, auto-merge, deploy via Badger, then **STOP** for human review before Phase 2.
 
-**§1.7 done** on this branch. **Start at 1.8a** (ops shell + API client), then 1.8b–c serial. Mock publish and manual/stub metrics stay the pipe until Mu adds vendor keys.
+**§1.8 done** on this branch. **Start at 1.9a** (operator/agent docs + batch-generate playbook), then 1.9b phase-1 exit report. Mock publish and manual/stub metrics stay the pipe until Mu adds vendor keys. Do **not** start Phase 2.
 

@@ -1,0 +1,389 @@
+import type {
+  AccountCreateRequest,
+  AccountReadResponse,
+  ArtifactApproveRequest,
+  ArtifactPatchRequest,
+  ArtifactReadResponse,
+  ArtifactStatus,
+  BrandReadResponse,
+  CarouselGenerateRequest,
+  ClusterAgentSummaryResponse,
+  ClusterCreateRequest,
+  ClusterMetricsSummaryResponse,
+  ClusterReadResponse,
+  ClusterSteerRequest,
+  HealthReadResponse,
+  MetricSnapshotReadResponse,
+  PostJobReadResponse,
+  SchedulePostJobRequest,
+  SourceItemCreateRequest,
+  SourceItemReadResponse,
+  SteerActionReadResponse,
+} from "./types";
+
+/**
+ * Error thrown when the Twerva API returns a non-success status.
+ */
+export class ApiClientError extends Error {
+  readonly statusCode: number;
+  readonly detailText: string;
+
+  constructor(statusCode: number, detailText: string) {
+    super(`API ${statusCode}: ${detailText}`);
+    this.name = "ApiClientError";
+    this.statusCode = statusCode;
+    this.detailText = detailText;
+  }
+}
+
+/**
+ * Resolve the API origin.
+ *
+ * Empty string means relative URLs (`/api/...`, `/health`) so the Vite
+ * dev proxy can forward to `http://127.0.0.1:8000`. Set
+ * `VITE_API_BASE_URL` to talk to another origin (preview, tunnel).
+ *
+ * @returns Origin without a trailing slash, or an empty string
+ */
+export function resolveApiBaseUrl(): string {
+
+  const configuredBaseUrl: string | undefined = import.meta.env.VITE_API_BASE_URL;
+
+  if (configuredBaseUrl === undefined) {
+    return "";
+  }
+
+  const trimmedBaseUrl: string = configuredBaseUrl.trim();
+
+  if (trimmedBaseUrl === "") {
+    return "";
+  }
+
+  return trimmedBaseUrl.replace(/\/$/, "");
+}
+
+export async function fetchHealthStatus(): Promise<HealthReadResponse> {
+
+  return requestJson<HealthReadResponse>("GET", "/health");
+}
+
+export async function listBrands(): Promise<BrandReadResponse[]> {
+
+  return requestJson<BrandReadResponse[]>("GET", "/api/v1/brands");
+}
+
+export async function listSourceItems(): Promise<SourceItemReadResponse[]> {
+
+  return requestJson<SourceItemReadResponse[]>("GET", "/api/v1/source-items");
+}
+
+export async function createSourceItem(
+  sourceItemCreateRequest: SourceItemCreateRequest,
+): Promise<SourceItemReadResponse> {
+
+  return requestJson<SourceItemReadResponse>(
+    "POST",
+    "/api/v1/source-items",
+    sourceItemCreateRequest,
+  );
+}
+
+export async function generateCarouselArtifact(
+  carouselGenerateRequest: CarouselGenerateRequest,
+): Promise<ArtifactReadResponse> {
+
+  return requestJson<ArtifactReadResponse>(
+    "POST",
+    "/api/v1/generate/carousel",
+    carouselGenerateRequest,
+  );
+}
+
+export async function listArtifacts(
+  artifactStatus?: ArtifactStatus,
+): Promise<ArtifactReadResponse[]> {
+
+  const queryString: string =
+    artifactStatus === undefined ? "" : `?status=${encodeURIComponent(artifactStatus)}`;
+
+  return requestJson<ArtifactReadResponse[]>(
+    "GET",
+    `/api/v1/artifacts${queryString}`,
+  );
+}
+
+export async function approveArtifact(
+  artifactId: string,
+  artifactApproveRequest?: ArtifactApproveRequest,
+): Promise<ArtifactReadResponse> {
+
+  return requestJson<ArtifactReadResponse>(
+    "POST",
+    `/api/v1/artifacts/${artifactId}/approve`,
+    artifactApproveRequest ?? {},
+  );
+}
+
+export async function rejectArtifact(artifactId: string): Promise<ArtifactReadResponse> {
+
+  return requestJson<ArtifactReadResponse>(
+    "POST",
+    `/api/v1/artifacts/${artifactId}/reject`,
+    {},
+  );
+}
+
+export async function patchArtifact(
+  artifactId: string,
+  artifactPatchRequest: ArtifactPatchRequest,
+): Promise<ArtifactReadResponse> {
+
+  return requestJson<ArtifactReadResponse>(
+    "PATCH",
+    `/api/v1/artifacts/${artifactId}`,
+    artifactPatchRequest,
+  );
+}
+
+export async function listClusters(): Promise<ClusterReadResponse[]> {
+
+  return requestJson<ClusterReadResponse[]>("GET", "/api/v1/clusters");
+}
+
+export async function createCluster(
+  clusterCreateRequest: ClusterCreateRequest,
+): Promise<ClusterReadResponse> {
+
+  return requestJson<ClusterReadResponse>(
+    "POST",
+    "/api/v1/clusters",
+    clusterCreateRequest,
+  );
+}
+
+export async function listAccounts(): Promise<AccountReadResponse[]> {
+
+  return requestJson<AccountReadResponse[]>("GET", "/api/v1/accounts");
+}
+
+export async function createAccount(
+  accountCreateRequest: AccountCreateRequest,
+): Promise<AccountReadResponse> {
+
+  return requestJson<AccountReadResponse>(
+    "POST",
+    "/api/v1/accounts",
+    accountCreateRequest,
+  );
+}
+
+export async function schedulePostJob(
+  schedulePostJobRequest: SchedulePostJobRequest,
+): Promise<PostJobReadResponse> {
+
+  return requestJson<PostJobReadResponse>(
+    "POST",
+    "/api/v1/schedule",
+    schedulePostJobRequest,
+  );
+}
+
+export async function listPostJobs(): Promise<PostJobReadResponse[]> {
+
+  return requestJson<PostJobReadResponse[]>("GET", "/api/v1/post-jobs");
+}
+
+export async function publishPostJob(postJobId: string): Promise<PostJobReadResponse> {
+
+  return requestJson<PostJobReadResponse>(
+    "POST",
+    `/api/v1/publish/run/${postJobId}`,
+  );
+}
+
+export async function createStubPostJobMetrics(
+  postJobId: string,
+): Promise<MetricSnapshotReadResponse> {
+
+  return requestJson<MetricSnapshotReadResponse>(
+    "POST",
+    `/api/v1/post-jobs/${postJobId}/metrics/stub`,
+  );
+}
+
+export async function steerCluster(
+  clusterId: string,
+  clusterSteerRequest: ClusterSteerRequest,
+): Promise<SteerActionReadResponse> {
+
+  return requestJson<SteerActionReadResponse>(
+    "POST",
+    `/api/v1/clusters/${clusterId}/steer`,
+    clusterSteerRequest,
+  );
+}
+
+export async function fetchClusterMetricsSummary(
+  clusterId: string,
+): Promise<ClusterMetricsSummaryResponse> {
+
+  return requestJson<ClusterMetricsSummaryResponse>(
+    "GET",
+    `/api/v1/clusters/${clusterId}/metrics/summary`,
+  );
+}
+
+export async function fetchClusterAgentSummaryJson(
+  clusterId: string,
+): Promise<ClusterAgentSummaryResponse> {
+
+  return requestJson<ClusterAgentSummaryResponse>(
+    "GET",
+    `/api/v1/clusters/${clusterId}/agent-summary`,
+  );
+}
+
+export async function fetchClusterAgentSummaryMarkdown(clusterId: string): Promise<string> {
+
+  return requestText("GET", `/api/v1/clusters/${clusterId}/agent-summary?format=markdown`);
+}
+
+async function requestJson<ResponseBody>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<ResponseBody> {
+
+  const response: Response = await sendApiRequest(method, path, body);
+
+  await throwIfResponseFailed(response);
+
+  if (response.status === 204) {
+    return undefined as ResponseBody;
+  }
+
+  const parsedJson: unknown = await response.json();
+
+  return parsedJson as ResponseBody;
+}
+
+async function requestText(method: string, path: string): Promise<string> {
+
+  const response: Response = await sendApiRequest(method, path);
+
+  await throwIfResponseFailed(response);
+
+  const responseText: string = await response.text();
+
+  return responseText;
+}
+
+async function sendApiRequest(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<Response> {
+
+  const apiBaseUrl: string = resolveApiBaseUrl();
+  const requestUrl: string = `${apiBaseUrl}${path}`;
+  const requestHeaders: HeadersInit = {};
+  const fetchInit: RequestInit = {
+    method,
+    headers: requestHeaders,
+  };
+
+  if (body !== undefined) {
+    requestHeaders["Content-Type"] = "application/json";
+    fetchInit.body = JSON.stringify(body);
+  }
+
+  const response: Response = await fetch(requestUrl, fetchInit);
+
+  return response;
+}
+
+async function throwIfResponseFailed(response: Response): Promise<void> {
+
+  if (response.ok) {
+    return;
+  }
+
+  const detailText: string = await readErrorTextFromResponse(response);
+
+  throw new ApiClientError(response.status, detailText);
+}
+
+async function readErrorTextFromResponse(response: Response): Promise<string> {
+
+  const rawBodyText: string = await response.text();
+
+  if (rawBodyText.trim() === "") {
+    return response.statusText || `HTTP ${response.status}`;
+  }
+
+  try {
+    const parsedBody: unknown = JSON.parse(rawBodyText);
+    const formattedDetail: string = formatApiErrorDetail(parsedBody);
+
+    return formattedDetail;
+  } catch {
+    return rawBodyText;
+  }
+}
+
+function formatApiErrorDetail(parsedBody: unknown): string {
+
+  if (typeof parsedBody === "string") {
+    return parsedBody;
+  }
+
+  if (parsedBody === null || typeof parsedBody !== "object") {
+    return "Request failed.";
+  }
+
+  const bodyRecord: Record<string, unknown> = parsedBody as Record<string, unknown>;
+  const detailValue: unknown = bodyRecord.detail;
+
+  if (typeof detailValue === "string") {
+    return detailValue;
+  }
+
+  if (Array.isArray(detailValue)) {
+    const messages: string[] = detailValue.map(formatValidationDetailItem);
+
+    return messages.join("; ");
+  }
+
+  if (detailValue !== undefined) {
+    return JSON.stringify(detailValue);
+  }
+
+  return JSON.stringify(parsedBody);
+}
+
+function formatValidationDetailItem(detailItem: unknown): string {
+
+  if (typeof detailItem === "string") {
+    return detailItem;
+  }
+
+  if (detailItem === null || typeof detailItem !== "object") {
+    return String(detailItem);
+  }
+
+  const detailRecord: Record<string, unknown> = detailItem as Record<string, unknown>;
+  const messageValue: unknown = detailRecord.msg;
+  const locationValue: unknown = detailRecord.loc;
+
+  if (typeof messageValue === "string" && Array.isArray(locationValue)) {
+    const locationText: string = locationValue.map(String).join(".");
+
+    return `${locationText}: ${messageValue}`;
+  }
+
+  if (typeof messageValue === "string") {
+    return messageValue;
+  }
+
+  return JSON.stringify(detailItem);
+}

@@ -33,7 +33,7 @@ Sibling to Spotmu: **separate service and URL**, same Spotmu AWS account for bil
 
 ```
 apps/server    # FastAPI API (health + /api/v1 persist-proof)
-apps/ops       # React / Vite / TypeScript ops console (stub)
+apps/ops       # React / Vite / TypeScript ops console (thin loop UI)
 packages/      # shared libraries
 tools/         # scripts and deploy helpers
 docs/          # project, product, planning, ops, reports
@@ -47,7 +47,7 @@ See `docs/prompts/directory.md`.
 - Docs: strategy + product + task sheet in place.
 - App host: EC2 `twerva-server` + `https://twerva.com` (stub).
 - Stack (Phase 1): FastAPI + React/Vite/TypeScript + Postgres — Spotmu-aligned.
-- App shells: `apps/server` and `apps/ops` run locally (task sheet §1.1). Domain schema + `/api/v1` persist-proof API and Spotmu seed are in (1.2). **1.3 Spotmu ingest** (public JSON + sitemap, manual cluster attach) is in. **1.4 carousel generate** (local PNG store, draft Artifact) is in. **1.5 approval & schedule** (review queue, cadence caps, `POST /api/v1/schedule`) is in. **1.6 mock publish** (`POST /api/v1/publish/run/{post_job_id}`, `PUBLISH_ADAPTER=mock`) is in. **1.7 measure & steer** (metric snapshots, cluster median, steer, agent-summary) is in. Ops UI is not built yet.
+- App shells: `apps/server` and `apps/ops` run locally (task sheet §1.1). Domain schema + `/api/v1` persist-proof API and Spotmu seed are in (1.2). **1.3 Spotmu ingest** (public JSON + sitemap, manual cluster attach) is in. **1.4 carousel generate** (local PNG store, draft Artifact) is in. **1.5 approval & schedule** (review queue, cadence caps, `POST /api/v1/schedule`) is in. **1.6 mock publish** (`POST /api/v1/publish/run/{post_job_id}`, `PUBLISH_ADAPTER=mock`) is in. **1.7 measure & steer** (metric snapshots, cluster median, steer, agent-summary) is in. **1.8 thin ops console** (`apps/ops`: Sources · Queue · Schedule · Accounts · Results against local `/api/v1`).
 
 ## Stack (Phase 1)
 
@@ -88,7 +88,10 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Details: [`apps/ops/README.md`](apps/ops/README.md).
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite proxies `/api` and
+`/health` to the API on `:8000` (or set `VITE_API_BASE_URL`). Walk
+Sources → Queue → Schedule → Accounts → Results against the local API.
+Details: [`apps/ops/README.md`](apps/ops/README.md).
 
 ## Development discipline
 
