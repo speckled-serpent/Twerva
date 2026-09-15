@@ -71,6 +71,22 @@ is the first).
   trigger in MVP).
 - Live EC2 apply is documented, not executed in this slice.
 
+## Verified
+
+- `python -m unittest discover -s tests` (24 tests) — health without URL,
+  fail-fast settings, engine/session, model metadata/indexes/enums,
+  Alembic revision `12bk_domain_schema`.
+- `GET /health` via uvicorn **without** `DATABASE_URL` → `200` `{"status":"ok"}`.
+- `alembic upgrade head` on empty local Postgres 16 → clean;
+  `alembic current` → `12bk_domain_schema (head)`.
+- `alembic downgrade base` then `upgrade head` again — clean.
+- Partial unique index: `WHERE (external_key IS NOT NULL)`.
+- ORM round-trip: Brand → SourceItem → Cluster + join → Account →
+  Artifact → PostJob → two MetricSnapshots (latest views wins) →
+  SteerAction. UUID PKs assigned by `gen_random_uuid()`.
+- Live `alembic upgrade` on `twerva-server` **not** run (1.2k-iii
+  documented only).
+
 ## Out of scope (as specified)
 
 - No FastAPI CRUD / Pydantic schemas (1.2l)

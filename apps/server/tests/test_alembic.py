@@ -45,6 +45,17 @@ class AlembicInitializationTests(unittest.TestCase):
 
         for module_node in parsed_module.body:
 
+            if isinstance(module_node, ast.AnnAssign):
+                annotation_target: ast.expr = module_node.target
+
+                if (
+                    isinstance(annotation_target, ast.Name)
+                    and isinstance(module_node.value, ast.Constant)
+                ):
+                    assigned_values[annotation_target.id] = module_node.value.value
+
+                continue
+
             if not isinstance(module_node, ast.Assign):
                 continue
 
