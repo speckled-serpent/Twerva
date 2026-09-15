@@ -111,3 +111,77 @@ is the first).
 - 1.2k-iii live: `alembic upgrade head` on `twerva-server`
 - 1.2l thin HTTP API
 - 1.2m idempotent Spotmu brand + example source item
+
+---
+
+# Task 1.2 (interim) — 1.2l HTTP API + 1.2m seed
+
+*2026-09-15*
+
+1.2b–k schema is merged (`12bk_domain_schema`). This note covers **1.2l**
+and **1.2m**. Live SSH deploy of `twerva-api` is documented, not executed.
+
+## Done
+
+- **1.2l-i** Pydantic create/read schemas in `app/api/v1/schemas.py` for
+  Brand, SourceItem, Cluster, Account, Artifact, PostJob, plus optional
+  MetricSnapshot create/read (no metric routes).
+- **1.2l-ii** `POST` + `GET` list + `GET` by id under `/api/v1` for Brand,
+  SourceItem, Cluster, Account. No auth.
+- **1.2l-iii** Same for Artifact and PostJob; both create and read include
+  `status` (`draft` / `scheduled` defaults).
+- **1.2l-iv** `GET /health` still does not import settings/models/`app.db`
+  at module load. `/api/v1` mounts when `DATABASE_URL` can be resolved
+  (env, `.env`, or test flag); otherwise the process stays health-only.
+  Deploy steps for systemd `twerva-api` on `twerva-server` are in
+  `apps/server/README.md`. Live SSH is deferred (same as 1.2a-v / 1.2k-iii).
+- **1.2l-v** `tools/smoke_1_2l_api.sh` plus a README curl sketch:
+  Brand `spotmu` → SourceItem → Cluster → Account → Artifact `draft` →
+  PostJob `scheduled`, then GET each.
+- **1.2m-i / 1.2m-ii / 1.2m-iii** Idempotent `python -m app.seed`: Brand
+  `slug=spotmu` `name=Spotmu` and one fake SourceItem (`external_key=example`,
+  three overview bullets, `https://spotmu.com/interest/example`). Not ingest.
+
+No OAuth tokens, S3, Celery, ops UI, or 1.3 ingest.
+
+## Trade-offs
+
+- No new Alembic revision (seed is a module, not a data migration) so
+  `12bk_domain_schema` stays the single head.
+- MetricSnapshot has schemas only; SteerAction still has no API.
+- Persist handler tests skip when Postgres is not reachable (metadata /
+  schema / route-surface tests always run).
+- Live `systemctl restart twerva-api` on EC2 is documented, not run.
+
+## Verified
+
+- `python -m unittest discover -s tests` — 1.2a–k tests plus schema,
+  route-surface, lookups 404, seed idempotency. Persist handler test
+  skips without Postgres; against local Postgres 16 +
+  `alembic upgrade head` it passes.
+- `GET /health` via uvicorn **without** `DATABASE_URL` → `200` `{"status":"ok"}`.
+  `/api/v1/brands` is `404` in that health-only process (routes not mounted).
+- `app/main.py` AST still excludes `app.db` / `app.models` / `app.settings`.
+- `python -m app.seed` twice: first creates Brand + SourceItem; second
+  prints `already present` with the same ids.
+- `tools/smoke_1_2l_api.sh` against local uvicorn with `DATABASE_URL`:
+  Brand `spotmu` reused → SourceItem → Cluster → Account → Artifact
+  `draft` → PostJob `scheduled`, then GET each.
+- Live `systemctl restart twerva-api` on `twerva-server` **not** run.
+
+## Scripts touched
+
+- `apps/server/app/main.py` (health-only import; lazy `/api/v1` attach)
+- `apps/server/app/api/v1/` (schemas, routers, lookups, persist helper)
+- `apps/server/app/seed.py`
+- `apps/server/tests/test_api_schemas.py`, `test_api_routes.py`,
+  `test_api_lookups.py`, `test_seed.py`, `test_api_persist.py`
+- `tools/smoke_1_2l_api.sh`
+- `apps/server/README.md`, root `README.md`
+- `docs/planning/task_sheet.md` (1.2l / 1.2m leaves ticked)
+
+## Next
+
+- 1.2k-iii / 1.2l-iv live: `alembic upgrade head`, `python -m app.seed`,
+  `systemctl restart twerva-api` on `twerva-server`
+- 1.3 Spotmu ingest (replace the fake example SourceItem)
