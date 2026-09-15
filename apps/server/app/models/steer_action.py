@@ -1,4 +1,4 @@
-"""Steer action — stub row for later agent/human cluster decisions. No API."""
+"""Steer action — append-only cluster decision (kill/pause/double_down/resume)."""
 
 import uuid
 from datetime import datetime
@@ -23,6 +23,7 @@ class SteerAction(Base, UuidPrimaryKeyMixin):
     are `kill`, `pause`, `double_down`, `resume` — the same closed set
     1.2j-i listed as a check constraint. No updated_at: steer rows are
     append-only for MVP. `created_by` is freeform (`human`, agent name).
+    HTTP create is `POST /api/v1/clusters/{id}/steer` (1.7c).
     """
 
     __tablename__ = "steer_actions"
