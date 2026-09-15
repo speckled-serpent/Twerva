@@ -19,8 +19,8 @@ Checkbox legend: `[ ]` todo · `[~]` in progress · `[x]` done
 - [x] Register Twerva domain (`twerva.com`)
 - [x] Public URL + TLS on Spotmu AWS (EC2 `twerva-server`, EIP `3.19.233.237`, Spaceship A → nginx + Let's Encrypt)
 - [x] Compute + Postgres on EC2 `twerva-server` (Docker Postgres 16, localhost-only `:5432`; DB URL in `/opt/twerva/database_url.env`) — RDS deferred
-- [ ] S3 bucket/prefix for artifacts — **parked** until carousel/media generate needs object storage
-- [ ] Twerva-prefixed secrets in AWS SM/SSM — **parked**; Phase 1 secrets stay on-box (`/opt/twerva/*.env` mode 600)
+- [x] **DEFERRED** S3 bucket/prefix for artifacts — until carousel/media generate needs object storage (see Parking lot)
+- [x] **DEFERRED** Twerva-prefixed secrets in AWS SM/SSM — Phase 1 secrets stay on-box (`/opt/twerva/*.env` mode 600) (see Parking lot)
 - [x] Choose stack for ops console + workers: FastAPI + React/Vite/TS + Postgres (Celery/Redis later) — Spotmu-aligned
 - [x] Empty app shells: `apps/server` (FastAPI healthcheck) + `apps/ops` (Vite React stub)
 - [x] Healthcheck endpoint on the Twerva URL (`https://twerva.com/health` → systemd `twerva-api` / uvicorn on `127.0.0.1:8000`)
@@ -36,11 +36,11 @@ Checkbox legend: `[ ]` todo · `[~]` in progress · `[x]` done
 #### 1.2a — DB plumbing
 Wire SQLAlchemy + Alembic to the existing EC2 Postgres (`DATABASE_URL` from `/opt/twerva/database_url.env`). Empty models package OK until 1.2b+.
 
-- [ ] **1.2a-i** Add DB deps to `apps/server` (`sqlalchemy`, `psycopg` or `psycopg2-binary`, `alembic`, `pydantic-settings` as needed). Pin ranges in `requirements.txt` / `pyproject.toml` consistent with Spotmu-aligned stack.
-- [ ] **1.2a-ii** Settings module reads `DATABASE_URL` from env (fail fast on missing URL in non-test). Document local override in `apps/server/README.md`.
-- [ ] **1.2a-iii** SQLAlchemy engine + `SessionLocal` / session dependency for FastAPI (`apps/server/app/db.py` or equivalent).
-- [ ] **1.2a-iv** Alembic init under `apps/server` (`alembic.ini`, `alembic/env.py` using same `DATABASE_URL`). Empty migration chain ready for 1.2b+.
-- [ ] **1.2a-v** Smoke: from `twerva-server`, app (or `alembic current`) connects to Postgres on `127.0.0.1:5432` using the on-box env file. Note command in README.
+- [x] **1.2a-i** Add DB deps to `apps/server` (`sqlalchemy`, `psycopg` or `psycopg2-binary`, `alembic`, `pydantic-settings` as needed). Pin ranges in `requirements.txt` / `pyproject.toml` consistent with Spotmu-aligned stack.
+- [x] **1.2a-ii** Settings module reads `DATABASE_URL` from env (fail fast on missing URL in non-test). Document local override in `apps/server/README.md`.
+- [x] **1.2a-iii** SQLAlchemy engine + `SessionLocal` / session dependency for FastAPI (`apps/server/app/db.py` or equivalent).
+- [x] **1.2a-iv** Alembic init under `apps/server` (`alembic.ini`, `alembic/env.py` using same `DATABASE_URL`). Empty migration chain ready for 1.2b+.
+- [x] **1.2a-v** Smoke: from `twerva-server`, app (or `alembic current`) connects to Postgres on `127.0.0.1:5432` using the on-box env file. Note command in README.
 
 #### 1.2b — Shared types & status enums
 Single source of truth for IDs and lifecycle strings used by Artifact / Post job.
@@ -243,8 +243,8 @@ Thin FastAPI routes — enough to prove the model; not the ops console (1.8).
 ---
 
 ## Parking lot (do not pull forward early)
-- S3 / object storage for generated media (create when carousel/video pipeline needs it)
-- AWS Secrets Manager / SSM (Phase 1 uses on-box env files)
+- **DEFERRED from 1.1** — S3 / object storage for generated media (create when carousel/video pipeline needs it)
+- **DEFERRED from 1.1** — AWS Secrets Manager / SSM with Twerva-prefixed secrets (Phase 1 uses on-box `/opt/twerva/*.env` mode 600)
 
 - Character / mascot universes
 - Outfy-class “post only to seller’s own empty accounts” as the product
@@ -258,6 +258,6 @@ Thin FastAPI routes — enough to prove the model; not the ops console (1.8).
 
 ## Suggested next coding slice
 
-§1.1 skeleton is largely done. **Start at 1.2a** (DB plumbing), then walk lettered leaves in order through **1.2m**. Do not start 1.3 ingest until 1.2 exit criteria pass.
+§1.1 skeleton done (S3 + SM/SSM deferred to Parking lot). **Start at 1.2a** (DB plumbing), then walk lettered leaves in order through **1.2m**. Do not start 1.3 ingest until 1.2 exit criteria pass.
 
 After 1.2: 1.3 Spotmu ingest spike → 1.4 carousel → 1.5 approve → 1.6 publish adapter → 1.7 measure/steer stubs → 1.8 thin ops console.
