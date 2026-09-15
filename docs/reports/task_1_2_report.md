@@ -25,7 +25,8 @@
 **Revision:** `12bk_domain_schema` (first head; `down_revision` is empty).
 
 Live SSH `alembic upgrade` on `twerva-server` is **not** required for this
-PR. Apply later from `apps/server` with the on-box URL:
+PR. Production deploy, migrate, and rollback: [`docs/ops/deploy.md`](../ops/deploy.md).
+Apply later from `apps/server` with the on-box URL:
 
 ```bash
 set -a

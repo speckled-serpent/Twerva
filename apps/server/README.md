@@ -63,6 +63,9 @@ On-box file: `/opt/twerva/database_url.env` (mode 600). It provides
 the process environment (systemd `EnvironmentFile=` or `source` in a shell).
 The app does not open that file itself.
 
+Production deploy, migrate, verify, and rollback (Badger):
+[`docs/ops/deploy.md`](../../docs/ops/deploy.md).
+
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
