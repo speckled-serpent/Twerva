@@ -1,0 +1,4 @@
+Alembic revisions for the Twerva API database.
+
+The chain is empty in 1.2a (no domain tables). Domain migrations start in 1.2b+.
+Run commands from `apps/server` so `alembic.ini` and `app.settings` resolve.
