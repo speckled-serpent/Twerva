@@ -36,10 +36,41 @@ git `main` (rsync or tar). Preserve the on-box `.venv`.
 | `/opt/twerva/server` | App tree (`apps/server` contents). Preserve `.venv`. |
 | systemd `twerva-api` | uvicorn `app.main:application` on `127.0.0.1:8000` |
 | optional `EnvironmentFile` | `/opt/twerva/database_url.env` |
-| nginx + Let’s Encrypt | TLS for `twerva.com`; `location = /health` proxies to uvicorn |
+| nginx + Let’s Encrypt | TLS for `twerva.com`; **public** `location = /health` only → uvicorn |
 | `/opt/twerva/docker-compose.postgres.yml` | Docker Postgres 16 |
 | `/opt/twerva/postgres/` | Postgres data directory |
 | Postgres bind | `127.0.0.1:5432` only (not public) |
+
+## Public surface (`/health` only)
+
+**Standing decision (Mu accepted Sparky’s recommendation):** nginx’s
+public surface on `https://twerva.com` is **`/health` only**.
+
+Live nginx already proxies `location = /health` to uvicorn on
+`127.0.0.1:8000`. Do **not** add public `location` blocks for `/api/`,
+`/docs`, or other uvicorn paths until the API has auth — or Mu
+explicitly revisits.
+
+`/api/v1` currently has **no auth** and includes POSTs. Treat it as
+private: on-box loopback, or an SSH tunnel. Same for FastAPI `/docs`.
+
+| URL | Who can reach it |
+|---|---|
+| `https://twerva.com/health` | Public. nginx exact `/health` → uvicorn |
+| `http://127.0.0.1:8000/health` | On-box (same process Badger monitors) |
+| `http://127.0.0.1:8000/api/v1/...` | Private. Loopback or SSH tunnel |
+| `http://127.0.0.1:8000/docs` | Private. FastAPI Swagger; not public |
+| `https://twerva.com/api/...` | Must stay **unreachable** via nginx |
+| `https://twerva.com/docs` | Must stay **unreachable** via nginx |
+
+Off-box API access is a tunnel to loopback, not a new nginx location:
+
+```bash
+ssh -i ~/.ssh/twerva-key.pem -L 8000:127.0.0.1:8000 ubuntu@3.19.233.237
+```
+
+Then `http://127.0.0.1:8000/api/v1/...` and `/docs` on your machine.
+Do not paste production payloads or env files into chat.
 
 ## Secrets (paths only)
 
@@ -140,6 +171,11 @@ Both must print:
 {"status":"ok"}
 ```
 
+Those are the **only** public verify curls. Do not expect
+`https://twerva.com/api/...` or `https://twerva.com/docs` to hit
+uvicorn — see [Public surface](#public-surface-health-only). On-box
+`/api/v1` and `/docs` stay on `http://127.0.0.1:8000`.
+
 Then check the rest of [Health](#health-expectations).
 
 ## Rollback
@@ -174,7 +210,8 @@ Also watch:
 
 nginx `location = /health` must keep proxying to uvicorn. A public
 `https://twerva.com/health` failure with a passing loopback curl points
-at nginx/TLS, not the app.
+at nginx/TLS, not the app. Do not “fix” that by widening nginx to
+`/api/` or `/docs`.
 
 Database connectivity (not `/health`): `alembic current` after sourcing
 `/opt/twerva/database_url.env`, as in
@@ -187,6 +224,8 @@ Ask **Mu** before any of:
 - AWS spend
 - Security-group changes that can lock us out of SSH
 - Destroying EBS volumes, the Postgres data dir, or the Twerva EIP
+- Exposing `/api/` or `/docs` (or any other uvicorn path) on public
+  nginx — even a “temporary” location
 
 Never:
 
@@ -196,6 +235,8 @@ Never:
 - Bind Postgres on a public interface
 - Overwrite `/opt/twerva/server/.venv` as part of a routine sync
 - Treat `/health` as proof the schema or `DATABASE_URL` is good
+- Add public nginx `/api/` or `/docs` while `/api/v1` has no auth
+  (POSTs included)
 
 Deferred (do not provision in this runbook): RDS, S3, Secrets Manager /
 SSM. Same Spotmu AWS account is fine; this file does not describe

@@ -9,7 +9,7 @@ secret values.
 
 | Doc | Role |
 |---|---|
-| [`deploy.md`](deploy.md) | Production `twerva-server`: layout, deploy, migrate, verify, rollback, health, landmines |
+| [`deploy.md`](deploy.md) | Production `twerva-server`: layout, deploy, migrate, verify, rollback, `/health`-only public surface, landmines |
 
 Local API run, `DATABASE_URL`, and Alembic smoke stay in
 [`apps/server/README.md`](../../apps/server/README.md). Schema revision
