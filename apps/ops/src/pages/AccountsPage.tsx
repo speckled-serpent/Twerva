@@ -259,7 +259,7 @@ export function AccountsPage(): ReactElement {
       </form>
 
       <h2>Clusters</h2>
-      {clusters.length === 0 ? (
+      {loadError !== null ? null : clusters.length === 0 ? (
         <p>No clusters. Create one below (seed does not create a cluster).</p>
       ) : (
         <table>
@@ -287,7 +287,7 @@ export function AccountsPage(): ReactElement {
       )}
 
       <h2>Accounts</h2>
-      {accounts.length === 0 ? (
+      {loadError !== null ? null : accounts.length === 0 ? (
         <p>No accounts. Create one below.</p>
       ) : (
         <table>

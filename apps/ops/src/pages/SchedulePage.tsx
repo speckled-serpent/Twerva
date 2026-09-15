@@ -232,7 +232,7 @@ export function SchedulePage(): ReactElement {
       </form>
 
       <h2>Post jobs</h2>
-      {postJobs.length === 0 ? (
+      {loadError !== null ? null : postJobs.length === 0 ? (
         <p>No post jobs yet.</p>
       ) : (
         <table>

@@ -49,6 +49,12 @@ against a local API.
 
 - `npm run build` from `apps/ops`: `tsc -b` + Vite production `dist/`
   succeeded.
+- Browser: Vite at `http://127.0.0.1:5173` against a health-only API
+  (`GET /health` → `API: ok`; `/api/v1` unmounted). All five nav pages
+  render. Missing `/api/v1` shows a plain **Not Found** banner. Forms
+  stay disabled until ids are chosen. This environment had no Postgres,
+  so generate → approve → mock publish was not walked against a live
+  DB.
 
 ## Out of scope (as specified)
 

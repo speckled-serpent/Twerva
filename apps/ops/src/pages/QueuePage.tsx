@@ -131,7 +131,7 @@ export function QueuePage(): ReactElement {
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 
-      {draftArtifacts.length === 0 ? (
+      {loadError !== null ? null : draftArtifacts.length === 0 ? (
         <p>No drafts. Generate a carousel on Sources.</p>
       ) : (
         <ul className="card-list">

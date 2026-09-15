@@ -287,7 +287,7 @@ export function SourcesPage(): ReactElement {
       </form>
 
       <h2>Source items</h2>
-      {sourceItems.length === 0 ? (
+      {loadError !== null ? null : sourceItems.length === 0 ? (
         <p>No source items. Seed the API (`python -m app.seed`) or create one above.</p>
       ) : (
         <table>
