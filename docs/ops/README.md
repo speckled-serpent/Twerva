@@ -22,3 +22,5 @@ Approval & schedule (1.5): no new host deps;
 [`docs/reports/task_1_5_report.md`](../reports/task_1_5_report.md).
 Publish (1.6): mock adapter default, no vendor keys;
 [`docs/reports/task_1_6_report.md`](../reports/task_1_6_report.md).
+Measure & steer (1.7): manual/stub metrics, median, steer;
+[`docs/reports/task_1_7_report.md`](../reports/task_1_7_report.md).

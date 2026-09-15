@@ -137,6 +137,13 @@ Optional loopback smoke: `tools/smoke_1_6_publish.sh` (seed/generate/
 approve/schedule/mock publish; no Spotmu, no vendor signup). Still no
 public nginx `/api/`.
 
+### Phase 1.7 (measure & steer)
+
+No new host deps, env vars, or Alembic revision. Sync the app tree and
+`sudo systemctl restart twerva-api`. Optional loopback smoke:
+`tools/smoke_1_7_measure_steer.sh` (metrics → median → steer →
+agent-summary; no analytics vendor). Still no public nginx `/api/`.
+
 The app does not open `database_url.env` itself. systemd may load it as
 `EnvironmentFile=`, or a shell must `source` it before Alembic. Local
 override and URL rewrite rules: [`apps/server/README.md`](../../apps/server/README.md).

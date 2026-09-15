@@ -102,12 +102,19 @@ First source: **Spotmu interest briefs**
 - Landing hits / CTR when UTM or Spotmu analytics available
 - Suppression signals (sudden reach collapse, account flags) — even if coarse at first
 - Dashboard: cluster-level rollup sufficient for steer
+- **1.7 lock:** manual `POST /api/v1/post-jobs/{id}/metrics` (append-only
+  snapshots, latest-wins). Optional stub copies mock views for
+  `mock-` platform ids only. Cluster summary is median of latest
+  non-null views; empty → `null`. No analytics vendor in MVP.
 
 ### Steer
 
 - Kill / pause a cluster
 - Double-down (raise cadence or concentrate generate) on clusters above floor
 - Agent-readable summaries so next generate batch learns (template tweaks, topic mix)
+- **1.7 lock:** `POST /api/v1/clusters/{id}/steer`. Pause/kill set
+  `is_active=false`; resume sets true; double_down is log-only.
+  Accounts are not status-flipped. Agent summary is JSON or markdown.
 
 ### Explicitly out of MVP
 

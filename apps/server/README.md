@@ -132,7 +132,9 @@ Account, Artifact (includes `status`), and PostJob (includes `status`).
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
 are Phase 1.5. `POST /api/v1/publish/run/{post_job_id}` mock-publishes a
-scheduled job (Phase 1.6; default `PUBLISH_ADAPTER=mock`). Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+scheduled job (Phase 1.6; default `PUBLISH_ADAPTER=mock`). Measure &
+steer (Phase 1.7): `POST /api/v1/post-jobs/{id}/metrics`, cluster
+median summary, steer, agent-summary. Interactive docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 when the process has a database URL.
 
 ### Seed (1.2m)
@@ -382,6 +384,83 @@ tools/smoke_1_6_publish.sh
 TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_6_publish.sh
 ```
 
+## Measure & steer (1.7)
+
+Thin API; no ops UI (1.8), no Celery, **no** real analytics vendor.
+`GET /health` still starts without `DATABASE_URL`. Reuses
+`metric_snapshots` + `steer_actions` (no new Alembic revision).
+
+After mock publish, POST metrics by hand (or use the stub below):
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/post-jobs/<post-job-id>/metrics \
+  -H 'Content-Type: application/json' \
+  -d '{"views":20,"likes":2,"comments":0,"shares":0}'
+```
+
+`published` / `failed` jobs become `measured`. Multiple snapshots per
+job are allowed; queries take **latest `captured_at`**.
+
+### Stub puller (1.7a-ii)
+
+There is no vendor insights pull. For jobs whose `platform_post_id`
+starts with `mock-` (the 1.6 mock adapter):
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/post-jobs/<post-job-id>/metrics/stub
+```
+
+Writes `views=100`, `likes=10`, `comments=2`, `shares=1`. Any other
+platform id is HTTP **409**.
+
+### Cluster median (1.7b)
+
+```bash
+curl -sS http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/metrics/summary
+```
+
+Median of latest-wins **views** across post jobs on that cluster's
+accounts. Jobs without a snapshot, or with `views` null on the latest
+row, are omitted from the median. Empty → `"median_views": null`
+(not zero). Even-length lists average the two central values.
+
+### Steer (1.7c)
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/steer \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"pause","reason":"median below floor"}'
+```
+
+`action` is `kill` | `pause` | `double_down` | `resume`. Optional
+`reason`, optional `created_by` (default `human`). Pause/kill set
+`clusters.is_active=false`; resume sets true. **double_down is
+log-only** (row written, flag unchanged; no cadence bump in MVP).
+Account `status` rows are not flipped.
+
+### Agent summary (1.7d)
+
+```bash
+curl -sS "http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/agent-summary"
+curl -sS "http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/agent-summary?format=markdown"
+```
+
+JSON (default) or markdown: cluster flag, median block, recent
+artifacts / post jobs / steer actions.
+
+### Measure & steer smoke (1.7d-ii)
+
+With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted).
+Uses the seeded/example SourceItem + generate + approve + schedule +
+mock publish (**no** Spotmu HTTP, **no** vendor):
+
+```bash
+# from the repo root
+tools/smoke_1_7_measure_steer.sh
+# or
+TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_7_measure_steer.sh
+```
+
 ### Persist-proof smoke (1.2l-v)
 
 With uvicorn running **and** `DATABASE_URL` set (so `/api/v1` is mounted):
@@ -455,6 +534,10 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
     yet). Restart `twerva-api` after sync. Optional loopback:
     `tools/smoke_1_6_publish.sh` (approve/schedule/mock publish; no
     Spotmu, no vendor signup).
+13. **1.7:** no new host deps, no Alembic revision, no nginx `/api`.
+    Restart `twerva-api` after sync. Optional loopback:
+    `tools/smoke_1_7_measure_steer.sh` (metrics → median → steer →
+    agent-summary; no analytics vendor).
 
 `GET /health` must keep working if the unit is ever started without
 `DATABASE_URL` (health-only). Production must keep the env file so

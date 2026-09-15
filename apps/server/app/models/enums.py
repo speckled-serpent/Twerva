@@ -57,7 +57,7 @@ class AccountStatus(enum.StrEnum):
 
 
 class SteerActionType(enum.StrEnum):
-    """Coarse steer decision attached to a Cluster (stub table, no API)."""
+    """Coarse steer decision attached to a Cluster (1.7c HTTP API)."""
 
     KILL = "kill"
     PAUSE = "pause"

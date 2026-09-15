@@ -33,6 +33,11 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/artifacts/{artifact_id}/reject",
         "/api/v1/schedule",
         "/api/v1/publish/run/{post_job_id}",
+        "/api/v1/post-jobs/{post_job_id}/metrics",
+        "/api/v1/post-jobs/{post_job_id}/metrics/stub",
+        "/api/v1/clusters/{cluster_id}/metrics/summary",
+        "/api/v1/clusters/{cluster_id}/steer",
+        "/api/v1/clusters/{cluster_id}/agent-summary",
     },
 )
 COLLECTION_HTTP_METHODS: frozenset[str] = frozenset({"post", "get"})
@@ -123,6 +128,30 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         ]
 
         self.assertIn("post", publish_run_methods)
+
+    def test_measure_and_steer_routes_exist(self) -> None:
+        """1.7: metrics append, stub, cluster median, steer, agent-summary."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        metrics_methods: set[str] = methods_by_path[
+            "/api/v1/post-jobs/{post_job_id}/metrics"
+        ]
+        stub_methods: set[str] = methods_by_path[
+            "/api/v1/post-jobs/{post_job_id}/metrics/stub"
+        ]
+        summary_methods: set[str] = methods_by_path[
+            "/api/v1/clusters/{cluster_id}/metrics/summary"
+        ]
+        steer_methods: set[str] = methods_by_path["/api/v1/clusters/{cluster_id}/steer"]
+        agent_summary_methods: set[str] = methods_by_path[
+            "/api/v1/clusters/{cluster_id}/agent-summary"
+        ]
+
+        self.assertIn("post", metrics_methods)
+        self.assertIn("post", stub_methods)
+        self.assertIn("get", summary_methods)
+        self.assertIn("post", steer_methods)
+        self.assertIn("get", agent_summary_methods)
 
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""

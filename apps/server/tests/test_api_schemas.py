@@ -18,9 +18,11 @@ from app.api.v1.schemas import (
     BrandReadResponse,
     ClusterCreateRequest,
     ClusterReadResponse,
+    ClusterSteerRequest,
     MetricSnapshotCreateRequest,
     MetricSnapshotReadResponse,
     PostJobCreateRequest,
+    PostJobMetricsCreateRequest,
     PostJobReadResponse,
     SchedulePostJobRequest,
     SourceItemCreateRequest,
@@ -33,6 +35,7 @@ from app.models.enums import (
     Platform,
     PostJobStatus,
     SourceType,
+    SteerActionType,
 )
 
 
@@ -278,6 +281,28 @@ class ApiSchemaTests(unittest.TestCase):
         self.assertEqual(patch_request.caption, "patched")
         self.assertEqual(schedule_request.scheduled_for, FIXED_TIMESTAMP)
         self.assertEqual(schedule_request.artifact_id, FIXED_ARTIFACT_ID)
+
+    def test_post_job_metrics_and_steer_request_schemas(self) -> None:
+        """1.7: metrics body omits post_job_id; steer defaults created_by=human."""
+
+        metrics_create_request: PostJobMetricsCreateRequest = PostJobMetricsCreateRequest(
+            views=10,
+            likes=2,
+        )
+        steer_request: ClusterSteerRequest = ClusterSteerRequest(
+            action=SteerActionType.PAUSE,
+            reason="below floor",
+        )
+        steer_request_with_actor: ClusterSteerRequest = ClusterSteerRequest(
+            action=SteerActionType.DOUBLE_DOWN,
+            created_by="canary",
+        )
+
+        self.assertEqual(metrics_create_request.views, 10)
+        self.assertIsNone(metrics_create_request.captured_at)
+        self.assertEqual(steer_request.action, SteerActionType.PAUSE)
+        self.assertEqual(steer_request.created_by, "human")
+        self.assertEqual(steer_request_with_actor.created_by, "canary")
 
 
 if __name__ == "__main__":

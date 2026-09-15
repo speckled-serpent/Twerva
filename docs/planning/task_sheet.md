@@ -274,23 +274,25 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 **Exit:** Manual (or stub) metric capture into `metric_snapshots`; cluster median views endpoint; steer actions kill/pause/double_down/resume recorded; agent-readable summary JSON/markdown endpoint or CLI.
 
+**Out of scope:** Celery/Redis, ops UI (1.8), real analytics vendor / platform insights pull.
+
 **Parallelism:** serial.
 
 #### 1.7a — Metrics in
-- [ ] **1.7a-i** `POST /api/v1/post-jobs/{id}/metrics` body views/likes/comments/shares — append `metric_snapshots` row (latest-wins already documented).
-- [ ] **1.7a-ii** Optional stub puller that no-ops or copies mock views for mock-published jobs — document.
+- [x] **1.7a-i** `POST /api/v1/post-jobs/{id}/metrics` body views/likes/comments/shares — append `metric_snapshots` row (latest-wins already documented).
+- [x] **1.7a-ii** Optional stub puller that no-ops or copies mock views for mock-published jobs — document.
 
 #### 1.7b — Cluster median
-- [ ] **1.7b-i** `GET /api/v1/clusters/{id}/metrics/summary` — median views across post jobs that have snapshots (document empty behavior).
-- [ ] **1.7b-ii** Unit test for median helper.
+- [x] **1.7b-i** `GET /api/v1/clusters/{id}/metrics/summary` — median views across post jobs that have snapshots (document empty behavior).
+- [x] **1.7b-ii** Unit test for median helper.
 
 #### 1.7c — Steer controls
-- [ ] **1.7c-i** `POST /api/v1/clusters/{id}/steer` body `{action, reason?}` → insert `steer_actions`; if `kill`/`pause`, set cluster `is_active=false` or account statuses paused as documented; `resume`/`double_down` documented behavior (double_down may only log for MVP).
-- [ ] **1.7c-ii** Tests for pause/resume side effects you implement.
+- [x] **1.7c-i** `POST /api/v1/clusters/{id}/steer` body `{action, reason?}` → insert `steer_actions`; if `kill`/`pause`, set cluster `is_active=false` or account statuses paused as documented; `resume`/`double_down` documented behavior (double_down may only log for MVP).
+- [x] **1.7c-ii** Tests for pause/resume side effects you implement.
 
 #### 1.7d — Agent summary
-- [ ] **1.7d-i** `GET /api/v1/clusters/{id}/agent-summary` (or CLI) returning markdown/JSON: recent artifacts, post jobs, medians, last steer actions.
-- [ ] **1.7d-ii** `docs/reports/task_1_7_report.md`; tick leaves; smoke script.
+- [x] **1.7d-i** `GET /api/v1/clusters/{id}/agent-summary` (or CLI) returning markdown/JSON: recent artifacts, post jobs, medians, last steer actions.
+- [x] **1.7d-ii** `docs/reports/task_1_7_report.md`; tick leaves; smoke script.
 
 **1.7 done when:** metrics → median → steer → summary works via API.
 
@@ -436,5 +438,5 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 Overnight mandate (Mu): finish **1.5 → 1.9**, auto-merge, deploy via Badger, then **STOP** for human review before Phase 2.
 
-**§1.6 done** on this branch. **Start at 1.7a** (metric snapshots), then 1.7b–d serial. Mock publish stays the pipe until Mu adds vendor keys.
+**§1.7 done** on this branch. **Start at 1.8a** (ops shell + API client), then 1.8b–c serial. Mock publish and manual/stub metrics stay the pipe until Mu adds vendor keys.
 

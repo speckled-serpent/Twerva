@@ -112,7 +112,37 @@ Do not build brand-product or editorial-brief flows in 1.2.
 - `double_down`
 - `resume`
 
-Stub table only. No HTTP API in 1.2b–k.
+`POST /api/v1/clusters/{id}/steer` (1.7c) appends a `steer_actions` row.
+
+Side effects on the cluster (account rows are **not** paused/disabled in MVP):
+
+- `kill` / `pause` → `clusters.is_active = false`
+- `resume` → `clusters.is_active = true`
+- `double_down` → log-only (row written; `is_active` unchanged; no cadence bump)
+
+## Measure (1.7)
+
+`POST /api/v1/post-jobs/{id}/metrics` appends a `metric_snapshots` row
+(latest-wins still applies). Optional
+`POST /api/v1/post-jobs/{id}/metrics/stub` copies documented mock
+counts (`views=100`, `likes=10`, `comments=2`, `shares=1`) only when
+`platform_post_id` starts with `mock-` (HTTP 409 otherwise). There is
+**no** real analytics vendor pull.
+
+A `published` or `failed` PostJob moves to `measured` when a snapshot
+is stored. `scheduled` / `publishing` / already-`measured` keep their
+status (snapshots are still stored).
+
+`GET /api/v1/clusters/{id}/metrics/summary` takes each post job on
+accounts in the cluster, uses the latest snapshot by `captured_at`,
+and reports the **median** of non-null `views`. Empty cluster, no
+snapshots, or all-null views → `median_views` is JSON `null` (not
+zero). Even-length lists use the mean of the two central values
+(may be a half).
+
+`GET /api/v1/clusters/{id}/agent-summary` (`?format=json` default, or
+`markdown`) returns recent artifacts, post jobs (with latest views),
+the median block, and recent steer actions.
 
 ## Account uniqueness (1.2f-ii)
 

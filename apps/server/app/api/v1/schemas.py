@@ -11,6 +11,7 @@ from app.models.enums import (
     Platform,
     PostJobStatus,
     SourceType,
+    SteerActionType,
 )
 
 
@@ -256,7 +257,7 @@ class PostJobReadResponse(BaseModel):
 
 
 class MetricSnapshotCreateRequest(BaseModel):
-    """Optional body for creating a MetricSnapshot (no route in 1.2l)."""
+    """Optional body for creating a MetricSnapshot (legacy persist shape)."""
 
     post_job_id: uuid.UUID
     captured_at: datetime
@@ -264,6 +265,21 @@ class MetricSnapshotCreateRequest(BaseModel):
     likes: int | None = None
     comments: int | None = None
     shares: int | None = None
+    raw: dict[str, object] | list[object] | None = None
+
+
+class PostJobMetricsCreateRequest(BaseModel):
+    """Body for `POST /api/v1/post-jobs/{id}/metrics` (1.7a-i).
+
+    `post_job_id` is the path parameter. `captured_at` defaults to UTC now
+    in the service when omitted.
+    """
+
+    views: int | None = Field(default=None, ge=0)
+    likes: int | None = Field(default=None, ge=0)
+    comments: int | None = Field(default=None, ge=0)
+    shares: int | None = Field(default=None, ge=0)
+    captured_at: datetime | None = None
     raw: dict[str, object] | list[object] | None = None
 
 
@@ -280,3 +296,72 @@ class MetricSnapshotReadResponse(BaseModel):
     comments: int | None
     shares: int | None
     raw: dict[str, object] | list[object] | None
+
+
+class ClusterMetricsSummaryResponse(BaseModel):
+    """`GET /api/v1/clusters/{id}/metrics/summary` (1.7b).
+
+    `median_views` is null when no post jobs have a latest snapshot with
+    non-null `views` (empty cluster, jobs without snapshots, or views
+    all null). It is not coerced to zero.
+    """
+
+    cluster_id: uuid.UUID
+    post_job_count: int
+    snapshot_job_count: int
+    views_job_count: int
+    median_views: float | None
+
+
+class ClusterSteerRequest(BaseModel):
+    """Body for `POST /api/v1/clusters/{id}/steer` (1.7c)."""
+
+    action: SteerActionType
+    reason: str | None = None
+    created_by: str | None = "human"
+
+
+class SteerActionReadResponse(BaseModel):
+    """Serialized SteerAction row."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    cluster_id: uuid.UUID
+    action: SteerActionType
+    reason: str | None
+    created_by: str | None
+    created_at: datetime
+
+
+class AgentSummaryArtifact(BaseModel):
+    """Slim artifact line for the agent summary."""
+
+    id: uuid.UUID
+    status: ArtifactStatus
+    caption: str | None
+    created_at: datetime
+
+
+class AgentSummaryPostJob(BaseModel):
+    """Slim post-job line plus latest-wins views when present."""
+
+    id: uuid.UUID
+    status: PostJobStatus
+    platform_post_id: str | None
+    published_at: datetime | None
+    latest_views: int | None
+    latest_captured_at: datetime | None
+
+
+class ClusterAgentSummaryResponse(BaseModel):
+    """`GET /api/v1/clusters/{id}/agent-summary` JSON (1.7d)."""
+
+    cluster_id: uuid.UUID
+    slug: str
+    name: str
+    is_active: bool
+    metrics: ClusterMetricsSummaryResponse
+    recent_artifacts: list[AgentSummaryArtifact]
+    recent_post_jobs: list[AgentSummaryPostJob]
+    recent_steer_actions: list[SteerActionReadResponse]
