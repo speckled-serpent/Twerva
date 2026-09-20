@@ -3,6 +3,8 @@ import { useEffect, useState, type ReactElement } from "react";
 import { approveArtifact, listArtifacts, patchArtifact, rejectArtifact } from "../api/client";
 import type { ArtifactReadResponse } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCanWriteOps } from "../session/OpsSessionContext";
 
 /**
  * Queue page: draft artifacts with approve / reject / caption edit.
@@ -11,6 +13,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
  */
 export function QueuePage(): ReactElement {
 
+  const canWrite: boolean = useCanWriteOps();
   const [draftArtifacts, setDraftArtifacts] = useState<ArtifactReadResponse[]>([]);
   const [captionByArtifactId, setCaptionByArtifactId] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -127,6 +130,7 @@ export function QueuePage(): ReactElement {
       <p className="lede">
         Draft artifacts only. Approve / reject, or PATCH the caption before approve.
       </p>
+      <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
@@ -173,7 +177,7 @@ export function QueuePage(): ReactElement {
                 <div className="button-row">
                   <button
                     type="button"
-                    disabled={isBusy}
+                    disabled={!canWrite || isBusy}
                     onClick={(): void => {
                       handleSaveCaption(draftArtifact.id);
                     }}
@@ -182,7 +186,7 @@ export function QueuePage(): ReactElement {
                   </button>
                   <button
                     type="button"
-                    disabled={isBusy}
+                    disabled={!canWrite || isBusy}
                     onClick={(): void => {
                       handleApprove(draftArtifact.id);
                     }}
@@ -192,7 +196,7 @@ export function QueuePage(): ReactElement {
                   <button
                     type="button"
                     className="danger"
-                    disabled={isBusy}
+                    disabled={!canWrite || isBusy}
                     onClick={(): void => {
                       handleReject(draftArtifact.id);
                     }}

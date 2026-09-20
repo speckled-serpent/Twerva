@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth.passwords import hash_plain_password
-from app.models import OpsUser
+from app.models import OpsUser, OpsUserRole
 from app.settings import Settings, get_settings
 
 
@@ -76,6 +76,7 @@ def bootstrap_admin_operator_if_needed(
     created_ops_user: OpsUser = OpsUser(
         username=admin_username,
         password_hash=password_hash,
+        role=OpsUserRole.ADMIN,
     )
     our_database_session.add(created_ops_user)
     our_database_session.commit()

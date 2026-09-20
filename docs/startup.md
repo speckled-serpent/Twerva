@@ -11,7 +11,7 @@ For the overnight close-out packet, see [`docs/reports/phase_1_exit_report.md`](
 
 | Piece | Where | Notes |
 |---|---|---|
-| Public site | `https://twerva.com` | Ops console at `/`. nginx proxies `/api/` and `/health`. Login required for `/api/v1` (except `/auth/login` / `/logout` / `/me`). |
+| Public site | `https://twerva.com` | Ops console at `/`. nginx proxies `/api/` and `/health`. Login required for `/api/v1` (except `/auth/login` / `/logout` / `/me`). Readers are GET-only. |
 | API | EC2 `twerva-server` | Code at `/opt/twerva/server` (synced `apps/server` tree, **not** a full git clone). Uvicorn on **`127.0.0.1:8000`** (not public). |
 | Postgres | Same EC2 (Docker) | Bound to `127.0.0.1:5432`. Creds in `/opt/twerva/database_url.env` (mode 600 — don’t paste into chat). |
 | Artifacts (carousel PNGs) | `/opt/twerva/artifacts` | Local disk; S3 still deferred. |
@@ -38,6 +38,10 @@ curl -s https://twerva.com/health
 
 Open **https://twerva.com** and sign in with the bootstrap admin (set on
 the box; never committed). Unauthenticated `GET /api/v1/brands` is 401.
+Rotate that bootstrap password under **Account → Change password** (env
+does not overwrite an existing admin). Admins create more operators
+under **Users** (`admin` full, `reader` GET-only). The header shows the
+current role.
 
 ---
 
@@ -89,9 +93,9 @@ Local API `.env` should set `SESSION_COOKIE_SECURE=false` (HTTP) and
 
 ## Walk the Phase 1 path in ops
 
-Nav: **Sources · Queue · Schedule · Accounts · Results**
+Nav: **Sources · Queue · Schedule · Accounts · Results · Account** (+ **Users** for admins)
 
-1. **Sign in** — bootstrap admin (or any `ops_users` row).
+1. **Sign in** — bootstrap admin (or any `ops_users` row). Role is in the header.
 2. **Sources** — list Spotmu-shaped source items; generate a carousel (creates a **draft** artifact; PNGs land under `/opt/twerva/artifacts` on the server).
 3. **Queue** — approve / reject / edit caption (human gate).
 4. **Accounts** — clusters/accounts, cadence caps, steer (pause/kill/resume).

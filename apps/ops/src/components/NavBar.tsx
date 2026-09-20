@@ -1,12 +1,22 @@
 import type { ReactElement } from "react";
 
-export type OpsPageId = "sources" | "queue" | "schedule" | "accounts" | "results";
+import type { OpsUserRole } from "../api/types";
+
+export type OpsPageId =
+  | "sources"
+  | "queue"
+  | "schedule"
+  | "accounts"
+  | "results"
+  | "account"
+  | "users";
 
 export interface NavBarProps {
   activePageId: OpsPageId;
   onNavigate: (pageId: OpsPageId) => void;
   healthLabel: string;
   signedInUsername: string;
+  signedInRole: OpsUserRole;
   onLogout: () => void;
   isLoggingOut: boolean;
 }
@@ -14,6 +24,7 @@ export interface NavBarProps {
 interface NavItem {
   pageId: OpsPageId;
   label: string;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -22,10 +33,12 @@ const NAV_ITEMS: NavItem[] = [
   { pageId: "schedule", label: "Schedule" },
   { pageId: "accounts", label: "Accounts" },
   { pageId: "results", label: "Results" },
+  { pageId: "account", label: "Account" },
+  { pageId: "users", label: "Users", adminOnly: true },
 ];
 
 /**
- * Top nav for the five Phase 1.8 ops pages plus operator logout.
+ * Top nav for ops pages plus operator role and logout.
  *
  * @param props - Active page, navigate callback, health, session
  * @returns The ops header
@@ -35,9 +48,14 @@ export function NavBar({
   onNavigate,
   healthLabel,
   signedInUsername,
+  signedInRole,
   onLogout,
   isLoggingOut,
 }: NavBarProps): ReactElement {
+
+  const visibleNavItems: NavItem[] = NAV_ITEMS.filter((navItem: NavItem): boolean => {
+    return navItem.adminOnly !== true || signedInRole === "admin";
+  });
 
   return (
     <header className="ops-header">
@@ -45,7 +63,10 @@ export function NavBar({
         <strong>Twerva ops</strong>
         <span className="ops-header-meta">
           <span className="ops-health">{healthLabel}</span>
-          <span className="ops-signed-in">{signedInUsername}</span>
+          <span className="ops-signed-in">
+            {signedInUsername}
+            <span className="ops-role-badge">{signedInRole}</span>
+          </span>
           <button
             type="button"
             className="ops-logout-button"
@@ -59,7 +80,7 @@ export function NavBar({
         </span>
       </div>
       <nav className="ops-nav" aria-label="Ops pages">
-        {NAV_ITEMS.map((navItem: NavItem): ReactElement => {
+        {visibleNavItems.map((navItem: NavItem): ReactElement => {
           const isActive: boolean = navItem.pageId === activePageId;
 
           return (

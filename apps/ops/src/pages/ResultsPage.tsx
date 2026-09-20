@@ -15,6 +15,8 @@ import type {
   MetricSnapshotReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCanWriteOps } from "../session/OpsSessionContext";
 
 /**
  * Results page: cluster median summary, stub metrics, agent-summary pane.
@@ -23,6 +25,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
  */
 export function ResultsPage(): ReactElement {
 
+  const canWrite: boolean = useCanWriteOps();
   const [clusters, setClusters] = useState<ClusterReadResponse[]>([]);
   const [clusterId, setClusterId] = useState<string>("");
   const [metricsSummary, setMetricsSummary] = useState<ClusterMetricsSummaryResponse | null>(null);
@@ -163,6 +166,7 @@ export function ResultsPage(): ReactElement {
       <p className="lede">
         Cluster median views and the agent-summary. Stub metrics only work on mock-published jobs.
       </p>
+      <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
@@ -214,7 +218,7 @@ export function ResultsPage(): ReactElement {
         </label>
         <button
           type="button"
-          disabled={isBusy || stubPostJobId === ""}
+          disabled={!canWrite || isBusy || stubPostJobId === ""}
           onClick={(): void => {
             void handleStubMetrics();
           }}

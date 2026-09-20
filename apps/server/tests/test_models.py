@@ -16,6 +16,7 @@ from app.models import (
     Cluster,
     MetricSnapshot,
     OpsUser,
+    OpsUserRole,
     Platform,
     PostJob,
     PostJobStatus,
@@ -197,6 +198,15 @@ class DomainEnumTests(unittest.TestCase):
             {member.value for member in SteerActionType},
             {"kill", "pause", "double_down", "resume"},
         )
+
+    def test_ops_user_role_values(self) -> None:
+        """Ops operator roles are admin (full) and reader (GET-only)."""
+
+        self.assertEqual(
+            {member.value for member in OpsUserRole},
+            {"admin", "reader"},
+        )
+        self.assertIn("role", set(OpsUser.__table__.columns.keys()))
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

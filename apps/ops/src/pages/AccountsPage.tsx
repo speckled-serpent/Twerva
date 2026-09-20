@@ -17,6 +17,8 @@ import type {
   SteerActionReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCanWriteOps } from "../session/OpsSessionContext";
 
 const STEER_ACTIONS: SteerActionName[] = ["kill", "pause", "double_down", "resume"];
 
@@ -27,6 +29,7 @@ const STEER_ACTIONS: SteerActionName[] = ["kill", "pause", "double_down", "resum
  */
 export function AccountsPage(): ReactElement {
 
+  const canWrite: boolean = useCanWriteOps();
   const [clusters, setClusters] = useState<ClusterReadResponse[]>([]);
   const [accounts, setAccounts] = useState<AccountReadResponse[]>([]);
   const [brands, setBrands] = useState<BrandReadResponse[]>([]);
@@ -209,6 +212,7 @@ export function AccountsPage(): ReactElement {
       <p className="lede">
         Clusters and accounts. Cadence cap is per account. Steer is per cluster.
       </p>
+      <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
@@ -247,7 +251,7 @@ export function AccountsPage(): ReactElement {
             <button
               key={steerAction}
               type="button"
-              disabled={isBusy || steerClusterId === ""}
+              disabled={!canWrite || isBusy || steerClusterId === ""}
               onClick={(): void => {
                 void handleSteer(steerAction);
               }}
@@ -357,7 +361,7 @@ export function AccountsPage(): ReactElement {
             required
           />
         </label>
-        <button type="submit" disabled={isBusy || clusterBrandId === ""}>
+        <button type="submit" disabled={!canWrite || isBusy || clusterBrandId === ""}>
           Create cluster
         </button>
       </form>
@@ -414,7 +418,7 @@ export function AccountsPage(): ReactElement {
             }}
           />
         </label>
-        <button type="submit" disabled={isBusy || accountClusterId === ""}>
+        <button type="submit" disabled={!canWrite || isBusy || accountClusterId === ""}>
           Create account
         </button>
       </form>

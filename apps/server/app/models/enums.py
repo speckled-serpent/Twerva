@@ -65,6 +65,13 @@ class SteerActionType(enum.StrEnum):
     RESUME = "resume"
 
 
+class OpsUserRole(enum.StrEnum):
+    """Operator role on `ops_users` (console RBAC, not social `accounts`)."""
+
+    ADMIN = "admin"
+    READER = "reader"
+
+
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ArtifactStatus.DRAFT: frozenset(
         {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
@@ -128,3 +135,4 @@ PLATFORM_ENUM: Enum = as_postgres_enum(Platform, "platform")
 SOURCE_TYPE_ENUM: Enum = as_postgres_enum(SourceType, "source_type")
 ACCOUNT_STATUS_ENUM: Enum = as_postgres_enum(AccountStatus, "account_status")
 STEER_ACTION_TYPE_ENUM: Enum = as_postgres_enum(SteerActionType, "steer_action_type")
+OPS_USER_ROLE_ENUM: Enum = as_postgres_enum(OpsUserRole, "ops_user_role")

@@ -51,6 +51,29 @@ textarea {
   font-size: 0.9rem;
 }
 
+.ops-signed-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ops-role-badge {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid #888;
+  background: #fff;
+  font-size: 0.75rem;
+  text-transform: lowercase;
+}
+
+.readonly-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #8a7a3a;
+  background: #f7f3e2;
+  color: #5a4a10;
+}
+
 .ops-logout-button {
   border: 1px solid #888;
   background: #fff;

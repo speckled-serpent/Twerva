@@ -1,8 +1,9 @@
 """Aggregate `/api/v1` persist-proof routers.
 
-`/api/v1/auth/*` is public (login / logout / me). Every other `/api/v1`
-route requires a valid ops session cookie via
-`require_authenticated_ops_operator`.
+`/api/v1/auth/login`, `/logout`, and `/me` stay public as before (`/me`
+still 401 without a cookie). Other `/api/v1` routes require a session
+cookie. Readers may GET; mutations return 403 except self
+`change-password` and `logout`. User-admin routes are admin-only.
 """
 
 from fastapi import APIRouter, Depends
@@ -20,14 +21,14 @@ from app.api.v1.publish import publish_router
 from app.api.v1.schedule import schedule_router
 from app.api.v1.source_items import source_items_router
 from app.api.v1.steer import steer_router
-from app.auth.dependencies import require_authenticated_ops_operator
+from app.auth.dependencies import require_ops_operator_allowed_for_request
 
 
 api_v1_router: APIRouter = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(authentication_router)
 
 protected_api_v1_router: APIRouter = APIRouter(
-    dependencies=[Depends(require_authenticated_ops_operator)],
+    dependencies=[Depends(require_ops_operator_allowed_for_request)],
 )
 protected_api_v1_router.include_router(brands_router)
 protected_api_v1_router.include_router(source_items_router)

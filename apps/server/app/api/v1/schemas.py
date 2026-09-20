@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.enums import (
     AccountStatus,
     ArtifactStatus,
+    OpsUserRole,
     Platform,
     PostJobStatus,
     SourceType,
@@ -381,6 +382,7 @@ class OpsUserReadResponse(BaseModel):
 
     id: uuid.UUID
     username: str
+    role: OpsUserRole
     created_at: datetime
     updated_at: datetime
 
@@ -389,3 +391,36 @@ class OpsLogoutResponse(BaseModel):
     """Body for `POST /api/v1/auth/logout`."""
 
     status: str
+
+
+class OpsChangePasswordRequest(BaseModel):
+    """Body for `POST /api/v1/auth/change-password` (self only)."""
+
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+class OpsChangePasswordResponse(BaseModel):
+    """Body after a successful self password change."""
+
+    status: str
+
+
+class OpsUserCreateRequest(BaseModel):
+    """Body for `POST /api/v1/auth/users` (admin only)."""
+
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=8)
+    role: OpsUserRole
+
+
+class OpsUserRolePatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/auth/users/{id}` (admin only)."""
+
+    role: OpsUserRole
+
+
+class OpsUserResetPasswordRequest(BaseModel):
+    """Body for `POST /api/v1/auth/users/{id}/reset-password` (admin only)."""
+
+    new_password: str = Field(min_length=8)

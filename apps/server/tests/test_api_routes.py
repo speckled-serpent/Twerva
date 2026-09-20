@@ -41,6 +41,10 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/login",
         "/api/v1/auth/logout",
         "/api/v1/auth/me",
+        "/api/v1/auth/change-password",
+        "/api/v1/auth/users",
+        "/api/v1/auth/users/{ops_user_id}",
+        "/api/v1/auth/users/{ops_user_id}/reset-password",
     },
 )
 COLLECTION_HTTP_METHODS: frozenset[str] = frozenset({"post", "get"})
@@ -157,16 +161,29 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         self.assertIn("get", agent_summary_methods)
 
     def test_auth_routes_exist(self) -> None:
-        """Public login / logout / me under `/api/v1/auth`."""
+        """Login / logout / me plus password and user-admin routes."""
 
         methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
         login_methods: set[str] = methods_by_path["/api/v1/auth/login"]
         logout_methods: set[str] = methods_by_path["/api/v1/auth/logout"]
         me_methods: set[str] = methods_by_path["/api/v1/auth/me"]
+        change_password_methods: set[str] = methods_by_path[
+            "/api/v1/auth/change-password"
+        ]
+        users_methods: set[str] = methods_by_path["/api/v1/auth/users"]
+        user_item_methods: set[str] = methods_by_path["/api/v1/auth/users/{ops_user_id}"]
+        reset_password_methods: set[str] = methods_by_path[
+            "/api/v1/auth/users/{ops_user_id}/reset-password"
+        ]
 
         self.assertIn("post", login_methods)
         self.assertIn("post", logout_methods)
         self.assertIn("get", me_methods)
+        self.assertIn("post", change_password_methods)
+        self.assertIn("get", users_methods)
+        self.assertIn("post", users_methods)
+        self.assertIn("patch", user_item_methods)
+        self.assertIn("post", reset_password_methods)
 
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""

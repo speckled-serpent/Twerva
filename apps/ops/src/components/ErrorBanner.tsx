@@ -30,6 +30,11 @@ export function ErrorBanner({ error }: ErrorBannerProps): ReactElement | null {
 function formatUnknownError(error: unknown): string {
 
   if (error instanceof ApiClientError) {
+
+    if (error.statusCode === 403) {
+      return `This action is not allowed for your role (403). ${error.detailText}`;
+    }
+
     return error.detailText;
   }
 

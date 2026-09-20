@@ -27,7 +27,7 @@ from app.auth.sessions import (
 )
 from app.db import get_our_database_session
 from app.main import application, get_health_status
-from app.models import OpsUser
+from app.models import OpsUser, OpsUserRole
 from app.settings import (
     TEST_PLACEHOLDER_SESSION_SECRET,
     Settings,
@@ -38,37 +38,104 @@ from app.settings import (
 
 CORRECT_PASSWORD: str = "correct-horse-battery"
 WRONG_PASSWORD: str = "wrong-password"
+NEW_PASSWORD: str = "new-correct-horse"
 ADMIN_USERNAME: str = "admin"
+READER_USERNAME: str = "reader-agent"
 SESSION_COOKIE_NAME: str = "twerva_ops_session"
 
 
 class _FakeScalarResult:
-    """Stand-in for `session.scalars(...).first()`."""
+    """Stand-in for `session.scalars(...).first()` / `.all()`."""
 
-    def __init__(self, ops_user: OpsUser | None) -> None:
+    def __init__(self, ops_users: list[OpsUser]) -> None:
 
-        self.ops_user: OpsUser | None = ops_user
+        self.ops_users: list[OpsUser] = ops_users
 
     def first(self) -> OpsUser | None:
 
-        return self.ops_user
+        if not self.ops_users:
+
+            return None
+
+        return self.ops_users[0]
+
+    def all(self) -> list[OpsUser]:
+
+        return list(self.ops_users)
 
 
 class _FakeOpsDatabaseSession:
-    """In-memory session that can serve one ops user for HTTP tests."""
+    """In-memory session that can serve one or more ops users for HTTP tests."""
 
     def __init__(self, ops_user: OpsUser | None) -> None:
 
-        self.ops_user: OpsUser | None = ops_user
+        self.ops_users: list[OpsUser] = [] if ops_user is None else [ops_user]
         self.added_ops_user: OpsUser | None = None
         self.commit_count: int = 0
 
+    @property
+    def ops_user(self) -> OpsUser | None:
+        """First stored operator, matching the single-user constructor."""
+
+        if not self.ops_users:
+
+            return None
+
+        return self.ops_users[0]
+
     def scalars(self, statement: object) -> _FakeScalarResult:
 
-        if self.ops_user is None:
-            empty_result: _FakeScalarResult = _FakeScalarResult(None)
+        compiled_sql: str = ""
+        compiled_parameters: dict[str, object] = {}
 
-            return empty_result
+        if hasattr(statement, "compile"):
+            compiled_statement = statement.compile()
+            compiled_sql = str(compiled_statement).lower()
+            compiled_parameters = dict(getattr(compiled_statement, "params", {}) or {})
+
+        is_ops_user_query: bool = (
+            "ops_users" in compiled_sql or "opsuser" in compiled_sql
+        )
+
+        if compiled_sql != "" and not is_ops_user_query:
+            empty_non_user_result: _FakeScalarResult = _FakeScalarResult([])
+
+            return empty_non_user_result
+
+        parameter_values: list[object] = list(compiled_parameters.values())
+        matching_ops_users: list[OpsUser] = list(self.ops_users)
+
+        if parameter_values:
+            username_matches: list[OpsUser] = [
+                stored_ops_user
+                for stored_ops_user in self.ops_users
+                if stored_ops_user.username in parameter_values
+            ]
+
+            if username_matches:
+                matching_ops_users = username_matches
+            elif any(isinstance(parameter_value, str) for parameter_value in parameter_values):
+                matching_ops_users = []
+
+        matching_ops_users.sort(key=lambda stored_ops_user: stored_ops_user.username)
+
+        return _FakeScalarResult(matching_ops_users)
+
+    def get(self, model: object, ops_user_id: uuid.UUID) -> OpsUser | None:
+
+        if model is not OpsUser:
+
+            return None
+
+        for stored_ops_user in self.ops_users:
+
+            if stored_ops_user.id == ops_user_id:
+
+                return stored_ops_user
+
+        return None
+
+    def scalar(self, statement: object) -> int:
 
         compiled_parameters: dict[str, object] = {}
 
@@ -78,49 +145,40 @@ class _FakeOpsDatabaseSession:
 
         parameter_values: list[object] = list(compiled_parameters.values())
 
-        if self.ops_user.username not in parameter_values:
-            unmatched_result: _FakeScalarResult = _FakeScalarResult(None)
+        if (
+            OpsUserRole.ADMIN in parameter_values
+            or OpsUserRole.ADMIN.value in parameter_values
+        ):
+            admin_count: int = sum(
+                1
+                for stored_ops_user in self.ops_users
+                if stored_ops_user.role == OpsUserRole.ADMIN
+            )
 
-            return unmatched_result
+            return admin_count
 
-        matching_result: _FakeScalarResult = _FakeScalarResult(self.ops_user)
-
-        return matching_result
-
-    def get(self, model: object, ops_user_id: uuid.UUID) -> OpsUser | None:
-
-        if self.ops_user is None:
-
-            return None
-
-        if model is not OpsUser:
-
-            return None
-
-        if self.ops_user.id != ops_user_id:
-
-            return None
-
-        return self.ops_user
-
-    def scalar(self, statement: object) -> int:
-
-        del statement
-
-        if self.ops_user is None:
-
-            return 0
-
-        return 1
+        return len(self.ops_users)
 
     def add(self, ops_user: OpsUser) -> None:
 
         self.added_ops_user = ops_user
-        self.ops_user = ops_user
+
+        for user_index, stored_ops_user in enumerate(self.ops_users):
+
+            if stored_ops_user.id is not None and stored_ops_user.id == ops_user.id:
+                self.ops_users[user_index] = ops_user
+
+                return
+
+        self.ops_users.append(ops_user)
 
     def commit(self) -> None:
 
         self.commit_count += 1
+
+    def rollback(self) -> None:
+
+        return
 
     def refresh(self, ops_user: OpsUser) -> None:
 
@@ -133,8 +191,14 @@ class _FakeOpsDatabaseSession:
         if ops_user.updated_at is None:
             ops_user.updated_at = datetime.now(timezone.utc)
 
+        if getattr(ops_user, "role", None) is None:
+            ops_user.role = OpsUserRole.READER
 
-def _build_ops_user(username: str = ADMIN_USERNAME, password: str = CORRECT_PASSWORD,
+
+def _build_ops_user(
+    username: str = ADMIN_USERNAME,
+    password: str = CORRECT_PASSWORD,
+    role: OpsUserRole = OpsUserRole.ADMIN,
 ) -> OpsUser:
     """Return an `OpsUser` instance that is not attached to Postgres."""
 
@@ -143,6 +207,7 @@ def _build_ops_user(username: str = ADMIN_USERNAME, password: str = CORRECT_PASS
         id=uuid.uuid4(),
         username=username,
         password_hash=hash_plain_password(password),
+        role=role,
         created_at=now,
         updated_at=now,
     )
@@ -258,6 +323,7 @@ class AuthHttpTests(unittest.TestCase):
         self.assertEqual(login_response.status_code, 200)
         self.assertEqual(login_response.json()["username"], ADMIN_USERNAME)
         self.assertEqual(login_response.json()["id"], str(self.ops_user.id))
+        self.assertEqual(login_response.json()["role"], OpsUserRole.ADMIN.value)
         self.assertNotIn("password", login_response.json())
         self.assertNotIn("password_hash", login_response.json())
         self.assertIn(SESSION_COOKIE_NAME, login_response.cookies)
@@ -291,6 +357,7 @@ class AuthHttpTests(unittest.TestCase):
 
         self.assertEqual(me_response.status_code, 200)
         self.assertEqual(me_response.json()["username"], ADMIN_USERNAME)
+        self.assertEqual(me_response.json()["role"], OpsUserRole.ADMIN.value)
 
     def test_me_without_cookie_returns_401(self) -> None:
         """GET /auth/me with no cookie is 401."""
@@ -403,6 +470,293 @@ class BootstrapAdminTests(unittest.TestCase):
         self.assertFalse(bootstrap_result.created)
         self.assertEqual(fake_session.commit_count, 0)
         self.assertIn("already has", bootstrap_result.skipped_reason or "")
+
+    def test_bootstrap_created_user_is_admin(self) -> None:
+        """The first seeded operator is role=admin."""
+
+        fake_session: _FakeOpsDatabaseSession = _FakeOpsDatabaseSession(None)
+        settings: Settings = Settings(
+            database_url="postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva",
+            ops_admin_username="bootstrap-admin",
+            ops_admin_password="bootstrap-secret",
+            session_secret=TEST_PLACEHOLDER_SESSION_SECRET,
+            session_cookie_secure=False,
+        )
+        bootstrap_result: OpsAdminBootstrapResult = bootstrap_admin_operator_if_needed(
+            fake_session,  # type: ignore[arg-type]
+            settings,
+        )
+
+        self.assertTrue(bootstrap_result.created)
+        self.assertIsNotNone(fake_session.added_ops_user)
+        self.assertEqual(fake_session.added_ops_user.role, OpsUserRole.ADMIN)
+
+
+class ChangePasswordHttpTests(unittest.TestCase):
+    """Self-service password change for any signed-in operator."""
+
+    def setUp(self) -> None:
+        """Build one admin and a TestClient."""
+
+        clear_settings_cache()
+        self.ops_user: OpsUser = _build_ops_user()
+        self.fake_session: _FakeOpsDatabaseSession = _FakeOpsDatabaseSession(
+            self.ops_user,
+        )
+        self.test_client: TestClient = _build_auth_test_client(self.fake_session)
+
+    def tearDown(self) -> None:
+        """Close the client and drop settings."""
+
+        self.test_client.close()
+        clear_settings_cache()
+
+    def test_change_password_success_then_old_password_fails(self) -> None:
+        """Correct current password updates the hash; old password no longer logs in."""
+
+        self._login(ADMIN_USERNAME, CORRECT_PASSWORD)
+        change_response = self.test_client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": CORRECT_PASSWORD, "new_password": NEW_PASSWORD},
+        )
+
+        self.assertEqual(change_response.status_code, 200)
+        self.assertEqual(change_response.json()["status"], "password_changed")
+        self.assertTrue(
+            plain_password_matches_hash(NEW_PASSWORD, self.ops_user.password_hash),
+        )
+        self.assertFalse(
+            plain_password_matches_hash(CORRECT_PASSWORD, self.ops_user.password_hash),
+        )
+
+        self.test_client.post("/api/v1/auth/logout")
+        old_password_login = self.test_client.post(
+            "/api/v1/auth/login",
+            json={"username": ADMIN_USERNAME, "password": CORRECT_PASSWORD},
+        )
+        new_password_login = self.test_client.post(
+            "/api/v1/auth/login",
+            json={"username": ADMIN_USERNAME, "password": NEW_PASSWORD},
+        )
+
+        self.assertEqual(old_password_login.status_code, 401)
+        self.assertEqual(new_password_login.status_code, 200)
+
+    def test_change_password_rejects_wrong_current_password(self) -> None:
+        """Wrong current password is 400 and leaves the hash unchanged."""
+
+        previous_password_hash: str = self.ops_user.password_hash
+        self._login(ADMIN_USERNAME, CORRECT_PASSWORD)
+        change_response = self.test_client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": WRONG_PASSWORD, "new_password": NEW_PASSWORD},
+        )
+
+        self.assertEqual(change_response.status_code, 400)
+        self.assertEqual(self.ops_user.password_hash, previous_password_hash)
+
+    def test_change_password_requires_authentication(self) -> None:
+        """No cookie is 401."""
+
+        change_response = self.test_client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": CORRECT_PASSWORD, "new_password": NEW_PASSWORD},
+        )
+
+        self.assertEqual(change_response.status_code, 401)
+
+    def _login(self, username: str, password: str) -> None:
+        """Establish a session cookie for later requests."""
+
+        login_response = self.test_client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": password},
+        )
+
+        self.assertEqual(login_response.status_code, 200)
+
+
+class OpsUserAdminHttpTests(unittest.TestCase):
+    """Admin can list/create operators; readers cannot."""
+
+    def setUp(self) -> None:
+        """Build an admin plus a reader in one fake session."""
+
+        clear_settings_cache()
+        self.admin_user: OpsUser = _build_ops_user()
+        self.reader_user: OpsUser = _build_ops_user(
+            username=READER_USERNAME,
+            role=OpsUserRole.READER,
+        )
+        self.fake_session: _FakeOpsDatabaseSession = _FakeOpsDatabaseSession(
+            self.admin_user,
+        )
+        self.fake_session.ops_users.append(self.reader_user)
+        self.test_client: TestClient = _build_auth_test_client(self.fake_session)
+
+    def tearDown(self) -> None:
+        """Close the client and drop settings."""
+
+        self.test_client.close()
+        clear_settings_cache()
+
+    def test_admin_lists_ops_users_without_password_hashes(self) -> None:
+        """GET /auth/users returns id, username, role, timestamps only."""
+
+        self._login(ADMIN_USERNAME, CORRECT_PASSWORD)
+        list_response = self.test_client.get("/api/v1/auth/users")
+
+        self.assertEqual(list_response.status_code, 200)
+        listed_usernames: list[str] = [
+            user_row["username"] for user_row in list_response.json()
+        ]
+
+        self.assertIn(ADMIN_USERNAME, listed_usernames)
+        self.assertIn(READER_USERNAME, listed_usernames)
+
+        for user_row in list_response.json():
+            self.assertIn("role", user_row)
+            self.assertNotIn("password", user_row)
+            self.assertNotIn("password_hash", user_row)
+
+    def test_admin_creates_reader_user(self) -> None:
+        """POST /auth/users as admin creates a reader without echoing the password."""
+
+        self._login(ADMIN_USERNAME, CORRECT_PASSWORD)
+        create_response = self.test_client.post(
+            "/api/v1/auth/users",
+            json={
+                "username": "new-reader",
+                "password": NEW_PASSWORD,
+                "role": OpsUserRole.READER.value,
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 201)
+        self.assertEqual(create_response.json()["username"], "new-reader")
+        self.assertEqual(create_response.json()["role"], OpsUserRole.READER.value)
+        self.assertNotIn("password", create_response.json())
+        self.assertNotIn("password_hash", create_response.json())
+        self.assertIsNotNone(self.fake_session.added_ops_user)
+        self.assertTrue(
+            plain_password_matches_hash(
+                NEW_PASSWORD,
+                self.fake_session.added_ops_user.password_hash,
+            ),
+        )
+
+        created_login = self.test_client.post(
+            "/api/v1/auth/login",
+            json={"username": "new-reader", "password": NEW_PASSWORD},
+        )
+
+        self.assertEqual(created_login.status_code, 200)
+        self.assertEqual(created_login.json()["role"], OpsUserRole.READER.value)
+
+    def test_reader_cannot_list_or_create_users(self) -> None:
+        """Non-admin GET/POST /auth/users is 403."""
+
+        self._login(READER_USERNAME, CORRECT_PASSWORD)
+        list_response = self.test_client.get("/api/v1/auth/users")
+        create_response = self.test_client.post(
+            "/api/v1/auth/users",
+            json={
+                "username": "should-fail",
+                "password": NEW_PASSWORD,
+                "role": OpsUserRole.READER.value,
+            },
+        )
+
+        self.assertEqual(list_response.status_code, 403)
+        self.assertEqual(create_response.status_code, 403)
+
+    def test_admin_can_patch_role_and_reset_password(self) -> None:
+        """Optional admin routes: change role and set a password."""
+
+        self._login(ADMIN_USERNAME, CORRECT_PASSWORD)
+        patch_response = self.test_client.patch(
+            f"/api/v1/auth/users/{self.reader_user.id}",
+            json={"role": OpsUserRole.ADMIN.value},
+        )
+        reset_response = self.test_client.post(
+            f"/api/v1/auth/users/{self.reader_user.id}/reset-password",
+            json={"new_password": NEW_PASSWORD},
+        )
+
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertEqual(patch_response.json()["role"], OpsUserRole.ADMIN.value)
+        self.assertEqual(reset_response.status_code, 200)
+        self.assertTrue(
+            plain_password_matches_hash(NEW_PASSWORD, self.reader_user.password_hash),
+        )
+
+    def _login(self, username: str, password: str) -> None:
+        """Establish a session cookie for later requests."""
+
+        login_response = self.test_client.post(
+            "/api/v1/auth/login",
+            json={"username": username, "password": password},
+        )
+
+        self.assertEqual(login_response.status_code, 200)
+
+
+class ReaderRbacHttpTests(unittest.TestCase):
+    """Readers may GET domain routes; mutations are 403."""
+
+    def setUp(self) -> None:
+        """Build a reader-only client."""
+
+        clear_settings_cache()
+        self.reader_user: OpsUser = _build_ops_user(
+            username=READER_USERNAME,
+            role=OpsUserRole.READER,
+        )
+        self.fake_session: _FakeOpsDatabaseSession = _FakeOpsDatabaseSession(
+            self.reader_user,
+        )
+        self.test_client: TestClient = _build_auth_test_client(self.fake_session)
+        login_response = self.test_client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": CORRECT_PASSWORD},
+        )
+
+        self.assertEqual(login_response.status_code, 200)
+
+    def tearDown(self) -> None:
+        """Close the client and drop settings."""
+
+        self.test_client.close()
+        clear_settings_cache()
+
+    def test_reader_can_get_domain_routes(self) -> None:
+        """GET /api/v1/brands is allowed for readers."""
+
+        brands_response = self.test_client.get("/api/v1/brands")
+
+        self.assertEqual(brands_response.status_code, 200)
+        self.assertEqual(brands_response.json(), [])
+
+    def test_reader_cannot_mutate_domain_routes(self) -> None:
+        """POST /api/v1/brands is 403 for readers."""
+
+        create_brand_response = self.test_client.post(
+            "/api/v1/brands",
+            json={"slug": "blocked", "name": "Blocked"},
+        )
+
+        self.assertEqual(create_brand_response.status_code, 403)
+        self.assertIn("read-only", create_brand_response.json()["detail"].lower())
+
+    def test_reader_can_change_own_password(self) -> None:
+        """Readers may POST /auth/change-password."""
+
+        change_response = self.test_client.post(
+            "/api/v1/auth/change-password",
+            json={"current_password": CORRECT_PASSWORD, "new_password": NEW_PASSWORD},
+        )
+
+        self.assertEqual(change_response.status_code, 200)
 
 
 if __name__ == "__main__":
