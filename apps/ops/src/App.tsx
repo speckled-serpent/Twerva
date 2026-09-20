@@ -8,12 +8,15 @@ import {
 } from "./api/client";
 import type { HealthReadResponse, OpsUserReadResponse } from "./api/types";
 import { NavBar, type OpsPageId } from "./components/NavBar";
+import { AccountPage } from "./pages/AccountPage";
 import { AccountsPage } from "./pages/AccountsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { QueuePage } from "./pages/QueuePage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SchedulePage } from "./pages/SchedulePage";
 import { SourcesPage } from "./pages/SourcesPage";
+import { UsersPage } from "./pages/UsersPage";
+import { OpsSessionContext, isAdminOpsRole } from "./session/OpsSessionContext";
 
 type SessionState = "checking" | "signed_out" | "signed_in";
 
@@ -139,22 +142,34 @@ export function App(): ReactElement {
     );
   }
 
+  const canWrite: boolean = isAdminOpsRole(signedInOperator.role);
+  const safeActivePageId: OpsPageId =
+    activePageId === "users" && !canWrite ? "sources" : activePageId;
+
   return (
-    <div className="ops-console-shell">
-      <NavBar
-        activePageId={activePageId}
-        onNavigate={(pageId: OpsPageId): void => {
-          setActivePageId(pageId);
-        }}
-        healthLabel={healthLabel}
-        signedInUsername={signedInOperator.username}
-        isLoggingOut={isLoggingOut}
-        onLogout={(): void => {
-          void handleLogout();
-        }}
-      />
-      <main className="ops-main">{renderActivePage(activePageId)}</main>
-    </div>
+    <OpsSessionContext.Provider
+      value={{
+        currentOperator: signedInOperator,
+        canWrite,
+      }}
+    >
+      <div className="ops-console-shell">
+        <NavBar
+          activePageId={safeActivePageId}
+          onNavigate={(pageId: OpsPageId): void => {
+            setActivePageId(pageId);
+          }}
+          healthLabel={healthLabel}
+          signedInUsername={signedInOperator.username}
+          signedInRole={signedInOperator.role}
+          isLoggingOut={isLoggingOut}
+          onLogout={(): void => {
+            void handleLogout();
+          }}
+        />
+        <main className="ops-main">{renderActivePage(safeActivePageId)}</main>
+      </div>
+    </OpsSessionContext.Provider>
   );
 }
 
@@ -174,6 +189,14 @@ function renderActivePage(activePageId: OpsPageId): ReactElement {
 
   if (activePageId === "accounts") {
     return <AccountsPage />;
+  }
+
+  if (activePageId === "account") {
+    return <AccountPage />;
+  }
+
+  if (activePageId === "users") {
+    return <UsersPage />;
   }
 
   return <ResultsPage />;

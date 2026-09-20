@@ -14,8 +14,13 @@ import type {
   ClusterSteerRequest,
   HealthReadResponse,
   MetricSnapshotReadResponse,
+  OpsChangePasswordRequest,
+  OpsChangePasswordResponse,
   OpsLoginRequest,
+  OpsUserCreateRequest,
   OpsUserReadResponse,
+  OpsUserResetPasswordRequest,
+  OpsUserRolePatchRequest,
   PostJobReadResponse,
   SchedulePostJobRequest,
   SourceItemCreateRequest,
@@ -90,6 +95,57 @@ export async function loginOpsOperator(
 export async function logoutOpsOperator(): Promise<void> {
 
   await requestJson<{ status: string }>("POST", "/api/v1/auth/logout");
+}
+
+export async function changeOwnOpsPassword(
+  opsChangePasswordRequest: OpsChangePasswordRequest,
+): Promise<OpsChangePasswordResponse> {
+
+  return requestJson<OpsChangePasswordResponse>(
+    "POST",
+    "/api/v1/auth/change-password",
+    opsChangePasswordRequest,
+  );
+}
+
+export async function listOpsUsers(): Promise<OpsUserReadResponse[]> {
+
+  return requestJson<OpsUserReadResponse[]>("GET", "/api/v1/auth/users");
+}
+
+export async function createOpsUser(
+  opsUserCreateRequest: OpsUserCreateRequest,
+): Promise<OpsUserReadResponse> {
+
+  return requestJson<OpsUserReadResponse>(
+    "POST",
+    "/api/v1/auth/users",
+    opsUserCreateRequest,
+  );
+}
+
+export async function patchOpsUserRole(
+  opsUserId: string,
+  opsUserRolePatchRequest: OpsUserRolePatchRequest,
+): Promise<OpsUserReadResponse> {
+
+  return requestJson<OpsUserReadResponse>(
+    "PATCH",
+    `/api/v1/auth/users/${opsUserId}`,
+    opsUserRolePatchRequest,
+  );
+}
+
+export async function resetOpsUserPassword(
+  opsUserId: string,
+  opsUserResetPasswordRequest: OpsUserResetPasswordRequest,
+): Promise<OpsChangePasswordResponse> {
+
+  return requestJson<OpsChangePasswordResponse>(
+    "POST",
+    `/api/v1/auth/users/${opsUserId}/reset-password`,
+    opsUserResetPasswordRequest,
+  );
 }
 
 export async function listBrands(): Promise<BrandReadResponse[]> {

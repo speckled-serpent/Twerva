@@ -7,7 +7,8 @@ source → generate carousel → approve → schedule → mock publish → measu
 ```
 
 Ugly-but-usable. Operator login against `/api/v1/auth` (session cookie).
-Requires **Node.js 20+** (22 is fine).
+Roles: **admin** (full) and **reader** (GET-only; Account password change
+still allowed). Requires **Node.js 20+** (22 is fine).
 
 ## Run locally (API + ops)
 
@@ -46,8 +47,9 @@ npm run dev
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Sign in (bootstrap
 admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
-`python -m app.auth.bootstrap`). Unauthenticated `/api/v1` is 401;
-`GET /auth/me` 401 sends you back to the login page.
+`python -m app.auth.bootstrap`). Rotate the bootstrap password on
+**Account**. Admins create more operators on **Users**. Unauthenticated
+`/api/v1` is 401; `GET /auth/me` 401 sends you back to the login page.
 
 ### Walk the loop in the browser
 
@@ -63,8 +65,9 @@ admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
    with `mock-`) so `median_views` is no longer null. Steer buttons live on
    **Accounts**.
 
-API errors render as plain text under the page heading. **Log out** is
-in the header. All fetches use `credentials: "include"`.
+API errors render as plain text under the page heading (403 writes say
+the role is read-only). **Log out** and the current **role** are in the
+header. All fetches use `credentials: "include"`.
 
 Agent dry-run (generate drafts, **stop before approve**):
 [`docs/agents/playbook_batch_generate_spotmu_cluster.md`](../../docs/agents/playbook_batch_generate_spotmu_cluster.md)

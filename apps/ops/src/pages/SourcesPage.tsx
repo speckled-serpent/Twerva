@@ -14,6 +14,8 @@ import type {
   SourceItemReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCanWriteOps } from "../session/OpsSessionContext";
 
 /**
  * Sources page: list source items, create one, generate a carousel draft.
@@ -22,6 +24,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
  */
 export function SourcesPage(): ReactElement {
 
+  const canWrite: boolean = useCanWriteOps();
   const [sourceItems, setSourceItems] = useState<SourceItemReadResponse[]>([]);
   const [brands, setBrands] = useState<BrandReadResponse[]>([]);
   const [clusters, setClusters] = useState<ClusterReadResponse[]>([]);
@@ -167,6 +170,7 @@ export function SourcesPage(): ReactElement {
       <p className="lede">
         List source items, create one if seed is empty, then generate a carousel draft.
       </p>
+      <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
@@ -208,7 +212,7 @@ export function SourcesPage(): ReactElement {
             ))}
           </select>
         </label>
-        <button type="submit" disabled={isBusy || generateSourceItemId === ""}>
+        <button type="submit" disabled={!canWrite || isBusy || generateSourceItemId === ""}>
           {isBusy ? "Working…" : "Generate carousel"}
         </button>
       </form>
@@ -281,7 +285,7 @@ export function SourcesPage(): ReactElement {
             }}
           />
         </label>
-        <button type="submit" disabled={isBusy || brandId === ""}>
+        <button type="submit" disabled={!canWrite || isBusy || brandId === ""}>
           Create source item
         </button>
       </form>

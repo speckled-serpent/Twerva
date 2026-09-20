@@ -53,7 +53,10 @@ proxy FastAPI `/docs` (or `/redoc`, `/openapi.json`).
 
 `/api/v1` (except `/api/v1/auth/login`, `/logout`, `/me`) requires a
 signed httpOnly session cookie. Unauthenticated `/api/v1` calls return
-**401**. `GET /health` stays public and does not open Postgres.
+**401**. Signed-in **readers** may `GET` `/api/v1` (except user-admin
+routes) and may `POST /auth/change-password` / `/logout`; other writes
+are **403**. **Admins** keep full access, including user create. `GET
+/health` stays public and does not open Postgres.
 
 | URL | Who can reach it |
 |---|---|
@@ -306,8 +309,9 @@ cd /opt/twerva/server && alembic upgrade head
 python -m app.auth.bootstrap
 ```
 
-Head after ops web auth: revision **`ops_users_web_auth`** (parent
-`12bk_domain_schema`).
+Head after ops RBAC: revision **`ops_users_role_rbac`** (parent
+`ops_users_web_auth`). Existing `ops_users` rows are backfilled as
+`admin`. New creates default to `reader` unless an admin sets otherwise.
 
 Confirm before and after:
 
@@ -316,12 +320,15 @@ alembic heads
 alembic current
 ```
 
-Expected after a clean apply: `ops_users_web_auth (head)`.
+Expected after a clean apply: `ops_users_role_rbac (head)`.
 
 `python -m app.auth.bootstrap` creates the first `ops_users` row when
 the table is empty and `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` are
-set. It prints the username only — never the password. Re-running is
-a no-op once any operator exists (env is **not** a password reset).
+set. The seeded row is **`admin`**. It prints the username only — never
+the password. Re-running is a no-op once any operator exists (env is
+**not** a password reset). Rotate the bootstrap password in the ops
+**Account** page (`POST /api/v1/auth/change-password`). Create more
+operators on the admin **Users** page (`POST /api/v1/auth/users`).
 
 Startup also attempts bootstrap when `/api/v1` mounts (non-test). The
 CLI is the reliable first-apply path.
@@ -368,7 +375,8 @@ Sources loads.
 Prefer a **forward** migration or a forward code fix.
 
 `12bk_domain_schema` is the first revision (`down_revision` is empty).
-`ops_users_web_auth` drops only `ops_users` on downgrade. `alembic
+`ops_users_role_rbac` drops only the `role` column (and `ops_user_role`
+enum). `ops_users_web_auth` drops `ops_users` on downgrade. `alembic
 downgrade base` drops the whole 1.2 domain schema. Do not do that on
 production unless Mu has explicitly approved destroying those tables.
 

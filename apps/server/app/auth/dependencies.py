@@ -1,4 +1,4 @@
-"""FastAPI dependency that requires a valid ops session cookie."""
+"""FastAPI dependencies for ops session cookies and basic RBAC."""
 
 import uuid
 
@@ -7,11 +7,22 @@ from sqlalchemy.orm import Session
 
 from app.auth.sessions import InvalidOpsSessionError, read_ops_user_id_from_session_token
 from app.db import get_our_database_session
-from app.models import OpsUser
+from app.models import OpsUser, OpsUserRole
 from app.settings import Settings, get_settings
 
 
 UNAUTHENTICATED_DETAIL: str = "Not authenticated."
+ADMIN_ROLE_REQUIRED_DETAIL: str = "Admin role required."
+READER_WRITE_DENIED_DETAIL: str = (
+    "Reader accounts are read-only. Ask an admin to perform this change."
+)
+READER_SAFE_HTTP_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS"})
+READER_ALLOWED_MUTATION_PATHS: frozenset[str] = frozenset(
+    {
+        "/api/v1/auth/change-password",
+        "/api/v1/auth/logout",
+    },
+)
 
 
 def require_authenticated_ops_operator(
@@ -60,3 +71,85 @@ def require_authenticated_ops_operator(
         )
 
     return found_ops_user
+
+
+def require_admin_ops_operator(
+    current_ops_operator: OpsUser = Depends(require_authenticated_ops_operator),
+) -> OpsUser:
+    """Return the signed-in admin, or raise HTTP 403 for readers.
+
+    Args:
+        current_ops_operator: Authenticated ops operator from the session cookie.
+
+    Returns:
+        The same operator when `role` is `admin`.
+
+    Raises:
+        HTTPException: 403 when the operator is not an admin.
+    """
+
+    if current_ops_operator.role != OpsUserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=ADMIN_ROLE_REQUIRED_DETAIL,
+        )
+
+    return current_ops_operator
+
+
+def require_ops_operator_allowed_for_request(
+    request: Request,
+    current_ops_operator: OpsUser = Depends(require_authenticated_ops_operator),
+) -> OpsUser:
+    """Allow admins fully; readers may GET (and a few self-service POSTs).
+
+    Args:
+        request: Incoming request (method + path).
+        current_ops_operator: Authenticated ops operator.
+
+    Returns:
+        The operator when the method is permitted for their role.
+
+    Raises:
+        HTTPException: 403 when a reader attempts a denied mutation.
+    """
+
+    if ops_operator_may_perform_request(current_ops_operator, request):
+
+        return current_ops_operator
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=READER_WRITE_DENIED_DETAIL,
+    )
+
+
+def ops_operator_may_perform_request(ops_operator: OpsUser, request: Request,
+) -> bool:
+    """Return True when this operator may perform the HTTP method/path.
+
+    Args:
+        ops_operator: Signed-in `ops_users` row.
+        request: Incoming request.
+
+    Returns:
+        True for admins, safe reader methods, and allowed reader mutations.
+    """
+
+    if ops_operator.role == OpsUserRole.ADMIN:
+
+        return True
+
+    request_method: str = request.method.upper()
+
+    if request_method in READER_SAFE_HTTP_METHODS:
+
+        return True
+
+    request_path: str = request.url.path
+
+    if request_method == "POST" and request_path in READER_ALLOWED_MUTATION_PATHS:
+
+        return True
+
+    return False

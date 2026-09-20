@@ -4,9 +4,11 @@ FastAPI process for the Twerva API. `GET /health` is a liveness check and does
 **not** open a database connection (it does not import models or `app.db` at
 module load). Domain tables land in Alembic revision `12bk_domain_schema`
 (task 1.2b–k). Ops operator table `ops_users` is revision
-`ops_users_web_auth`. Persist-proof HTTP lives under `/api/v1` (task 1.2l) and is
+`ops_users_web_auth`; `role` (`admin` / `reader`) is
+`ops_users_role_rbac`. Persist-proof HTTP lives under `/api/v1` (task 1.2l) and is
 mounted when `DATABASE_URL` can be resolved. All `/api/v1` routes except
-`/api/v1/auth/*` require a signed session cookie.
+`/api/v1/auth/login` / `/logout` / `/me` require a signed session cookie.
+Readers are GET-only (plus self `change-password` and `logout`).
 
 Requires **Python 3.11+**.
 
@@ -91,7 +93,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`ops_users_web_auth`** (parent `12bk_domain_schema`).
+Current head: **`ops_users_role_rbac`** (parent `ops_users_web_auth`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -117,7 +119,7 @@ alembic current
 ```
 
 `alembic current` opens Postgres on `127.0.0.1:5432` using `DATABASE_URL`.
-After `alembic upgrade head` it should report `ops_users_web_auth (head)`.
+After `alembic upgrade head` it should report `ops_users_role_rbac (head)`.
 
 Local equivalent (your own `DATABASE_URL`):
 
@@ -148,6 +150,12 @@ python -m app.auth.bootstrap       # no-op if any ops_users row exists
 Public routes: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`,
 `GET /api/v1/auth/me`. Everything else under `/api/v1` is 401 without a
 valid cookie. `GET /health` stays public and import-light.
+
+Roles: bootstrap env seeds the **first empty-DB admin** only (`role=admin`).
+Password rotation is `POST /api/v1/auth/change-password` (self) or the
+Account page — not a second bootstrap. Admins `GET`/`POST /api/v1/auth/users`
+to provision operators (`admin` or `reader`). Readers may GET domain
+routes and change their own password; other writes are 403.
 
 ```bash
 curl -sS -c /tmp/twerva-ops.jar -b /tmp/twerva-ops.jar \
@@ -559,7 +567,7 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
 1. Update the Twerva checkout used by systemd `twerva-api`.
 2. In `apps/server`, refresh the venv: `pip install -r requirements.txt`.
 3. Load `/opt/twerva/database_url.env` into the environment (`set -a; source ...; set +a` or systemd `EnvironmentFile=`).
-4. `alembic upgrade head` — head is `ops_users_web_auth`. Then
+4. `alembic upgrade head` — head is `ops_users_role_rbac`. Then
    `python -m app.auth.bootstrap`.
 5. `python -m app.seed` (idempotent Spotmu brand + example SourceItem).
 6. `sudo systemctl restart twerva-api` (uvicorn `app.main:application` on `127.0.0.1:8000`).

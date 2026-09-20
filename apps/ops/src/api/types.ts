@@ -211,6 +211,8 @@ export interface HealthReadResponse {
   status: string;
 }
 
+export type OpsUserRole = "admin" | "reader";
+
 export interface OpsLoginRequest {
   username: string;
   password: string;
@@ -219,6 +221,30 @@ export interface OpsLoginRequest {
 export interface OpsUserReadResponse {
   id: string;
   username: string;
+  role: OpsUserRole;
   created_at: string;
   updated_at: string;
+}
+
+export interface OpsChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface OpsChangePasswordResponse {
+  status: string;
+}
+
+export interface OpsUserCreateRequest {
+  username: string;
+  password: string;
+  role: OpsUserRole;
+}
+
+export interface OpsUserRolePatchRequest {
+  role: OpsUserRole;
+}
+
+export interface OpsUserResetPasswordRequest {
+  new_password: string;
 }

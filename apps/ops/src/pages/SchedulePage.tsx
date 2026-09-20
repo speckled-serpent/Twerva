@@ -13,6 +13,8 @@ import type {
   PostJobReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCanWriteOps } from "../session/OpsSessionContext";
 
 /**
  * Build a datetime-local value one hour from now.
@@ -39,6 +41,7 @@ function defaultScheduledForValue(): string {
  */
 export function SchedulePage(): ReactElement {
 
+  const canWrite: boolean = useCanWriteOps();
   const [approvedArtifacts, setApprovedArtifacts] = useState<ArtifactReadResponse[]>([]);
   const [accounts, setAccounts] = useState<AccountReadResponse[]>([]);
   const [postJobs, setPostJobs] = useState<PostJobReadResponse[]>([]);
@@ -173,6 +176,7 @@ export function SchedulePage(): ReactElement {
       <p className="lede">
         Attach an approved artifact to an account and time, then mock-publish the post job.
       </p>
+      <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
@@ -226,7 +230,7 @@ export function SchedulePage(): ReactElement {
             required
           />
         </label>
-        <button type="submit" disabled={isBusy || artifactId === "" || accountId === ""}>
+        <button type="submit" disabled={!canWrite || isBusy || artifactId === "" || accountId === ""}>
           Schedule
         </button>
       </form>
@@ -261,7 +265,7 @@ export function SchedulePage(): ReactElement {
                     {canPublish ? (
                       <button
                         type="button"
-                        disabled={isRowBusy}
+                        disabled={!canWrite || isRowBusy}
                         onClick={(): void => {
                           void handleMockPublish(postJob.id);
                         }}
