@@ -15,6 +15,7 @@ from app.models import (
     Brand,
     Cluster,
     MetricSnapshot,
+    OpsUser,
     Platform,
     PostJob,
     PostJobStatus,
@@ -38,6 +39,7 @@ EXPECTED_TABLE_NAMES: frozenset[str] = frozenset(
         "post_jobs",
         "metric_snapshots",
         "steer_actions",
+        "ops_users",
     },
 )
 
@@ -64,6 +66,7 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(PostJob.__tablename__, "post_jobs")
         self.assertEqual(MetricSnapshot.__tablename__, "metric_snapshots")
         self.assertEqual(SteerAction.__tablename__, "steer_actions")
+        self.assertEqual(OpsUser.__tablename__, "ops_users")
         self.assertIs(Account, AccountModel)
 
     def test_account_has_no_oauth_token_columns(self) -> None:

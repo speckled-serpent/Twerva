@@ -42,6 +42,7 @@ from app.models.enums import (
     SteerActionType,
 )
 from app.models.metric_snapshot import MetricSnapshot
+from app.models.ops_user import OpsUser
 from app.models.post_job import PostJob
 from app.models.source_item import SourceItem
 from app.models.steer_action import SteerAction
@@ -60,6 +61,7 @@ __all__ = [
     "Brand",
     "Cluster",
     "MetricSnapshot",
+    "OpsUser",
     "PLATFORM_ENUM",
     "POST_JOB_STATUS_ENUM",
     "POST_JOB_STATUS_TRANSITIONS",

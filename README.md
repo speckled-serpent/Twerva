@@ -47,7 +47,7 @@ See `docs/prompts/directory.md`.
 
 - Domain: registered.
 - Docs: strategy + product + task sheet in place.
-- App host: EC2 `twerva-server` + `https://twerva.com` (stub).
+- App host: EC2 `twerva-server` + `https://twerva.com` (ops console + cookie auth).
 - Stack (Phase 1): FastAPI + React/Vite/TypeScript + Postgres — Spotmu-aligned.
 - App shells: `apps/server` and `apps/ops` run locally (task sheet §1.1). Domain schema + `/api/v1` persist-proof API and Spotmu seed are in (1.2). **1.3 Spotmu ingest** (public JSON + sitemap, manual cluster attach) is in. **1.4 carousel generate** (local PNG store, draft Artifact) is in. **1.5 approval & schedule** (review queue, cadence caps, `POST /api/v1/schedule`) is in. **1.6 mock publish** (`POST /api/v1/publish/run/{post_job_id}`, `PUBLISH_ADAPTER=mock`) is in. **1.7 measure & steer** (metric snapshots, cluster median, steer, agent-summary) is in. **1.8 thin ops console** (`apps/ops`: Sources · Queue · Schedule · Accounts · Results against local `/api/v1`). **1.9 agent hooks** (docs + batch-generate dry-run; human gate). Phase 1 sheet closed pending Mu review — **do not start Phase 2**.
 
@@ -60,6 +60,7 @@ See `docs/prompts/directory.md`.
 ## Run locally
 
 `GET /health` does not need Postgres. `/api/v1` and `python -m app.seed` do.
+`/api/v1` (except `/auth/login` / `/logout` / `/me`) needs a session cookie.
 
 **API** (Python 3.11+):
 

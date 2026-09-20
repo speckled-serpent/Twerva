@@ -40,6 +40,10 @@ if [[ "${HEALTH_STATUS}" != "ok" ]]; then
   exit 1
 fi
 
+# shellcheck source=lib/ops_session.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/ops_session.sh"
+ops_begin_authenticated_curl "${BASE_URL}"
+
 echo "POST /api/v1/brands (spotmu, or reuse if slug exists)"
 BRAND_BODY="$(curl -sS -X POST "${BASE_URL}/api/v1/brands" \
   -H 'Content-Type: application/json' \

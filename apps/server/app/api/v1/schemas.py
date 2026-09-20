@@ -365,3 +365,27 @@ class ClusterAgentSummaryResponse(BaseModel):
     recent_artifacts: list[AgentSummaryArtifact]
     recent_post_jobs: list[AgentSummaryPostJob]
     recent_steer_actions: list[SteerActionReadResponse]
+
+
+class OpsLoginRequest(BaseModel):
+    """Body for `POST /api/v1/auth/login`."""
+
+    username: str
+    password: str
+
+
+class OpsUserReadResponse(BaseModel):
+    """Serialized ops operator. Never includes `password_hash`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class OpsLogoutResponse(BaseModel):
+    """Body for `POST /api/v1/auth/logout`."""
+
+    status: str

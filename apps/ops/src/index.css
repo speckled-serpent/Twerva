@@ -38,9 +38,28 @@ textarea {
   margin-bottom: 0.5rem;
 }
 
-.ops-health {
+.ops-header-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ops-health,
+.ops-signed-in {
   color: #4a4a4a;
   font-size: 0.9rem;
+}
+
+.ops-logout-button {
+  border: 1px solid #888;
+  background: #fff;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+}
+
+.ops-login-main {
+  max-width: 28rem;
 }
 
 .ops-nav {

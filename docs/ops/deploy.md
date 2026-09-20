@@ -34,49 +34,48 @@ git `main` (rsync or tar). Preserve the on-box `.venv`.
 | Path | Role |
 |---|---|
 | `/opt/twerva/server` | App tree (`apps/server` contents). Preserve `.venv`. |
-| systemd `twerva-api` | uvicorn `app.main:application` on `127.0.0.1:8000` |
-| optional `EnvironmentFile` | `/opt/twerva/database_url.env` |
-| nginx + Let’s Encrypt | TLS for `twerva.com`; **public** `location = /health` only → uvicorn |
+| systemd `twerva-api` | uvicorn `app.main:application` on `127.0.0.1:8000` (loopback only) |
+| optional `EnvironmentFile` | `/opt/twerva/database_url.env` (add ops auth vars here, or a second file) |
+| optional ops auth env | `/opt/twerva/ops_auth.env` (mode 600) if secrets are split from the DB URL |
+| nginx + Let’s Encrypt | TLS for `twerva.com`; static ops at `/`; proxy `/api/` and `/health` |
+| `/var/www/twerva-ops` | Production `apps/ops` `dist/` (replaces the old stub page) |
 | `/opt/twerva/docker-compose.postgres.yml` | Docker Postgres 16 |
 | `/opt/twerva/postgres/` | Postgres data directory |
 | `/opt/twerva/artifacts` | Local carousel PNG store (1.4). `ARTIFACT_STORAGE_DIR`. Not public. |
 | Postgres bind | `127.0.0.1:5432` only (not public) |
 
-## Public surface (`/health` only)
+## Public surface (ops console + authenticated `/api`)
 
-**Standing decision (Mu accepted Sparky’s recommendation):** nginx’s
-public surface on `https://twerva.com` is **`/health` only**.
+`https://twerva.com` is the **ops console**. nginx serves the Vite
+`dist/` at `/` and proxies `/api/` plus `/health` to uvicorn on
+loopback. **Do not** bind uvicorn on a public interface. **Do not**
+proxy FastAPI `/docs` (or `/redoc`, `/openapi.json`).
 
-Live nginx already proxies `location = /health` to uvicorn on
-`127.0.0.1:8000`. Do **not** add public `location` blocks for `/api/`,
-`/docs`, or other uvicorn paths until the API has auth — or Mu
-explicitly revisits.
-
-`/api/v1` currently has **no auth** and includes POSTs. Treat it as
-private: on-box loopback, or an SSH tunnel. Same for FastAPI `/docs`.
+`/api/v1` (except `/api/v1/auth/login`, `/logout`, `/me`) requires a
+signed httpOnly session cookie. Unauthenticated `/api/v1` calls return
+**401**. `GET /health` stays public and does not open Postgres.
 
 | URL | Who can reach it |
 |---|---|
-| `https://twerva.com/health` | Public. nginx exact `/health` → uvicorn |
-| `http://127.0.0.1:8000/health` | On-box (same process Badger monitors) |
-| `http://127.0.0.1:8000/api/v1/...` | Private. Loopback or SSH tunnel |
-| `http://127.0.0.1:8000/docs` | Private. FastAPI Swagger; not public |
-| `https://twerva.com/api/...` | Must stay **unreachable** via nginx |
+| `https://twerva.com/` | Public HTML/JS for the ops console. Login required to use `/api`. |
+| `https://twerva.com/health` | Public. nginx `/health` → uvicorn |
+| `https://twerva.com/api/v1/auth/*` | Public login / logout / me (me is 401 without a cookie) |
+| `https://twerva.com/api/v1/...` | Cookie session required (401 otherwise) |
+| `http://127.0.0.1:8000/...` | On-box only. nginx is the only public front door |
 | `https://twerva.com/docs` | Must stay **unreachable** via nginx |
 
-The Phase 1.8 ops console (`apps/ops`) is **local Vite only**. A later
-private nginx `dist/` host is optional. Do **not** add public locations
-for the ops UI tonight (same rule as `/api`). Phase 1.9 is docs +
-`tools/agent_batch_generate.sh` (loopback dry-run). No nginx change.
+Same-origin cookies on `twerva.com` are enough (no CORS required in
+production). Local Vite still proxies `/api` and `/health` to
+`127.0.0.1:8000`.
 
-Off-box API access is a tunnel to loopback, not a new nginx location:
+Off-box Swagger remains a tunnel to loopback:
 
 ```bash
 ssh -i ~/.ssh/twerva-key.pem -L 8000:127.0.0.1:8000 ubuntu@3.19.233.237
 ```
 
-Then `http://127.0.0.1:8000/api/v1/...` and `/docs` on your machine.
-Do not paste production payloads or env files into chat.
+Then `http://127.0.0.1:8000/docs` on your machine. Do not paste
+production payloads or env files into chat.
 
 ## Secrets (paths only)
 
@@ -84,7 +83,8 @@ Mode **600**. **Never** commit, print, or paste these files.
 
 | Path | Role |
 |---|---|
-| `/opt/twerva/database_url.env` | `DATABASE_URL` for the API and Alembic |
+| `/opt/twerva/database_url.env` | `DATABASE_URL` for the API and Alembic. May also hold ops auth vars if systemd only loads this file. |
+| `/opt/twerva/ops_auth.env` | Optional split file: `OPS_ADMIN_USERNAME`, `OPS_ADMIN_PASSWORD`, `SESSION_SECRET`, `SESSION_COOKIE_SECURE=true`. Mode 600. Add `EnvironmentFile=` on `twerva-api` if used. |
 | `/opt/twerva/postgres.env` | Docker Postgres credentials |
 
 ### Phase 1.3 env vars (Spotmu ingest)
@@ -98,11 +98,10 @@ on the default. To set it explicitly, add a line to an existing mode-600
 env file systemd already loads, or a second `EnvironmentFile=` — do not
 invent a new nginx location.
 
-**Do not** add public nginx `/api/` (or `/docs`) for ingest. `/api/v1`
-stays loopback / SSH tunnel. `GET /health` is still the only public
-path. No new Alembic revision in 1.3 (`12bk_domain_schema` remains
-head). After sync, `pip install -r requirements.txt` so **httpx** lands
-in `.venv`, then restart `twerva-api`.
+Ingest still talks to public Spotmu. After this auth slice, nginx **does**
+proxy `/api/` (cookie required). Do **not** proxy `/docs`. After sync,
+`pip install -r requirements.txt` so **httpx** (and later **bcrypt** /
+**itsdangerous**) land in `.venv`, then restart `twerva-api`.
 
 ### Phase 1.4 env vars (carousel generate)
 
@@ -119,18 +118,17 @@ Match ownership to whichever user runs `twerva-api` if that is not
 a new PNG folder (history on purpose). Watch free space next to the
 Postgres data volume.
 
-**Do not** add public nginx `/api/` (or `/docs`, or `/artifacts`).
-`/api/v1` stays loopback / SSH tunnel. `GET /health` is still the only
-public path. No new Alembic revision in 1.4 (`12bk_domain_schema`
-remains head). After sync, `pip install -r requirements.txt` so
-**Pillow** lands in `.venv`, then restart `twerva-api`.
+**Do not** add a public artifacts location. After sync,
+`pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
+restart `twerva-api`.
 
 ### Phase 1.5 (approval & schedule)
 
 No new host deps, env vars, or Alembic revision. Sync the app tree and
 `sudo systemctl restart twerva-api`. Optional loopback smoke:
 `tools/smoke_1_5_approve_schedule.sh` (seed/generate; no Spotmu, no
-real publish). Still no public nginx `/api/`.
+real publish). Smokes need `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD`
+so they can `POST /api/v1/auth/login`.
 
 ### Phase 1.6 (publish adapter)
 
@@ -139,15 +137,15 @@ No new host deps or Alembic revision. Default `PUBLISH_ADAPTER=mock`
 live HTTP is wired — do **not** switch the adapter to `ayrshare` on the
 box yet. Sync the app tree and `sudo systemctl restart twerva-api`.
 Optional loopback smoke: `tools/smoke_1_6_publish.sh` (seed/generate/
-approve/schedule/mock publish; no Spotmu, no vendor signup). Still no
-public nginx `/api/`.
+approve/schedule/mock publish; no Spotmu, no vendor signup). Smokes need
+ops login env as above.
 
 ### Phase 1.7 (measure & steer)
 
 No new host deps, env vars, or Alembic revision. Sync the app tree and
 `sudo systemctl restart twerva-api`. Optional loopback smoke:
 `tools/smoke_1_7_measure_steer.sh` (metrics → median → steer →
-agent-summary; no analytics vendor). Still no public nginx `/api/`.
+agent-summary; no analytics vendor). Smokes need ops login env as above.
 
 The app does not open `database_url.env` itself. systemd may load it as
 `EnvironmentFile=`, or a shell must `source` it before Alembic. Local
@@ -155,6 +153,39 @@ override and URL rewrite rules: [`apps/server/README.md`](../../apps/server/READ
 
 RDS, S3, and Secrets Manager / SSM are **deferred**. Phase 1 secrets
 stay on this box.
+
+### Ops auth env (public console)
+
+Add these to the env file **systemd already loads**
+(`/opt/twerva/database_url.env`) **or** a second mode-600 file
+`/opt/twerva/ops_auth.env` listed as another `EnvironmentFile=` on
+`twerva-api`. Do **not** commit or paste the values.
+
+```bash
+# generate on the box; do not put the result in git
+openssl rand -hex 32
+```
+
+| Variable | Role |
+|---|---|
+| `SESSION_SECRET` | HMAC secret for the signed session cookie. Required. Rotate invalidates every session. |
+| `OPS_ADMIN_USERNAME` | Bootstrap only — first `ops_users` row when the table is empty |
+| `OPS_ADMIN_PASSWORD` | Bootstrap only. Never logged. Not a standing override after the first user exists |
+| `SESSION_COOKIE_SECURE` | `true` on `https://twerva.com` |
+| `SESSION_COOKIE_NAME` | Optional. Default `twerva_ops_session` |
+| `SESSION_COOKIE_SAMESITE` | Optional. Default `lax` |
+| `OPS_CORS_ORIGINS` | Optional. Local Vite origins; production same-origin does not need CORS |
+
+After writing the file:
+
+```bash
+sudo chmod 600 /opt/twerva/database_url.env
+# if split:
+# sudo chmod 600 /opt/twerva/ops_auth.env
+```
+
+If you add `/opt/twerva/ops_auth.env`, edit the systemd unit so it
+loads both files, then `sudo systemctl daemon-reload`.
 
 ## Deploy (until scripts exist)
 
@@ -196,18 +227,87 @@ enough; no venv recreate required.
 **1.4 adds `pillow`** — same: routine `pip install -r requirements.txt`,
 then restart. Also `mkdir -p /opt/twerva/artifacts` (writable by the
 API user). Do not recreate the venv just for Pillow.
+**Ops web auth adds `bcrypt` and `itsdangerous`** — same: routine
+`pip install -r requirements.txt`. No venv recreate.
 
-### 3. Migrate (when revisions exist)
+### 3. Build and publish the ops console
 
-Load the on-box URL, then upgrade from the app tree so `alembic.ini` and
-`app.settings` resolve.
+From a clone at the intended revision (Node 20+). Production must use
+**relative `/api`** — do **not** set `VITE_API_BASE_URL` at build time
+(empty base = same-origin `/api` behind nginx; Vite proxy is local-only).
+
+```bash
+cd apps/ops
+npm ci
+npm run build
+```
+
+Copy `apps/ops/dist/` onto the box, replacing the stub page:
+
+```bash
+sudo mkdir -p /var/www/twerva-ops
+sudo rsync -a --delete apps/ops/dist/ /var/www/twerva-ops/
+```
+
+Or rsync from your laptop to `ubuntu@3.19.233.237:/tmp/twerva-ops-dist/`
+then `sudo rsync -a --delete /tmp/twerva-ops-dist/ /var/www/twerva-ops/`.
+
+### 4. nginx (replace the stub with the console)
+
+Keep uvicorn on `127.0.0.1:8000`. Certbot-compatible skeleton (HTTP
+first; `certbot --nginx` adds `listen 443 ssl` and the HTTP→HTTPS
+redirect). **Do not** add `location /docs`.
+
+```nginx
+server {
+    listen 80;
+    server_name twerva.com;
+
+    root /var/www/twerva-ops;
+    index index.html;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /health {
+        proxy_pass http://127.0.0.1:8000/health;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+Reload after editing: `sudo nginx -t && sudo systemctl reload nginx`.
+If certbot already manages `twerva.com`, merge the `root` / `location`
+blocks into the existing 443 server and keep its `ssl_certificate`
+lines.
+
+### 5. Migrate and bootstrap the first admin
+
+Load the on-box URL **and** ops auth vars, then upgrade from the app
+tree so `alembic.ini` and `app.settings` resolve.
 
 ```bash
 set -a && source /opt/twerva/database_url.env && set +a
+# if split:
+# set -a && source /opt/twerva/ops_auth.env && set +a
 cd /opt/twerva/server && alembic upgrade head
+python -m app.auth.bootstrap
 ```
 
-Head after tasks **1.2b–k**: revision **`12bk_domain_schema`**.
+Head after ops web auth: revision **`ops_users_web_auth`** (parent
+`12bk_domain_schema`).
 
 Confirm before and after:
 
@@ -216,55 +316,61 @@ alembic heads
 alembic current
 ```
 
-Expected after a clean apply: `12bk_domain_schema (head)`.
+Expected after a clean apply: `ops_users_web_auth (head)`.
 
-Live apply of this revision may still be pending — see
-[`docs/reports/task_1_2_report.md`](../reports/task_1_2_report.md)
-(1.2k-iii). Do not skip `alembic current` after upgrade.
+`python -m app.auth.bootstrap` creates the first `ops_users` row when
+the table is empty and `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` are
+set. It prints the username only — never the password. Re-running is
+a no-op once any operator exists (env is **not** a password reset).
+
+Startup also attempts bootstrap when `/api/v1` mounts (non-test). The
+CLI is the reliable first-apply path.
 
 Local Alembic (your own `DATABASE_URL`, not production secrets):
 [`apps/server/README.md`](../../apps/server/README.md).
 
-### 4. Restart the API
+### 6. Restart the API
 
 ```bash
 sudo systemctl restart twerva-api
 ```
 
-### 5. Verify
+### 7. Verify
 
 ```bash
 curl -sf http://127.0.0.1:8000/health
 curl -sf https://twerva.com/health
+curl -sS -o /dev/null -w "%{http_code}\n" https://twerva.com/api/v1/brands
+curl -sS -o /dev/null -w "%{http_code}\n" https://twerva.com/
 ```
 
-Both must print:
+Health curls must print:
 
 ```json
 {"status":"ok"}
 ```
 
-Those are the **only** public verify curls. Do not expect
-`https://twerva.com/api/...` or `https://twerva.com/docs` to hit
-uvicorn — see [Public surface](#public-surface-health-only). On-box
-`/api/v1` and `/docs` stay on `http://127.0.0.1:8000`.
+`/api/v1/brands` without a cookie must be **401**. `/` must be **200**
+(the ops `index.html`). `/docs` must **not** be a public FastAPI page.
 
-Then check the rest of [Health](#health-expectations).
+Then check the rest of [Health](#health-expectations). Open
+`https://twerva.com`, sign in with the bootstrap admin, and confirm
+Sources loads.
 
 ## Rollback
 
 1. Redeploy the **previous** app tree / git commit into
    `/opt/twerva/server` (same sync rules: preserve `.venv`).
 2. `sudo systemctl restart twerva-api`.
-3. Re-run the [verify](#5-verify) curls.
+3. Re-run the [verify](#7-verify) curls.
 
 **Database:** downgrade only if the target revision is known safe.
 Prefer a **forward** migration or a forward code fix.
 
 `12bk_domain_schema` is the first revision (`down_revision` is empty).
-`alembic downgrade base` drops the whole 1.2 domain schema. Do not do
-that on production unless Mu has explicitly approved destroying those
-tables.
+`ops_users_web_auth` drops only `ops_users` on downgrade. `alembic
+downgrade base` drops the whole 1.2 domain schema. Do not do that on
+production unless Mu has explicitly approved destroying those tables.
 
 ## Health expectations
 
@@ -281,10 +387,10 @@ Also watch:
 | Disk | box has free space (data volume under `/opt/twerva/postgres/` grows; carousel PNGs under `/opt/twerva/artifacts` grow on each generate) |
 | TLS | Let’s Encrypt cert for `twerva.com`; **alert if expiry is under 14 days** |
 
-nginx `location = /health` must keep proxying to uvicorn. A public
-`https://twerva.com/health` failure with a passing loopback curl points
-at nginx/TLS, not the app. Do not “fix” that by widening nginx to
-`/api/` or `/docs`.
+nginx must keep proxying `/health` and `/api/` to uvicorn, and serving
+`/var/www/twerva-ops` at `/`. A public `https://twerva.com/health`
+failure with a passing loopback curl points at nginx/TLS, not the app.
+Do not “fix” that by binding uvicorn on `0.0.0.0` or exposing `/docs`.
 
 Database connectivity (not `/health`): `alembic current` after sourcing
 `/opt/twerva/database_url.env`, as in
@@ -297,19 +403,21 @@ Ask **Mu** before any of:
 - AWS spend
 - Security-group changes that can lock us out of SSH
 - Destroying EBS volumes, the Postgres data dir, or the Twerva EIP
-- Exposing `/api/` or `/docs` (or any other uvicorn path) on public
-  nginx — even a “temporary” location
+- Binding uvicorn on a public interface
+- Exposing FastAPI `/docs` / `/redoc` / `/openapi.json` on public nginx
 
 Never:
 
 - Touch Spotmu’s EIP **`3.146.63.53`**
-- Put secrets in git or chat (`database_url.env`, `postgres.env`,
-  `DATABASE_URL` values, key material)
+- Put secrets in git or chat (`database_url.env`, `ops_auth.env`,
+  `postgres.env`, `DATABASE_URL` values, `SESSION_SECRET`,
+  `OPS_ADMIN_PASSWORD`, key material)
 - Bind Postgres on a public interface
 - Overwrite `/opt/twerva/server/.venv` as part of a routine sync
 - Treat `/health` as proof the schema or `DATABASE_URL` is good
-- Add public nginx `/api/` or `/docs` while `/api/v1` has no auth
-  (POSTs included)
+- Leave `/api/v1` reachable without the session cookie (auth regression)
+- Set `VITE_API_BASE_URL` when building production ops (breaks
+  same-origin `/api`)
 
 Deferred (do not provision in this runbook): RDS, S3, Secrets Manager /
 SSM. Same Spotmu AWS account is fine; this file does not describe
@@ -334,5 +442,7 @@ detail:
   approval, UTC cadence caps, `POST /api/v1/schedule`
 - [`docs/reports/task_1_6_report.md`](../reports/task_1_6_report.md) —
   mock PublishAdapter, `POST /api/v1/publish/run/{post_job_id}`
+- [`docs/reports/task_ops_web_auth_report.md`](../reports/task_ops_web_auth_report.md)
+  — `ops_users`, signed session cookie, public console nginx
 - [`docs/planning/task_sheet.md`](../planning/task_sheet.md) — §1.1 host
   facts; parking lot for S3 and Secrets Manager

@@ -6,9 +6,12 @@ import unittest
 from app.settings import (
     DEFAULT_ARTIFACT_STORAGE_DIR,
     DEFAULT_PUBLISH_ADAPTER,
+    DEFAULT_SESSION_COOKIE_NAME,
     DEFAULT_SPOTMU_API_BASE_URL,
     TEST_PLACEHOLDER_DATABASE_URL,
+    TEST_PLACEHOLDER_SESSION_SECRET,
     MissingDatabaseUrlError,
+    MissingSessionSecretError,
     clear_settings_cache,
     get_settings,
 )
@@ -43,6 +46,18 @@ class SettingsTests(unittest.TestCase):
             "PYTEST_CURRENT_TEST",
             None,
         )
+        self.previous_session_secret: str | None = os.environ.pop(
+            "SESSION_SECRET",
+            None,
+        )
+        self.previous_ops_admin_username: str | None = os.environ.pop(
+            "OPS_ADMIN_USERNAME",
+            None,
+        )
+        self.previous_ops_admin_password: str | None = os.environ.pop(
+            "OPS_ADMIN_PASSWORD",
+            None,
+        )
         clear_settings_cache()
 
     def tearDown(self) -> None:
@@ -71,6 +86,18 @@ class SettingsTests(unittest.TestCase):
             "PYTEST_CURRENT_TEST",
             self.previous_pytest_current_test,
         )
+        self._restore_environment_variable(
+            "SESSION_SECRET",
+            self.previous_session_secret,
+        )
+        self._restore_environment_variable(
+            "OPS_ADMIN_USERNAME",
+            self.previous_ops_admin_username,
+        )
+        self._restore_environment_variable(
+            "OPS_ADMIN_PASSWORD",
+            self.previous_ops_admin_password,
+        )
         clear_settings_cache()
 
     def test_missing_database_url_fails_fast_outside_tests(self) -> None:
@@ -91,6 +118,7 @@ class SettingsTests(unittest.TestCase):
         """Bare postgresql:// URLs become postgresql+psycopg://."""
 
         os.environ["DATABASE_URL"] = "postgresql://twerva:twerva@127.0.0.1:5432/twerva"
+        os.environ["SESSION_SECRET"] = "local-rewrite-test-secret"
         normalized_database_url: str = get_settings().database_url
 
         self.assertEqual(
@@ -105,6 +133,7 @@ class SettingsTests(unittest.TestCase):
             "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva"
         )
         os.environ["DATABASE_URL"] = explicit_database_url
+        os.environ["SESSION_SECRET"] = "local-rewrite-test-secret"
         loaded_database_url: str = get_settings().database_url
 
         self.assertEqual(loaded_database_url, explicit_database_url)
@@ -150,6 +179,26 @@ class SettingsTests(unittest.TestCase):
         loaded_publish_adapter: str = get_settings().publish_adapter
 
         self.assertEqual(loaded_publish_adapter, "ayrshare")
+
+    def test_test_environment_uses_placeholder_session_secret(self) -> None:
+        """Accept a placeholder SESSION_SECRET when TWERVA_ENV=test."""
+
+        os.environ["TWERVA_ENV"] = "test"
+        loaded_session_secret: str = get_settings().session_secret
+
+        self.assertEqual(loaded_session_secret, TEST_PLACEHOLDER_SESSION_SECRET)
+        self.assertEqual(get_settings().session_cookie_name, DEFAULT_SESSION_COOKIE_NAME)
+        self.assertFalse(get_settings().session_cookie_secure)
+
+    def test_missing_session_secret_fails_fast_when_database_url_is_set(self) -> None:
+        """Raise when SESSION_SECRET is absent outside tests and a DB URL exists."""
+
+        os.environ["DATABASE_URL"] = (
+            "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva"
+        )
+
+        with self.assertRaises(MissingSessionSecretError):
+            get_settings()
 
     def _restore_environment_variable(self, variable_name: str, previous_value: str | None,
     ) -> None:
