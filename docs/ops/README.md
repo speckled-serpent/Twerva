@@ -9,7 +9,7 @@ secret values.
 
 | Doc | Role |
 |---|---|
-| [`deploy.md`](deploy.md) | Production `twerva-server`: layout, deploy, migrate, verify, rollback, `/health`-only public surface, landmines |
+| [`deploy.md`](deploy.md) | Production `twerva-server`: layout, deploy, migrate, ops auth bootstrap, nginx console + `/api`, verify, rollback, landmines |
 
 Local API run, `DATABASE_URL`, and Alembic smoke stay in
 [`apps/server/README.md`](../../apps/server/README.md). Schema revision
@@ -24,8 +24,8 @@ Publish (1.6): mock adapter default, no vendor keys;
 [`docs/reports/task_1_6_report.md`](../reports/task_1_6_report.md).
 Measure & steer (1.7): manual/stub metrics, median, steer;
 [`docs/reports/task_1_7_report.md`](../reports/task_1_7_report.md).
-Ops console (1.8): local Vite UI only; do **not** expose on public nginx;
-[`docs/reports/task_1_8_report.md`](../reports/task_1_8_report.md).
+Ops console (1.8): local Vite UI; public `twerva.com` console +
+`ops_users` auth: [`docs/reports/task_ops_web_auth_report.md`](../reports/task_ops_web_auth_report.md).
 Agent hooks (1.9): docs + localhost dry-run; no nginx change;
 [`docs/agents/README.md`](../agents/README.md),
 [`docs/reports/phase_1_exit_report.md`](../reports/phase_1_exit_report.md).

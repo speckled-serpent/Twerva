@@ -210,3 +210,15 @@ export interface ClusterAgentSummaryResponse {
 export interface HealthReadResponse {
   status: string;
 }
+
+export interface OpsLoginRequest {
+  username: string;
+  password: string;
+}
+
+export interface OpsUserReadResponse {
+  id: string;
+  username: string;
+  created_at: string;
+  updated_at: string;
+}

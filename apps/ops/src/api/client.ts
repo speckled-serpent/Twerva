@@ -14,12 +14,16 @@ import type {
   ClusterSteerRequest,
   HealthReadResponse,
   MetricSnapshotReadResponse,
+  OpsLoginRequest,
+  OpsUserReadResponse,
   PostJobReadResponse,
   SchedulePostJobRequest,
   SourceItemCreateRequest,
   SourceItemReadResponse,
   SteerActionReadResponse,
 } from "./types";
+
+export const UNAUTHORIZED_EVENT_NAME: string = "twerva:unauthorized";
 
 /**
  * Error thrown when the Twerva API returns a non-success status.
@@ -65,6 +69,27 @@ export function resolveApiBaseUrl(): string {
 export async function fetchHealthStatus(): Promise<HealthReadResponse> {
 
   return requestJson<HealthReadResponse>("GET", "/health");
+}
+
+export async function fetchCurrentOpsOperator(): Promise<OpsUserReadResponse> {
+
+  return requestJson<OpsUserReadResponse>("GET", "/api/v1/auth/me");
+}
+
+export async function loginOpsOperator(
+  opsLoginRequest: OpsLoginRequest,
+): Promise<OpsUserReadResponse> {
+
+  return requestJson<OpsUserReadResponse>(
+    "POST",
+    "/api/v1/auth/login",
+    opsLoginRequest,
+  );
+}
+
+export async function logoutOpsOperator(): Promise<void> {
+
+  await requestJson<{ status: string }>("POST", "/api/v1/auth/logout");
 }
 
 export async function listBrands(): Promise<BrandReadResponse[]> {
@@ -256,7 +281,7 @@ async function requestJson<ResponseBody>(
 
   const response: Response = await sendApiRequest(method, path, body);
 
-  await throwIfResponseFailed(response);
+  await throwIfResponseFailed(response, path);
 
   if (response.status === 204) {
     return undefined as ResponseBody;
@@ -271,7 +296,7 @@ async function requestText(method: string, path: string): Promise<string> {
 
   const response: Response = await sendApiRequest(method, path);
 
-  await throwIfResponseFailed(response);
+  await throwIfResponseFailed(response, path);
 
   const responseText: string = await response.text();
 
@@ -290,6 +315,7 @@ async function sendApiRequest(
   const fetchInit: RequestInit = {
     method,
     headers: requestHeaders,
+    credentials: "include",
   };
 
   if (body !== undefined) {
@@ -302,10 +328,17 @@ async function sendApiRequest(
   return response;
 }
 
-async function throwIfResponseFailed(response: Response): Promise<void> {
+async function throwIfResponseFailed(
+  response: Response,
+  requestPath: string,
+): Promise<void> {
 
   if (response.ok) {
     return;
+  }
+
+  if (response.status === 401 && requestPath !== "/api/v1/auth/login") {
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT_NAME));
   }
 
   const detailText: string = await readErrorTextFromResponse(response);

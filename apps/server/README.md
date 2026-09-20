@@ -3,8 +3,10 @@
 FastAPI process for the Twerva API. `GET /health` is a liveness check and does
 **not** open a database connection (it does not import models or `app.db` at
 module load). Domain tables land in Alembic revision `12bk_domain_schema`
-(task 1.2b–k). Persist-proof HTTP lives under `/api/v1` (task 1.2l) and is
-mounted when `DATABASE_URL` can be resolved.
+(task 1.2b–k). Ops operator table `ops_users` is revision
+`ops_users_web_auth`. Persist-proof HTTP lives under `/api/v1` (task 1.2l) and is
+mounted when `DATABASE_URL` can be resolved. All `/api/v1` routes except
+`/api/v1/auth/*` require a signed session cookie.
 
 Requires **Python 3.11+**.
 
@@ -89,7 +91,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`12bk_domain_schema`** (Phase 1.2c–1.2j tables + enums).
+Current head: **`ops_users_web_auth`** (parent `12bk_domain_schema`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -115,7 +117,7 @@ alembic current
 ```
 
 `alembic current` opens Postgres on `127.0.0.1:5432` using `DATABASE_URL`.
-After `alembic upgrade head` it should report `12bk_domain_schema (head)`.
+After `alembic upgrade head` it should report `ops_users_web_auth (head)`.
 
 Local equivalent (your own `DATABASE_URL`):
 
@@ -125,9 +127,40 @@ alembic upgrade head
 alembic current
 ```
 
+## Ops auth
+
+Operator accounts live in `ops_users` (not social `accounts`). Sessions
+are a **signed httpOnly cookie** (`itsdangerous` + `SESSION_SECRET`);
+there is no `ops_sessions` table. Cookie flags: `HttpOnly`,
+`SameSite=Lax`, `Secure` from `SESSION_COOKIE_SECURE` (true in
+production HTTPS).
+
+```bash
+# required outside tests when DATABASE_URL is set
+export SESSION_SECRET=...          # openssl rand -hex 32
+export SESSION_COOKIE_SECURE=false # local HTTP only
+export OPS_ADMIN_USERNAME=admin
+export OPS_ADMIN_PASSWORD=...      # bootstrap only; never commit
+alembic upgrade head
+python -m app.auth.bootstrap       # no-op if any ops_users row exists
+```
+
+Public routes: `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`,
+`GET /api/v1/auth/me`. Everything else under `/api/v1` is 401 without a
+valid cookie. `GET /health` stays public and import-light.
+
+```bash
+curl -sS -c /tmp/twerva-ops.jar -b /tmp/twerva-ops.jar \
+  -X POST http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"..."}'
+curl -sS -b /tmp/twerva-ops.jar http://127.0.0.1:8000/api/v1/auth/me
+curl -sS -b /tmp/twerva-ops.jar http://127.0.0.1:8000/api/v1/brands
+```
+
 ## HTTP API (`/api/v1`)
 
-No auth. `POST` + `GET` list + `GET` by id for Brand, SourceItem, Cluster,
+Cookie auth (see above). `POST` + `GET` list + `GET` by id for Brand, SourceItem, Cluster,
 Account, Artifact (includes `status`), and PostJob (includes `status`).
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
@@ -526,7 +559,8 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
 1. Update the Twerva checkout used by systemd `twerva-api`.
 2. In `apps/server`, refresh the venv: `pip install -r requirements.txt`.
 3. Load `/opt/twerva/database_url.env` into the environment (`set -a; source ...; set +a` or systemd `EnvironmentFile=`).
-4. `alembic upgrade head` — still revision `12bk_domain_schema` (no new migration).
+4. `alembic upgrade head` — head is `ops_users_web_auth`. Then
+   `python -m app.auth.bootstrap`.
 5. `python -m app.seed` (idempotent Spotmu brand + example SourceItem).
 6. `sudo systemctl restart twerva-api` (uvicorn `app.main:application` on `127.0.0.1:8000`).
 7. Confirm `curl -sS http://127.0.0.1:8000/health` and `https://twerva.com/health` return `{"status":"ok"}`.

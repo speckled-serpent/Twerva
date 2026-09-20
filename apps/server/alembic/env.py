@@ -2,7 +2,7 @@
 
 Uses the same `DATABASE_URL` as the FastAPI process (`app.settings`).
 Imports the models package (not only `Base`) so `target_metadata` includes
-every 1.2c–1.2j table.
+every 1.2c–1.2j table plus `ops_users`.
 """
 
 from logging.config import fileConfig

@@ -6,7 +6,8 @@ Vite + React + TypeScript ops console for the Phase 1 loop:
 source → generate carousel → approve → schedule → mock publish → measure / steer
 ```
 
-Ugly-but-usable. No auth. Requires **Node.js 20+** (22 is fine).
+Ugly-but-usable. Operator login against `/api/v1/auth` (session cookie).
+Requires **Node.js 20+** (22 is fine).
 
 ## Run locally (API + ops)
 
@@ -43,7 +44,10 @@ npm install
 npm run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Sign in (bootstrap
+admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
+`python -m app.auth.bootstrap`). Unauthenticated `/api/v1` is 401;
+`GET /auth/me` 401 sends you back to the login page.
 
 ### Walk the loop in the browser
 
@@ -59,7 +63,8 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
    with `mock-`) so `median_views` is no longer null. Steer buttons live on
    **Accounts**.
 
-API errors render as plain text under the page heading.
+API errors render as plain text under the page heading. **Log out** is
+in the header. All fetches use `credentials: "include"`.
 
 Agent dry-run (generate drafts, **stop before approve**):
 [`docs/agents/playbook_batch_generate_spotmu_cluster.md`](../../docs/agents/playbook_batch_generate_spotmu_cluster.md)
@@ -76,7 +81,9 @@ Two options. **Prefer the Vite proxy for local `npm run dev`.**
 
 Copy [`.env.example`](.env.example) to `.env` only if you need the explicit
 origin (Vite preview against a remote API, etc.). Trailing slashes are
-stripped. CORS is not required when using the proxy.
+stripped. CORS is not required when using the proxy. If you skip the
+proxy and call another origin, the API must list that origin in
+`OPS_CORS_ORIGINS` and allow credentials.
 
 ```bash
 # optional — skip unless you are not using the proxy
@@ -84,7 +91,8 @@ cp .env.example .env
 # VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
-There is **no auth**. Do not point this console at a public API.
+Production on `https://twerva.com` is same-origin `/api` (no Vite
+proxy). Leave `VITE_API_BASE_URL` unset when running `npm run build`.
 
 ## Production build (static `dist/`)
 
@@ -94,11 +102,12 @@ npm run preview
 ```
 
 `npm run build` type-checks with `tsc -b`, then writes static files to
-`dist/`. `vite preview` serves that folder; it does **not** include the
-dev proxy, so set `VITE_API_BASE_URL` at **build** time if preview needs
-the API (or put nginx in front later).
+`dist/`. **Production:** copy `dist/` to `/var/www/twerva-ops` and let
+nginx serve `/` plus proxy `/api/` (see
+[`docs/ops/deploy.md`](../../docs/ops/deploy.md)). Do **not** set
+`VITE_API_BASE_URL` for that build.
 
-Later nginx can serve `dist/` as a private ops host. That is **not**
-required tonight. Do **not** expose the ops console (or `/api`) on
-`https://twerva.com` — public nginx stays `/health` only (see
-[`docs/ops/deploy.md`](../../docs/ops/deploy.md)).
+`vite preview` does **not** include the dev proxy. For a local preview
+against uvicorn, either put a proxy in front or set
+`VITE_API_BASE_URL` at **build** time (that baked origin is **not**
+what we deploy to `twerva.com`).
