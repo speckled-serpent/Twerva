@@ -59,9 +59,14 @@ live in Postgres; the first admin is seeded from env.
 
 ## Verified
 
-- Server unit tests: login success/fail, `/me`, protected 401, health
-  without `DATABASE_URL`, bootstrap skip/create, Alembic head.
-- `npm run build` in `apps/ops`.
+- Server unit tests: 149 collected, 13 persist skips (no Postgres).
+  Auth: login success/fail, `/me`, protected 401, health without
+  `DATABASE_URL`, bootstrap skip/create, Alembic head.
+- `npm run build` in `apps/ops` (`tsc -b` + Vite `dist/`).
+- Browser: same-origin preview of that `dist/` — failed login stays on
+  Sign in, successful login opens Sources with username + Log out,
+  session holds across Queue/Accounts, logout + reload stays signed
+  out.
 
 ## Out of scope
 

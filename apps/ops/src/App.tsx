@@ -106,15 +106,15 @@ export function App(): ReactElement {
   const handleLogout = async (): Promise<void> => {
 
     setIsLoggingOut(true);
+    setSignedInOperator(null);
+    setSessionState("signed_out");
 
     try {
       await logoutOpsOperator();
     } catch {
-      // Cookie clear is best-effort; always return to the login page.
+      // Cookie clear is best-effort; the login page is already showing.
     } finally {
       setIsLoggingOut(false);
-      setSignedInOperator(null);
-      setSessionState("signed_out");
     }
   };
 
