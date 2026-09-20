@@ -48,6 +48,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Override ARTIFACT_STORAGE_DIR (local PNG root).",
     )
+    argument_parser.add_argument(
+        "--template-id",
+        default=None,
+        help="Restricted Spotmu template (default spotmu_paper_v1).",
+    )
     parsed_arguments: argparse.Namespace = argument_parser.parse_args(argv)
     source_item_identifier: uuid.UUID = _parse_uuid_argument(
         parsed_arguments.source_item_id,
@@ -77,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             our_database_session,
             cluster_id=cluster_identifier,
             artifact_storage_directory=storage_directory,
+            template_id=parsed_arguments.template_id,
         )
         our_database_session.commit()
         our_database_session.refresh(created_artifact)

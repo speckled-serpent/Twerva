@@ -2,9 +2,11 @@ import type {
   AccountCreateRequest,
   AccountReadResponse,
   ArtifactApproveRequest,
+  ArtifactRegenerateRequest,
   ArtifactPatchRequest,
   ArtifactReadResponse,
   ArtifactStatus,
+  CarouselTemplateReadResponse,
   BrandReadResponse,
   CarouselGenerateRequest,
   ClusterAgentSummaryResponse,
@@ -178,6 +180,50 @@ export async function generateCarouselArtifact(
     "/api/v1/generate/carousel",
     carouselGenerateRequest,
   );
+}
+
+export async function listCarouselTemplates(): Promise<CarouselTemplateReadResponse[]> {
+
+  return requestJson<CarouselTemplateReadResponse[]>("GET", "/api/v1/generate/templates");
+}
+
+export async function regenerateCarouselArtifact(
+  artifactId: string,
+  artifactRegenerateRequest?: ArtifactRegenerateRequest,
+): Promise<ArtifactReadResponse> {
+
+  return requestJson<ArtifactReadResponse>(
+    "POST",
+    `/api/v1/artifacts/${artifactId}/regenerate`,
+    artifactRegenerateRequest ?? {},
+  );
+}
+
+/**
+ * Build the authenticated slide-image path (session cookie required).
+ *
+ * @param artifactId - Artifact UUID
+ * @param slideIndex - 0-based slide index
+ * @returns API path under `/api/v1/artifacts`
+ */
+export function buildArtifactSlideImagePath(artifactId: string, slideIndex: number): string {
+
+  return `/api/v1/artifacts/${artifactId}/slides/${slideIndex}/image`;
+}
+
+export async function fetchArtifactSlideImageBlob(
+  artifactId: string,
+  slideIndex: number,
+): Promise<Blob> {
+
+  const requestPath: string = buildArtifactSlideImagePath(artifactId, slideIndex);
+  const response: Response = await sendApiRequest("GET", requestPath);
+
+  await throwIfResponseFailed(response, requestPath);
+
+  const imageBlob: Blob = await response.blob();
+
+  return imageBlob;
 }
 
 export async function listArtifacts(

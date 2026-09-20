@@ -185,6 +185,19 @@ class CarouselPersistTests(unittest.TestCase):
 
         self.assertNotEqual(first_artifact.id, second_artifact.id)
         self.assertEqual(second_artifact.status, ArtifactStatus.DRAFT)
+        self.assertEqual(first_artifact.template_id, "spotmu_paper_v1")
+
+        bold_artifact = generate_carousel_artifact_draft(
+            created_source_item.id,
+            self.our_database_session,
+            cluster_id=created_cluster.id,
+            artifact_storage_directory=self.storage_directory,
+            template_id="spotmu_bold_v1",
+        )
+        self.our_database_session.commit()
+
+        self.assertEqual(bold_artifact.template_id, "spotmu_bold_v1")
+        self.assertNotEqual(bold_artifact.id, first_artifact.id)
 
 
 if __name__ == "__main__":

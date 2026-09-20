@@ -9,6 +9,7 @@ SERVER_ROOT_DIRECTORY: Path = Path(__file__).resolve().parents[1]
 DOMAIN_REVISION_ID: str = "12bk_domain_schema"
 OPS_USERS_REVISION_ID: str = "ops_users_web_auth"
 OPS_USERS_ROLE_REVISION_ID: str = "ops_users_role_rbac"
+ARTIFACT_TEMPLATE_ID_REVISION_ID: str = "artifact_template_id"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -37,6 +38,7 @@ class AlembicInitializationTests(unittest.TestCase):
             revision_names,
             [
                 f"{DOMAIN_REVISION_ID}.py",
+                f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
             ],
@@ -92,8 +94,8 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertEqual(assigned_values.get("revision"), OPS_USERS_REVISION_ID)
         self.assertEqual(assigned_values.get("down_revision"), DOMAIN_REVISION_ID)
 
-    def test_ops_users_role_revision_is_the_current_head(self) -> None:
-        """ops_users_role_rbac is the current head after ops_users_web_auth."""
+    def test_ops_users_role_revision_follows_ops_users_web_auth(self) -> None:
+        """ops_users_role_rbac follows ops_users_web_auth."""
 
         assigned_values: dict[str, object] = _revision_module_constants(
             SERVER_ROOT_DIRECTORY
@@ -104,6 +106,22 @@ class AlembicInitializationTests(unittest.TestCase):
 
         self.assertEqual(assigned_values.get("revision"), OPS_USERS_ROLE_REVISION_ID)
         self.assertEqual(assigned_values.get("down_revision"), OPS_USERS_REVISION_ID)
+
+    def test_artifact_template_id_revision_is_the_current_head(self) -> None:
+        """artifact_template_id is the current head after ops_users_role_rbac."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
+        )
+
+        self.assertEqual(assigned_values.get("revision"), ARTIFACT_TEMPLATE_ID_REVISION_ID)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            OPS_USERS_ROLE_REVISION_ID,
+        )
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

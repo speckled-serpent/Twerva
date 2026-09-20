@@ -309,9 +309,10 @@ cd /opt/twerva/server && alembic upgrade head
 python -m app.auth.bootstrap
 ```
 
-Head after ops RBAC: revision **`ops_users_role_rbac`** (parent
-`ops_users_web_auth`). Existing `ops_users` rows are backfilled as
-`admin`. New creates default to `reader` unless an admin sets otherwise.
+Head after carousel preview: revision **`artifact_template_id`** (parent
+`ops_users_role_rbac`). Adds nullable `artifacts.template_id`. Existing
+`ops_users` rows stay as previously backfilled (`admin`). New creates
+default to `reader` unless an admin sets otherwise.
 
 Confirm before and after:
 
@@ -320,7 +321,7 @@ alembic heads
 alembic current
 ```
 
-Expected after a clean apply: `ops_users_role_rbac (head)`.
+Expected after a clean apply: `artifact_template_id (head)`.
 
 `python -m app.auth.bootstrap` creates the first `ops_users` row when
 the table is empty and `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` are
@@ -375,6 +376,7 @@ Sources loads.
 Prefer a **forward** migration or a forward code fix.
 
 `12bk_domain_schema` is the first revision (`down_revision` is empty).
+`artifact_template_id` drops only `artifacts.template_id`.
 `ops_users_role_rbac` drops only the `role` column (and `ops_user_role`
 enum). `ops_users_web_auth` drops `ops_users` on downgrade. `alembic
 downgrade base` drops the whole 1.2 domain schema. Do not do that on

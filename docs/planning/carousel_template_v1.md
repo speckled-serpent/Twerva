@@ -6,6 +6,14 @@ parity target.*
 Render implementation: `apps/server/app/generate/carousel.py`.
 Storage: local `ARTIFACT_STORAGE_DIR` (see §1.4b). S3 stays parked.
 
+Restricted Spotmu templates (no freeform designer): `GET /api/v1/generate/templates`.
+`spotmu_paper_v1` is the default current look. `spotmu_bold_v1` keeps the same
+1080×1080 text-led rules with a darker ground and stronger accent. Generate
+and regenerate persist `artifacts.template_id`. Authenticated
+`GET /api/v1/artifacts/{id}/slides/{index}/image` streams the PNG
+(readers may GET). `POST /api/v1/artifacts/{id}/regenerate` inserts a
+**new** draft from the same source item (history kept).
+
 ---
 
 ## Canvas

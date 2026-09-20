@@ -73,6 +73,7 @@ class Artifact(Base, UuidPrimaryKeyMixin, TimestampMixin):
     caption: Mapped[str | None] = mapped_column(Text, nullable=True)
     cta_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     slides: Mapped[list[object] | None] = mapped_column(JSONB, nullable=True)
+    template_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

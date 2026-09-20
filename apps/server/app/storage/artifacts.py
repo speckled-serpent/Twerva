@@ -82,6 +82,116 @@ def write_artifact_slide_png_bytes(
     return relative_asset_reference
 
 
+def resolve_slide_png_path_for_index(
+    artifact_slides: list[object] | None,
+    slide_index: int,
+    artifact_storage_directory: Path,
+) -> Path | None:
+    """Return the on-disk PNG for `slides[index]`, or None when missing.
+
+    Rejects path escape. A present `asset_ref` that is not a file is
+    treated as missing (caller should 404).
+
+    Args:
+        artifact_slides: Ordered `artifacts.slides` JSON list.
+        slide_index: 0-based index from the image route.
+        artifact_storage_directory: Store root.
+
+    Returns:
+        Absolute existing PNG path, or None.
+    """
+
+    if artifact_slides is None:
+
+        return None
+
+    if slide_index < 0 or slide_index >= len(artifact_slides):
+
+        return None
+
+    stored_slide: object = artifact_slides[slide_index]
+    asset_reference: str | None = _asset_reference_from_stored_slide(stored_slide)
+
+    if asset_reference is None:
+
+        return None
+
+    resolved_storage_directory: Path = ensure_artifact_storage_directory(
+        artifact_storage_directory,
+    )
+
+    try:
+        candidate_path: Path = resolve_asset_reference_path(
+            asset_reference,
+            resolved_storage_directory,
+        )
+    except ArtifactAssetPathEscapeError:
+
+        return None
+
+    if not candidate_path.is_file():
+
+        return None
+
+    return candidate_path
+
+
+def resolve_asset_reference_path(
+    asset_reference: str,
+    resolved_storage_directory: Path,
+) -> Path:
+    """Join `asset_ref` onto the store and reject path escape.
+
+    Args:
+        asset_reference: Relative path stored on the slide.
+        resolved_storage_directory: Absolute artifact store root.
+
+    Returns:
+        Absolute candidate path (may not exist yet).
+
+    Raises:
+        ArtifactAssetPathEscapeError: Resolved path is outside the store.
+    """
+
+    candidate_path: Path = (resolved_storage_directory / asset_reference).resolve()
+
+    if not candidate_path.is_relative_to(resolved_storage_directory):
+        raise ArtifactAssetPathEscapeError(asset_reference)
+
+    return candidate_path
+
+
+def _asset_reference_from_stored_slide(stored_slide: object) -> str | None:
+    """Read a non-empty `asset_ref` string from a slides JSON object."""
+
+    if not isinstance(stored_slide, dict):
+
+        return None
+
+    raw_asset_reference: object = stored_slide.get("asset_ref")
+
+    if not isinstance(raw_asset_reference, str):
+
+        return None
+
+    stripped_asset_reference: str = raw_asset_reference.strip()
+
+    if stripped_asset_reference == "":
+
+        return None
+
+    return stripped_asset_reference
+
+
+class ArtifactAssetPathEscapeError(ValueError):
+    """`asset_ref` resolved outside `ARTIFACT_STORAGE_DIR`."""
+
+    def __init__(self, asset_reference: str) -> None:
+
+        super().__init__(f"asset_ref escapes artifact store: {asset_reference}")
+        self.asset_reference: str = asset_reference
+
+
 def sanitize_slide_role(role: str) -> str:
     """Keep filename-safe role tokens (lowercase letters, digits, underscore).
 

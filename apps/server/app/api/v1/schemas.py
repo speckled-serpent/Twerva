@@ -161,6 +161,26 @@ class CarouselGenerateRequest(BaseModel):
 
     source_item_id: uuid.UUID
     cluster_id: uuid.UUID | None = None
+    template_id: str | None = None
+
+
+class CarouselTemplateReadResponse(BaseModel):
+    """One restricted Spotmu template from `GET /api/v1/generate/templates`."""
+
+    template_id: str
+    name: str
+    description: str
+    is_default: bool
+
+
+class ArtifactRegenerateRequest(BaseModel):
+    """Body for `POST /api/v1/artifacts/{id}/regenerate`.
+
+    Creates a **new** draft from the same `source_item_id` (history kept).
+    `template_id` optional: falls back to the original artifact, then paper.
+    """
+
+    template_id: str | None = None
 
 
 class ArtifactCreateRequest(BaseModel):
@@ -174,6 +194,7 @@ class ArtifactCreateRequest(BaseModel):
     caption: str | None = None
     cta_url: str | None = None
     slides: list[ArtifactSlideSchema] | None = None
+    template_id: str | None = None
     approved_at: datetime | None = None
 
 
@@ -191,6 +212,7 @@ class ArtifactReadResponse(BaseModel):
     caption: str | None
     cta_url: str | None
     slides: list[object] | None
+    template_id: str | None = None
     approved_at: datetime | None
     created_at: datetime
     updated_at: datetime
