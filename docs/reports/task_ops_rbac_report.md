@@ -49,9 +49,15 @@ role. Session cookies stay; social `accounts` is untouched.
 
 ## Verified
 
-- Server unit tests (auth + alembic + routes + models) — run in this
-  slice.
-- `npm run build` in `apps/ops`.
+- Server unit tests: 162 collected, 13 persist skips (no Postgres).
+  Auth: change-password success/fail/unauthenticated; admin list/create;
+  reader GET brands allowed; reader POST brands 403; non-admin cannot
+  list/create users; `/me` includes `role`; Alembic head
+  `ops_users_role_rbac`.
+- `npm run build` in `apps/ops` (`tsc -b` + Vite `dist/`).
+- Browser walk-through of Account/Users against a live API was not
+  available in this environment (no Postgres). UI is type-checked and
+  built; exercise on `twerva.com` after migrate.
 
 ## Out of scope
 
