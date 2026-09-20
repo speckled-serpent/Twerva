@@ -118,6 +118,7 @@ class SettingsTests(unittest.TestCase):
         """Bare postgresql:// URLs become postgresql+psycopg://."""
 
         os.environ["DATABASE_URL"] = "postgresql://twerva:twerva@127.0.0.1:5432/twerva"
+        os.environ["SESSION_SECRET"] = "local-rewrite-test-secret"
         normalized_database_url: str = get_settings().database_url
 
         self.assertEqual(
@@ -132,6 +133,7 @@ class SettingsTests(unittest.TestCase):
             "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva"
         )
         os.environ["DATABASE_URL"] = explicit_database_url
+        os.environ["SESSION_SECRET"] = "local-rewrite-test-secret"
         loaded_database_url: str = get_settings().database_url
 
         self.assertEqual(loaded_database_url, explicit_database_url)
