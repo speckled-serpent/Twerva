@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
@@ -22,6 +24,7 @@ from app.api.v1.schemas import (
     ArtifactCreateRequest,
     ArtifactPatchRequest,
     ArtifactReadResponse,
+    ArtifactRegenerateRequest,
     ArtifactRejectRequest,
 )
 from app.approval.errors import (
@@ -35,8 +38,17 @@ from app.approval.service import (
     reject_artifact,
 )
 from app.db import get_our_database_session
+from app.generate.errors import (
+    CarouselArtifactMissingError,
+    CarouselArtifactMissingSourceError,
+    CarouselGenerateError,
+    CarouselUnknownTemplateError,
+)
+from app.generate.service import regenerate_carousel_artifact_draft
 from app.models import Artifact
 from app.models.enums import ArtifactStatus
+from app.settings import get_settings
+from app.storage.artifacts import resolve_slide_png_path_for_index
 
 
 artifacts_router: APIRouter = APIRouter(prefix="/artifacts", tags=["artifacts"])
@@ -73,6 +85,7 @@ def create_artifact(
         caption=artifact_create_request.caption,
         cta_url=artifact_create_request.cta_url,
         slides=serialized_slides,
+        template_id=artifact_create_request.template_id,
         approved_at=artifact_create_request.approved_at,
     )
     our_database_session.add(created_artifact)
@@ -130,6 +143,86 @@ def get_artifact_by_id(
     )
     artifact_read_response: ArtifactReadResponse = ArtifactReadResponse.model_validate(
         found_artifact,
+    )
+
+    return artifact_read_response
+
+
+@artifacts_router.get("/{artifact_id}/slides/{slide_index}/image")
+def get_artifact_slide_image(
+    artifact_id: uuid.UUID,
+    slide_index: int,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> FileResponse:
+    """Stream one slide PNG from `ARTIFACT_STORAGE_DIR`. Auth required.
+
+    Readers may GET. Missing artifact, index, `asset_ref`, or file is 404.
+    """
+
+    found_artifact: Artifact = fetch_artifact_by_id_or_raise(
+        artifact_id,
+        our_database_session,
+    )
+    artifact_storage_directory: Path = Path(get_settings().artifact_storage_dir)
+    slide_image_path: Path | None = resolve_slide_png_path_for_index(
+        found_artifact.slides,
+        slide_index,
+        artifact_storage_directory,
+    )
+
+    if slide_image_path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Slide image not found: {artifact_id} index {slide_index}",
+        )
+
+    slide_image_response: FileResponse = FileResponse(
+        path=slide_image_path,
+        media_type="image/png",
+    )
+
+    return slide_image_response
+
+
+@artifacts_router.post(
+    "/{artifact_id}/regenerate",
+    response_model=ArtifactReadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def regenerate_artifact_by_id(
+    artifact_id: uuid.UUID,
+    artifact_regenerate_request: ArtifactRegenerateRequest | None = None,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> ArtifactReadResponse:
+    """Render a new draft from the same source item (history kept).
+
+    Admin/write only via existing RBAC (readers get 403 on POST). Optional
+    `template_id` chooses a Spotmu template; omitted uses the original.
+    """
+
+    requested_template_id: str | None = None
+
+    if artifact_regenerate_request is not None:
+        requested_template_id = artifact_regenerate_request.template_id
+
+    created_artifact: Artifact
+
+    try:
+        created_artifact = regenerate_carousel_artifact_draft(
+            artifact_id,
+            our_database_session,
+            template_id=requested_template_id,
+        )
+    except CarouselGenerateError as generate_error:
+        _raise_http_exception_for_carousel_regenerate_error(generate_error)
+
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Carousel artifact could not be stored (foreign key conflict).",
+    )
+    our_database_session.refresh(created_artifact)
+    artifact_read_response: ArtifactReadResponse = ArtifactReadResponse.model_validate(
+        created_artifact,
     )
 
     return artifact_read_response
@@ -271,6 +364,35 @@ def _serialize_artifact_slides(
     ]
 
     return serialized_slides
+
+
+def _raise_http_exception_for_carousel_regenerate_error(
+    generate_error: CarouselGenerateError,
+) -> NoReturn:
+    """Map regenerate domain errors to HTTP status codes."""
+
+    if isinstance(generate_error, CarouselArtifactMissingError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(generate_error),
+        ) from generate_error
+
+    if isinstance(generate_error, CarouselArtifactMissingSourceError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(generate_error),
+        ) from generate_error
+
+    if isinstance(generate_error, CarouselUnknownTemplateError):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(generate_error),
+        ) from generate_error
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=str(generate_error),
+    ) from generate_error
 
 
 def _raise_http_exception_for_approval_error(approval_error: ApprovalError) -> NoReturn:

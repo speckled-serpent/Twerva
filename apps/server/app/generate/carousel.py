@@ -13,11 +13,15 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from app.generate.templates import (
+    CANVAS_HEIGHT_PIXELS,
+    CANVAS_WIDTH_PIXELS,
+    CarouselTemplate,
+    resolve_carousel_template,
+)
 from app.storage.artifacts import write_artifact_slide_png_bytes
 
 
-CANVAS_WIDTH_PIXELS: int = 1080
-CANVAS_HEIGHT_PIXELS: int = 1080
 SAFE_INSET_PIXELS: int = 96
 MAX_BULLET_CHARACTERS: int = 160
 SLIDE_ROLE_COVER: str = "cover"
@@ -108,6 +112,7 @@ def render_carousel_from_source_fields(
     source_fields: CarouselSourceFields,
     artifact_identifier: uuid.UUID,
     artifact_storage_directory: Path,
+    template_id: str | None = None,
 ) -> CarouselRenderResult:
     """Plan slides, draw PNGs, and write them under the artifact id.
 
@@ -115,11 +120,13 @@ def render_carousel_from_source_fields(
         source_fields: Title, heading, bullets, and URL fields.
         artifact_identifier: Destination folder name (Artifact UUID).
         artifact_storage_directory: Local `ARTIFACT_STORAGE_DIR`.
+        template_id: Restricted Spotmu template; default paper v1.
 
     Returns:
         Ordered rendered slides, caption string, and `cta_url`.
     """
 
+    carousel_template: CarouselTemplate = resolve_carousel_template(template_id)
     planned_slides: list[PlannedSlide] = plan_carousel_slides(source_fields)
     cta_url: str = resolve_carousel_cta_url(source_fields)
     caption: str = build_carousel_caption(source_fields, cta_url)
@@ -131,6 +138,7 @@ def render_carousel_from_source_fields(
             planned_slide,
             slide_index,
             slide_count,
+            carousel_template,
         )
         relative_asset_reference: str = write_artifact_slide_png_bytes(
             artifact_identifier,
@@ -159,6 +167,7 @@ def render_carousel_slide_png_bytes(
     planned_slide: PlannedSlide,
     slide_index: int,
     slide_count: int,
+    carousel_template: CarouselTemplate | None = None,
 ) -> bytes:
     """Draw one 1080×1080 text-led slide and return PNG bytes.
 
@@ -166,15 +175,23 @@ def render_carousel_slide_png_bytes(
         planned_slide: Role and body copy.
         slide_index: 0-based index (footer counter).
         slide_count: Total slides in this carousel.
+        carousel_template: Visual tokens; default paper v1.
 
     Returns:
         Encoded PNG payload.
     """
 
+    resolved_template: CarouselTemplate
+
+    if carousel_template is None:
+        resolved_template = resolve_carousel_template(None)
+    else:
+        resolved_template = carousel_template
+
     canvas_image: Image.Image = Image.new(
         "RGB",
         (CANVAS_WIDTH_PIXELS, CANVAS_HEIGHT_PIXELS),
-        COLOR_BACKGROUND,
+        resolved_template.color_background,
     )
     canvas_draw: ImageDraw.ImageDraw = ImageDraw.Draw(canvas_image)
     label_font: ImageFont.ImageFont = _load_canvas_font(LABEL_FONT_SIZE, bold=True)
@@ -184,19 +201,22 @@ def render_carousel_slide_png_bytes(
     role_label: str = ROLE_LABELS.get(planned_slide.role, planned_slide.role.upper())
     content_width: int = CANVAS_WIDTH_PIXELS - (SAFE_INSET_PIXELS * 2)
 
-    _draw_slide_label(canvas_draw, role_label, label_font)
-    _draw_accent_rule(canvas_draw)
-    _draw_centered_body_text(
+    _draw_left_edge_stripe(canvas_draw, resolved_template)
+    _draw_slide_label(canvas_draw, role_label, label_font, resolved_template)
+    _draw_accent_rule(canvas_draw, resolved_template)
+    _draw_body_text(
         canvas_draw,
         planned_slide.text,
         body_font,
         content_width,
+        resolved_template,
     )
     _draw_slide_footer(
         canvas_draw,
         footer_font,
         slide_index,
         slide_count,
+        resolved_template,
     )
 
     png_buffer: io.BytesIO = io.BytesIO()
@@ -206,40 +226,63 @@ def render_carousel_slide_png_bytes(
     return png_bytes
 
 
+def _draw_left_edge_stripe(
+    canvas_draw: ImageDraw.ImageDraw,
+    carousel_template: CarouselTemplate,
+) -> None:
+    """Paint an optional full-height accent stripe on the left edge."""
+
+    stripe_width: int = carousel_template.left_edge_stripe_width_pixels
+
+    if stripe_width <= 0:
+
+        return
+
+    canvas_draw.rectangle(
+        (0, 0, stripe_width, CANVAS_HEIGHT_PIXELS),
+        fill=carousel_template.color_accent,
+    )
+
+
 def _draw_slide_label(
     canvas_draw: ImageDraw.ImageDraw,
     role_label: str,
     label_font: ImageFont.ImageFont,
+    carousel_template: CarouselTemplate,
 ) -> None:
     """Paint the small role word at the top inset."""
 
     canvas_draw.text(
         (SAFE_INSET_PIXELS, SAFE_INSET_PIXELS),
         role_label,
-        fill=COLOR_MUTED,
+        fill=carousel_template.color_muted,
         font=label_font,
     )
 
 
-def _draw_accent_rule(canvas_draw: ImageDraw.ImageDraw) -> None:
-    """Paint a thin accent bar under the role label."""
+def _draw_accent_rule(
+    canvas_draw: ImageDraw.ImageDraw,
+    carousel_template: CarouselTemplate,
+) -> None:
+    """Paint an accent bar under the role label."""
 
     rule_top: int = SAFE_INSET_PIXELS + 48
-    rule_bottom: int = rule_top + 4
-    rule_right: int = SAFE_INSET_PIXELS + 120
+    rule_bottom: int = rule_top + carousel_template.accent_rule_height_pixels
+    rule_right: int = SAFE_INSET_PIXELS + carousel_template.accent_rule_width_pixels
     canvas_draw.rectangle(
         (SAFE_INSET_PIXELS, rule_top, rule_right, rule_bottom),
-        fill=COLOR_ACCENT,
+        fill=carousel_template.color_accent,
     )
 
 
-def _draw_centered_body_text(
+def _draw_body_text(
     canvas_draw: ImageDraw.ImageDraw,
     body_text: str,
     body_font: ImageFont.ImageFont,
     content_width: int,
+    carousel_template: CarouselTemplate,
 ) -> None:
-    """Wrap and vertically center the main copy."""
+    """Wrap and place the main copy (centered or left-aligned)."""
 
     wrapped_lines: list[str] = _wrap_text_to_width(
         body_text,
@@ -254,11 +297,17 @@ def _draw_centered_body_text(
 
     for wrapped_line in wrapped_lines:
         line_width: int = _measure_text_width(wrapped_line, body_font, canvas_draw)
-        line_left: int = (CANVAS_WIDTH_PIXELS - line_width) // 2
+        line_left: int
+
+        if carousel_template.body_align_center:
+            line_left = (CANVAS_WIDTH_PIXELS - line_width) // 2
+        else:
+            line_left = SAFE_INSET_PIXELS
+
         canvas_draw.text(
             (line_left, line_top),
             wrapped_line,
-            fill=COLOR_INK,
+            fill=carousel_template.color_ink,
             font=body_font,
         )
         line_top += line_height
@@ -269,6 +318,7 @@ def _draw_slide_footer(
     footer_font: ImageFont.ImageFont,
     slide_index: int,
     slide_count: int,
+    carousel_template: CarouselTemplate,
 ) -> None:
     """Paint the spotmu.com mark and slide counter."""
 
@@ -276,7 +326,7 @@ def _draw_slide_footer(
     canvas_draw.text(
         (SAFE_INSET_PIXELS, footer_top),
         FOOTER_MARK_TEXT,
-        fill=COLOR_MUTED,
+        fill=carousel_template.color_muted,
         font=footer_font,
     )
     counter_text: str = f"{slide_index + 1} / {slide_count}"
@@ -285,7 +335,7 @@ def _draw_slide_footer(
     canvas_draw.text(
         (counter_left, footer_top),
         counter_text,
-        fill=COLOR_MUTED,
+        fill=carousel_template.color_muted,
         font=footer_font,
     )
 

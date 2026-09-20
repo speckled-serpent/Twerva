@@ -29,6 +29,9 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/ingest/spotmu/sync",
         "/api/v1/clusters/{cluster_id}/source-items/{source_item_id}",
         "/api/v1/generate/carousel",
+        "/api/v1/generate/templates",
+        "/api/v1/artifacts/{artifact_id}/slides/{slide_index}/image",
+        "/api/v1/artifacts/{artifact_id}/regenerate",
         "/api/v1/artifacts/{artifact_id}/approve",
         "/api/v1/artifacts/{artifact_id}/reject",
         "/api/v1/schedule",
@@ -106,6 +109,22 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         generate_carousel_methods: set[str] = methods_by_path["/api/v1/generate/carousel"]
 
         self.assertIn("post", generate_carousel_methods)
+
+    def test_carousel_template_and_preview_routes_exist(self) -> None:
+        """Template list, slide image GET, and regenerate POST are registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        template_list_methods: set[str] = methods_by_path["/api/v1/generate/templates"]
+        slide_image_methods: set[str] = methods_by_path[
+            "/api/v1/artifacts/{artifact_id}/slides/{slide_index}/image"
+        ]
+        regenerate_methods: set[str] = methods_by_path[
+            "/api/v1/artifacts/{artifact_id}/regenerate"
+        ]
+
+        self.assertIn("get", template_list_methods)
+        self.assertIn("get", slide_image_methods)
+        self.assertIn("post", regenerate_methods)
 
     def test_review_queue_and_schedule_routes_exist(self) -> None:
         """1.5a / 1.5c: approve, reject, PATCH caption, POST schedule."""

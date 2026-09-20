@@ -255,7 +255,15 @@ class ApiSchemaTests(unittest.TestCase):
 
         self.assertEqual(generate_request.source_item_id, FIXED_SOURCE_ITEM_ID)
         self.assertIsNone(generate_request.cluster_id)
+        self.assertIsNone(generate_request.template_id)
         self.assertEqual(generate_request_with_cluster.cluster_id, FIXED_CLUSTER_ID)
+
+        generate_request_with_template: CarouselGenerateRequest = CarouselGenerateRequest(
+            source_item_id=FIXED_SOURCE_ITEM_ID,
+            template_id="spotmu_bold_v1",
+        )
+
+        self.assertEqual(generate_request_with_template.template_id, "spotmu_bold_v1")
 
     def test_approve_reject_patch_and_schedule_request_schemas(self) -> None:
         """1.5: review-queue and schedule bodies accept the locked fields."""

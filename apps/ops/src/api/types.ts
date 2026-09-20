@@ -107,6 +107,7 @@ export interface ArtifactReadResponse {
   caption: string | null;
   cta_url: string | null;
   slides: ArtifactSlide[] | unknown[] | null;
+  template_id?: string | null;
   approved_at: string | null;
   created_at: string;
   updated_at: string;
@@ -115,6 +116,18 @@ export interface ArtifactReadResponse {
 export interface CarouselGenerateRequest {
   source_item_id: string;
   cluster_id?: string | null;
+  template_id?: string | null;
+}
+
+export interface CarouselTemplateReadResponse {
+  template_id: string;
+  name: string;
+  description: string;
+  is_default: boolean;
+}
+
+export interface ArtifactRegenerateRequest {
+  template_id?: string | null;
 }
 
 export interface ArtifactApproveRequest {

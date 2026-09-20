@@ -93,7 +93,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`ops_users_role_rbac`** (parent `ops_users_web_auth`).
+Current head: **`artifact_template_id`** (parent `ops_users_role_rbac`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -284,8 +284,13 @@ Ingests `ai-agents`, GETs the SourceItem, creates/reuses cluster
 ## Carousel generate (1.4)
 
 Template lock: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel_template_v1.md).
-Sync generate (no Celery). Each call inserts a **new** `draft` Artifact
-(history kept). `GET /health` still starts without `DATABASE_URL`.
+Restricted Spotmu templates (`GET /api/v1/generate/templates`):
+`spotmu_paper_v1` (default, current look) and `spotmu_bold_v1`.
+Sync generate (no Celery). Each generate or regenerate inserts a **new**
+`draft` Artifact (history kept). Authenticated
+`GET /api/v1/artifacts/{id}/slides/{index}/image` streams the PNG
+(readers may GET; no public unauthenticated access).
+`GET /health` still starts without `DATABASE_URL`.
 
 ### CLI
 
@@ -296,6 +301,7 @@ ingest) — does not call Spotmu:
 ```bash
 python -m app.generate.carousel_cli <source_item_id>
 python -m app.generate.carousel_cli <source_item_id> --cluster-id <cluster-id>
+python -m app.generate.carousel_cli <source_item_id> --template-id spotmu_bold_v1
 # optional local store override:
 python -m app.generate.carousel_cli <source_item_id> --storage-dir ./data/artifacts
 ```
@@ -303,12 +309,17 @@ python -m app.generate.carousel_cli <source_item_id> --storage-dir ./data/artifa
 ### HTTP (loopback / SSH tunnel — not public nginx)
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8000/api/v1/generate/carousel \
+curl -sS -b /tmp/twerva-ops.jar http://127.0.0.1:8000/api/v1/generate/templates
+curl -sS -b /tmp/twerva-ops.jar -X POST http://127.0.0.1:8000/api/v1/generate/carousel \
   -H 'Content-Type: application/json' \
-  -d '{"source_item_id":"<source-item-id>"}'
-# optional:
-# -d '{"source_item_id":"<source-item-id>","cluster_id":"<cluster-id>"}'
-curl -sS http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>
+  -d '{"source_item_id":"<source-item-id>","template_id":"spotmu_bold_v1"}'
+curl -sS -b /tmp/twerva-ops.jar http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>
+curl -sS -b /tmp/twerva-ops.jar \
+  http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>/slides/0/image -o /tmp/slide.png
+curl -sS -b /tmp/twerva-ops.jar -X POST \
+  http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>/regenerate \
+  -H 'Content-Type: application/json' \
+  -d '{"template_id":"spotmu_paper_v1"}'
 ```
 
 Returns the existing Artifact read schema (`status=draft`,

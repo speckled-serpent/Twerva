@@ -37,3 +37,32 @@ class CarouselClusterBrandMismatchError(CarouselGenerateError):
         )
         self.cluster_id: uuid.UUID = cluster_id
         self.source_item_id: uuid.UUID = source_item_id
+
+
+class CarouselUnknownTemplateError(CarouselGenerateError):
+    """Requested `template_id` is not in the restricted Spotmu registry."""
+
+    def __init__(self, template_id: str) -> None:
+
+        super().__init__(f"Unknown carousel template: {template_id}")
+        self.template_id: str = template_id
+
+
+class CarouselArtifactMissingError(CarouselGenerateError):
+    """No Artifact exists for the requested regenerate id."""
+
+    def __init__(self, artifact_id: uuid.UUID) -> None:
+
+        super().__init__(f"Artifact not found: {artifact_id}")
+        self.artifact_id: uuid.UUID = artifact_id
+
+
+class CarouselArtifactMissingSourceError(CarouselGenerateError):
+    """Artifact has no source_item_id, so it cannot be regenerated."""
+
+    def __init__(self, artifact_id: uuid.UUID) -> None:
+
+        super().__init__(
+            f"Artifact {artifact_id} has no source_item_id; cannot regenerate.",
+        )
+        self.artifact_id: uuid.UUID = artifact_id

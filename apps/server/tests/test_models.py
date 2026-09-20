@@ -69,6 +69,7 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(SteerAction.__tablename__, "steer_actions")
         self.assertEqual(OpsUser.__tablename__, "ops_users")
         self.assertIs(Account, AccountModel)
+        self.assertIn("template_id", set(Artifact.__table__.columns.keys()))
 
     def test_account_has_no_oauth_token_columns(self) -> None:
         """1.2f: do not store OAuth tokens on accounts."""

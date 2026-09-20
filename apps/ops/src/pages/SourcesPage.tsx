@@ -4,17 +4,21 @@ import {
   createSourceItem,
   generateCarouselArtifact,
   listBrands,
+  listCarouselTemplates,
   listClusters,
   listSourceItems,
 } from "../api/client";
 import type {
   ArtifactReadResponse,
   BrandReadResponse,
+  CarouselTemplateReadResponse,
   ClusterReadResponse,
   SourceItemReadResponse,
 } from "../api/types";
+import { CarouselSlideStrip } from "../components/CarouselSlideStrip";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { TemplatePicker } from "../components/TemplatePicker";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 
 /**
@@ -42,16 +46,22 @@ export function SourcesPage(): ReactElement {
 
   const [generateSourceItemId, setGenerateSourceItemId] = useState<string>("");
   const [generateClusterId, setGenerateClusterId] = useState<string>("");
+  const [generateTemplateId, setGenerateTemplateId] = useState<string>("");
+  const [carouselTemplates, setCarouselTemplates] = useState<CarouselTemplateReadResponse[]>([]);
+  const [generatedArtifact, setGeneratedArtifact] = useState<ArtifactReadResponse | null>(null);
 
   const reloadLists = async (): Promise<void> => {
 
     const loadedSourceItems: SourceItemReadResponse[] = await listSourceItems();
     const loadedBrands: BrandReadResponse[] = await listBrands();
     const loadedClusters: ClusterReadResponse[] = await listClusters();
+    const loadedTemplates: CarouselTemplateReadResponse[] = await listCarouselTemplates();
 
     setSourceItems(loadedSourceItems);
     setBrands(loadedBrands);
     setClusters(loadedClusters);
+    setCarouselTemplates(loadedTemplates);
+    applyDefaultTemplateId(loadedTemplates, generateTemplateId, setGenerateTemplateId);
 
     if (brandId === "" && loadedBrands.length > 0) {
       setBrandId(loadedBrands[0].id);
@@ -71,6 +81,7 @@ export function SourcesPage(): ReactElement {
         const loadedSourceItems: SourceItemReadResponse[] = await listSourceItems();
         const loadedBrands: BrandReadResponse[] = await listBrands();
         const loadedClusters: ClusterReadResponse[] = await listClusters();
+        const loadedTemplates: CarouselTemplateReadResponse[] = await listCarouselTemplates();
 
         if (isCancelled) {
           return;
@@ -79,6 +90,8 @@ export function SourcesPage(): ReactElement {
         setSourceItems(loadedSourceItems);
         setBrands(loadedBrands);
         setClusters(loadedClusters);
+        setCarouselTemplates(loadedTemplates);
+        applyDefaultTemplateId(loadedTemplates, "", setGenerateTemplateId);
         setLoadError(null);
 
         if (loadedBrands.length > 0) {
@@ -152,10 +165,12 @@ export function SourcesPage(): ReactElement {
       const createdArtifact: ArtifactReadResponse = await generateCarouselArtifact({
         source_item_id: generateSourceItemId,
         cluster_id: generateClusterId === "" ? null : generateClusterId,
+        template_id: generateTemplateId === "" ? null : generateTemplateId,
       });
 
+      setGeneratedArtifact(createdArtifact);
       setStatusMessage(
-        `Generated draft artifact ${createdArtifact.id} (status ${createdArtifact.status}). Open Queue to review.`,
+        `Generated draft artifact ${createdArtifact.id} (status ${createdArtifact.status}, template ${createdArtifact.template_id ?? generateTemplateId}). Preview below or open Queue.`,
       );
     } catch (caughtError: unknown) {
       setActionError(caughtError);
@@ -168,7 +183,7 @@ export function SourcesPage(): ReactElement {
     <section>
       <h1>Sources</h1>
       <p className="lede">
-        List source items, create one if seed is empty, then generate a carousel draft.
+        List source items, create one if seed is empty, then generate a carousel draft and preview the slides.
       </p>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
@@ -212,10 +227,33 @@ export function SourcesPage(): ReactElement {
             ))}
           </select>
         </label>
+        <TemplatePicker
+          templates={carouselTemplates}
+          selectedTemplateId={generateTemplateId}
+          disabled={!canWrite || isBusy}
+          onChange={(templateId: string): void => {
+            setGenerateTemplateId(templateId);
+          }}
+        />
         <button type="submit" disabled={!canWrite || isBusy || generateSourceItemId === ""}>
           {isBusy ? "Working…" : "Generate carousel"}
         </button>
       </form>
+
+      {generatedArtifact === null ? null : (
+        <div className="generated-preview">
+          <h2>Last generated draft</h2>
+          <p>
+            {generatedArtifact.format} · {generatedArtifact.status} · template{" "}
+            {generatedArtifact.template_id ?? "—"}
+          </p>
+          <p className="mono">{generatedArtifact.id}</p>
+          <CarouselSlideStrip
+            artifactId={generatedArtifact.id}
+            slides={generatedArtifact.slides}
+          />
+        </div>
+      )}
 
       <h2>Create source item</h2>
       <form className="stack-form" onSubmit={(formEvent: FormEvent): void => {
@@ -317,4 +355,31 @@ export function SourcesPage(): ReactElement {
       )}
     </section>
   );
+}
+
+function applyDefaultTemplateId(
+  templates: CarouselTemplateReadResponse[],
+  currentTemplateId: string,
+  setTemplateId: (templateId: string) => void,
+): void {
+
+  if (currentTemplateId !== "") {
+    return;
+  }
+
+  const defaultTemplate: CarouselTemplateReadResponse | undefined = templates.find(
+    (carouselTemplate: CarouselTemplateReadResponse): boolean => {
+      return carouselTemplate.is_default;
+    },
+  );
+
+  if (defaultTemplate !== undefined) {
+    setTemplateId(defaultTemplate.template_id);
+
+    return;
+  }
+
+  if (templates.length > 0) {
+    setTemplateId(templates[0].template_id);
+  }
 }

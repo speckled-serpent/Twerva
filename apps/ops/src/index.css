@@ -216,3 +216,74 @@ td {
   overflow: auto;
   font-size: 0.85rem;
 }
+
+.slide-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.slide-preview-error {
+  margin: 0;
+  color: #7a1010;
+  font-size: 0.85rem;
+}
+
+.slide-preview-strip {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.2rem 0;
+}
+
+.slide-preview-thumb-button {
+  border: 1px solid #ccc;
+  background: #eee;
+  padding: 0;
+  cursor: pointer;
+}
+
+.slide-preview-thumb {
+  display: block;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+}
+
+.slide-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  z-index: 30;
+  padding: 1rem;
+}
+
+.slide-lightbox-image {
+  max-width: 90vw;
+  max-height: 80vh;
+  background: #111;
+}
+
+.slide-lightbox-caption {
+  margin: 0;
+  color: #f4f4f1;
+  font-size: 0.9rem;
+}
+
+.template-picker-description {
+  color: #4a4a4a;
+  font-size: 0.85rem;
+}
+
+.regenerate-row,
+.generated-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}

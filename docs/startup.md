@@ -96,8 +96,8 @@ Local API `.env` should set `SESSION_COOKIE_SECURE=false` (HTTP) and
 Nav: **Sources · Queue · Schedule · Accounts · Results · Account** (+ **Users** for admins)
 
 1. **Sign in** — bootstrap admin (or any `ops_users` row). Role is in the header.
-2. **Sources** — list Spotmu-shaped source items; generate a carousel (creates a **draft** artifact; PNGs land under `/opt/twerva/artifacts` on the server).
-3. **Queue** — approve / reject / edit caption (human gate).
+2. **Sources** — list Spotmu-shaped source items; pick a Spotmu template (`spotmu_paper_v1` / `spotmu_bold_v1`) and generate a carousel (creates a **draft** artifact; PNGs land under `/opt/twerva/artifacts`). Slides preview in-page after generate. Readers can see previews; only admins generate.
+3. **Queue** — preview slide PNGs (lightbox), approve / reject / edit caption, or **regenerate** a new draft with another template (history kept). Human gate.
 4. **Accounts** — clusters/accounts, cadence caps, steer (pause/kill/resume).
 5. **Schedule** — attach an **approved** artifact to an account + time → `post_job`; then **mock publish**.
 6. **Results** — stub/manual metrics, cluster median views, agent-summary.
