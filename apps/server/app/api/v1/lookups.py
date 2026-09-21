@@ -5,7 +5,7 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models import Account, Artifact, Brand, Cluster, PostJob, SourceItem
+from app.models import Account, Artifact, Brand, Campaign, Cluster, PostJob, SourceItem
 
 
 def fetch_brand_by_id_or_raise(
@@ -149,6 +149,34 @@ def fetch_artifact_by_id_or_raise(
         )
 
     return found_artifact
+
+
+def fetch_campaign_by_id_or_raise(
+    campaign_id: uuid.UUID,
+    our_database_session: Session,
+) -> Campaign:
+    """Return a Campaign or raise HTTP 404.
+
+    Args:
+        campaign_id: Primary key to load.
+        our_database_session: Open SQLAlchemy session.
+
+    Returns:
+        The matching Campaign row.
+
+    Raises:
+        HTTPException: If no Campaign exists for `campaign_id`.
+    """
+
+    found_campaign: Campaign | None = our_database_session.get(Campaign, campaign_id)
+
+    if found_campaign is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Campaign not found: {campaign_id}",
+        )
+
+    return found_campaign
 
 
 def fetch_post_job_by_id_or_raise(

@@ -24,11 +24,15 @@ from app.models.account import Account
 from app.models.artifact import Artifact, ArtifactSlide
 from app.models.base import Base
 from app.models.brand import Brand
+from app.models.campaign import Campaign, CampaignAccount, CampaignInterest
 from app.models.cluster import Cluster, cluster_source_items
 from app.models.enums import (
     ACCOUNT_STATUS_ENUM,
+    ADVERTISEMENT_TYPE_ENUM,
     ARTIFACT_STATUS_ENUM,
     ARTIFACT_STATUS_TRANSITIONS,
+    CAMPAIGN_STATUS_ENUM,
+    CAMPAIGN_TYPE_ENUM,
     OPS_USER_ROLE_ENUM,
     PLATFORM_ENUM,
     POST_JOB_STATUS_ENUM,
@@ -36,7 +40,10 @@ from app.models.enums import (
     SOURCE_TYPE_ENUM,
     STEER_ACTION_TYPE_ENUM,
     AccountStatus,
+    AdvertisementType,
     ArtifactStatus,
+    CampaignStatus,
+    CampaignType,
     OpsUserRole,
     Platform,
     PostJobStatus,
@@ -52,15 +59,24 @@ from app.models.steer_action import SteerAction
 
 __all__ = [
     "ACCOUNT_STATUS_ENUM",
+    "ADVERTISEMENT_TYPE_ENUM",
     "ARTIFACT_STATUS_ENUM",
     "ARTIFACT_STATUS_TRANSITIONS",
     "Account",
     "AccountStatus",
+    "AdvertisementType",
     "Artifact",
     "ArtifactSlide",
     "ArtifactStatus",
     "Base",
     "Brand",
+    "CAMPAIGN_STATUS_ENUM",
+    "CAMPAIGN_TYPE_ENUM",
+    "Campaign",
+    "CampaignAccount",
+    "CampaignInterest",
+    "CampaignStatus",
+    "CampaignType",
     "Cluster",
     "MetricSnapshot",
     "OPS_USER_ROLE_ENUM",

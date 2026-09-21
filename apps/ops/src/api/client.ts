@@ -8,6 +8,8 @@ import type {
   ArtifactStatus,
   CarouselTemplateReadResponse,
   BrandReadResponse,
+  CampaignCreateRequest,
+  CampaignReadResponse,
   CarouselGenerateRequest,
   ClusterAgentSummaryResponse,
   ClusterCreateRequest,
@@ -27,6 +29,7 @@ import type {
   SchedulePostJobRequest,
   SourceItemCreateRequest,
   SourceItemReadResponse,
+  SpotmuInterestSearchHit,
   SteerActionReadResponse,
 } from "./types";
 
@@ -153,6 +156,40 @@ export async function resetOpsUserPassword(
 export async function listBrands(): Promise<BrandReadResponse[]> {
 
   return requestJson<BrandReadResponse[]>("GET", "/api/v1/brands");
+}
+
+export async function listCampaigns(): Promise<CampaignReadResponse[]> {
+
+  return requestJson<CampaignReadResponse[]>("GET", "/api/v1/campaigns");
+}
+
+export async function createCampaign(
+  campaignCreateRequest: CampaignCreateRequest,
+): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>(
+    "POST",
+    "/api/v1/campaigns",
+    campaignCreateRequest,
+  );
+}
+
+export async function searchSpotmuInterests(
+  query: string,
+  limit?: number,
+): Promise<SpotmuInterestSearchHit[]> {
+
+  const trimmedQuery: string = query.trim();
+  const queryParts: string[] = [`q=${encodeURIComponent(trimmedQuery)}`];
+
+  if (limit !== undefined) {
+    queryParts.push(`limit=${encodeURIComponent(String(limit))}`);
+  }
+
+  return requestJson<SpotmuInterestSearchHit[]>(
+    "GET",
+    `/api/v1/spotmu/interests/search?${queryParts.join("&")}`,
+  );
 }
 
 export async function listSourceItems(): Promise<SourceItemReadResponse[]> {

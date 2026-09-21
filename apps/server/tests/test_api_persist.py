@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.v1.accounts import create_account, get_account_by_id
 from app.api.v1.artifacts import create_artifact, get_artifact_by_id
 from app.api.v1.brands import create_brand, get_brand_by_id, list_brands
+from app.api.v1.campaigns import create_campaign, get_campaign_by_id, list_campaigns
 from app.api.v1.clusters import (
     attach_source_item_to_cluster,
     create_cluster,
@@ -31,12 +32,21 @@ from app.api.v1.schemas import (
     AccountCreateRequest,
     ArtifactCreateRequest,
     BrandCreateRequest,
+    CampaignCreateRequest,
+    CampaignInterestWrite,
     ClusterCreateRequest,
     PostJobCreateRequest,
     SourceItemCreateRequest,
 )
 from app.api.v1.source_items import create_source_item, get_source_item_by_id
-from app.models.enums import ArtifactStatus, Platform, PostJobStatus
+from app.models.enums import (
+    AdvertisementType,
+    ArtifactStatus,
+    CampaignStatus,
+    CampaignType,
+    Platform,
+    PostJobStatus,
+)
 
 
 CANDIDATE_DATABASE_URLS: tuple[str, ...] = (
@@ -236,6 +246,73 @@ class ApiPersistTests(unittest.TestCase):
         self.assertEqual(fetched_account.platform, Platform.INSTAGRAM)
         self.assertEqual(fetched_artifact.status, ArtifactStatus.DRAFT)
         self.assertEqual(fetched_post_job.status, PostJobStatus.SCHEDULED)
+
+    def test_create_and_list_spotmu_campaign(self) -> None:
+        """Persist a not-started Spotmu campaign with accounts and interests."""
+
+        run_suffix: str = uuid.uuid4().hex[:8]
+        created_brand = create_brand(
+            BrandCreateRequest(
+                slug=f"campaign-brand-{run_suffix}",
+                name="Campaign Brand",
+            ),
+            self.our_database_session,
+        )
+        created_cluster = create_cluster(
+            ClusterCreateRequest(
+                brand_id=created_brand.id,
+                slug=f"campaign-lane-{run_suffix}",
+                name="Campaign lane",
+            ),
+            self.our_database_session,
+        )
+        created_account = create_account(
+            AccountCreateRequest(
+                cluster_id=created_cluster.id,
+                platform=Platform.INSTAGRAM,
+                handle=f"campaign_{run_suffix}",
+            ),
+            self.our_database_session,
+        )
+        created_campaign = create_campaign(
+            CampaignCreateRequest(
+                name=f"My Campaign {run_suffix}",
+                campaign_type=CampaignType.SPOTMU,
+                advertisement_type=AdvertisementType.CAROUSEL,
+                platforms=[Platform.INSTAGRAM],
+                account_ids=[created_account.id],
+                interests=[
+                    CampaignInterestWrite(slug="ai-agents", title="AI Agents"),
+                    CampaignInterestWrite(
+                        slug="anthropic",
+                        title="Anthropic",
+                        spotmu_interest_id="s-anthropic",
+                    ),
+                ],
+            ),
+            self.our_database_session,
+            None,
+        )
+        listed_campaigns = list_campaigns(self.our_database_session)
+        listed_campaign_ids: set[uuid.UUID] = {
+            campaign_response.id for campaign_response in listed_campaigns
+        }
+        fetched_campaign = get_campaign_by_id(
+            created_campaign.id,
+            self.our_database_session,
+        )
+
+        self.assertIn(created_campaign.id, listed_campaign_ids)
+        self.assertEqual(created_campaign.status, CampaignStatus.NOT_STARTED)
+        self.assertEqual(created_campaign.slug, f"my-campaign-{run_suffix}")
+        self.assertEqual(created_campaign.hashtag, f"#my-campaign-{run_suffix}")
+        self.assertEqual(created_campaign.account_count, 1)
+        self.assertEqual(created_campaign.interest_count, 2)
+        self.assertEqual(fetched_campaign.accounts[0].handle, f"campaign_{run_suffix}")
+        self.assertEqual(
+            {interest.slug for interest in fetched_campaign.interests},
+            {"ai-agents", "anthropic"},
+        )
 
 
 if __name__ == "__main__":

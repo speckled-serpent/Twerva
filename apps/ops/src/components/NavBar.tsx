@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import type { OpsUserRole } from "../api/types";
 
 export type OpsPageId =
-  | "sources"
+  | "campaigns"
   | "queue"
   | "schedule"
   | "accounts"
@@ -28,7 +28,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { pageId: "sources", label: "Sources" },
+  { pageId: "campaigns", label: "Campaigns" },
   { pageId: "queue", label: "Queue" },
   { pageId: "schedule", label: "Schedule" },
   { pageId: "accounts", label: "Accounts" },

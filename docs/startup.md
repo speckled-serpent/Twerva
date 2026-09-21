@@ -84,7 +84,7 @@ Open **http://127.0.0.1:5173**
 Vite proxies `/api` and `/health` to `http://127.0.0.1:8000` (local
 uvicorn or the tunnel). Fetches send `credentials: "include"` so the
 session cookie is stored for `:5173`. Header should show API healthy
-when the tunnel + `twerva-api` are up. Sign in before Sources loads.
+when the tunnel + `twerva-api` are up. Sign in before Campaigns loads.
 
 Local API `.env` should set `SESSION_COOKIE_SECURE=false` (HTTP) and
 `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` for the first bootstrap.
@@ -93,11 +93,11 @@ Local API `.env` should set `SESSION_COOKIE_SECURE=false` (HTTP) and
 
 ## Walk the Phase 1 path in ops
 
-Nav: **Sources · Queue · Schedule · Accounts · Results · Account** (+ **Users** for admins)
+Nav: **Campaigns · Queue · Schedule · Accounts · Results · Account** (+ **Users** for admins)
 
 1. **Sign in** — bootstrap admin (or any `ops_users` row). Role is in the header.
-2. **Sources** — list Spotmu-shaped source items; pick a Spotmu template (`spotmu_paper_v1` / `spotmu_bold_v1`) and generate a carousel (creates a **draft** artifact; PNGs land under `/opt/twerva/artifacts`). Slides preview in-page after generate. Readers can see previews; only admins generate.
-3. **Queue** — preview slide PNGs (lightbox), approve / reject / edit caption, or **regenerate** a new draft with another template (history kept). Human gate.
+2. **Campaigns** — **New Campaign** saves a `not_started` definition (name, auto slug/hashtag, Spotmu type, carousel, platforms, optional IG/TikTok accounts, live Spotmu interest search). It does **not** start, ingest, or generate. Type **Other** is coming soon. Apply Alembic head `campaigns_create_ui` on the box before the new API works.
+3. **Queue** — preview slide PNGs (lightbox), approve / reject / edit caption, or **regenerate** a new draft with another template (history kept). Human gate. Existing generate/approve loop is unchanged; it is no longer on this first nav page.
 4. **Accounts** — clusters/accounts, cadence caps, steer (pause/kill/resume).
 5. **Schedule** — attach an **approved** artifact to an account + time → `post_job`; then **mock publish**.
 6. **Results** — stub/manual metrics, cluster median views, agent-summary.

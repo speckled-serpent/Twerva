@@ -15,6 +15,7 @@ from app.ingest.spotmu import (
     list_spotmu_interest_slugs_from_sitemap,
     parse_overview_bullets,
     resolve_spotmu_api_base_url,
+    search_spotmu_interests,
 )
 
 
@@ -182,6 +183,37 @@ class SpotmuClientTests(unittest.TestCase):
 
         self.assertEqual(interest_slugs, ["ai-agents"])
 
+    def test_search_maps_live_shaped_array(self) -> None:
+        """Guest search JSON array maps slug, title, and hash id."""
+
+        http_client: httpx.Client = _client_returning_json_array(
+            [
+                {
+                    "id": "33a69aa4-7609-4359-b35f-d34ef7f26113",
+                    "interest_hash_id": "s69a0baf288c3c5d",
+                    "title": "Artificial Intelligence",
+                    "slug": "artificial-intelligence",
+                    "interest_heading": "AI heading",
+                },
+                {"title": "Missing slug"},
+            ],
+        )
+        search_hits = search_spotmu_interests("ai", http_client=http_client)
+
+        self.assertEqual(len(search_hits), 1)
+        self.assertEqual(search_hits[0].slug, "artificial-intelligence")
+        self.assertEqual(search_hits[0].title, "Artificial Intelligence")
+        self.assertEqual(search_hits[0].spotmu_interest_id, "s69a0baf288c3c5d")
+        self.assertEqual(search_hits[0].interest_heading, "AI heading")
+
+    def test_search_blank_query_skips_http(self) -> None:
+        """Blank q returns [] without calling Spotmu."""
+
+        http_client: httpx.Client = _client_raising_timeout()
+        search_hits = search_spotmu_interests("   ", http_client=http_client)
+
+        self.assertEqual(search_hits, [])
+
 
 def _client_returning_json(payload: dict[str, object]) -> httpx.Client:
     """Return a client whose GET yields the given JSON object."""
@@ -191,6 +223,25 @@ def _client_returning_json(payload: dict[str, object]) -> httpx.Client:
         _ = request
 
         return httpx.Response(200, json=payload)
+
+    mock_transport: httpx.MockTransport = httpx.MockTransport(handler)
+    http_client: httpx.Client = httpx.Client(transport=mock_transport)
+
+    return http_client
+
+
+def _client_returning_json_array(payload: list[object]) -> httpx.Client:
+    """Return a client whose GET yields a JSON array."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+
+        _ = request
+
+        return httpx.Response(
+            200,
+            json=payload,
+            headers={"content-type": "application/json"},
+        )
 
     mock_transport: httpx.MockTransport = httpx.MockTransport(handler)
     http_client: httpx.Client = httpx.Client(transport=mock_transport)

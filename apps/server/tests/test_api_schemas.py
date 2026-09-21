@@ -14,6 +14,8 @@ from app.api.v1.schemas import (
     ArtifactRejectRequest,
     ArtifactSlideSchema,
     BrandCreateRequest,
+    CampaignCreateRequest,
+    CampaignReadResponse,
     CarouselGenerateRequest,
     BrandReadResponse,
     ClusterCreateRequest,
@@ -27,11 +29,15 @@ from app.api.v1.schemas import (
     SchedulePostJobRequest,
     SourceItemCreateRequest,
     SourceItemReadResponse,
+    SpotmuInterestSearchHitResponse,
     SpotmuSyncRequest,
 )
 from app.models.enums import (
     AccountStatus,
+    AdvertisementType,
     ArtifactStatus,
+    CampaignStatus,
+    CampaignType,
     Platform,
     PostJobStatus,
     SourceType,
@@ -311,6 +317,45 @@ class ApiSchemaTests(unittest.TestCase):
         self.assertEqual(steer_request.action, SteerActionType.PAUSE)
         self.assertEqual(steer_request.created_by, "human")
         self.assertEqual(steer_request_with_actor.created_by, "canary")
+
+    def test_campaign_create_and_read_round_trip_fields(self) -> None:
+        """Campaign create defaults to carousel; read includes counts."""
+
+        campaign_create_request: CampaignCreateRequest = CampaignCreateRequest(
+            name="My Campaign",
+            campaign_type=CampaignType.SPOTMU,
+            platforms=[Platform.INSTAGRAM],
+            interests=[{"slug": "ai-agents", "title": "AI Agents"}],
+        )
+        campaign_read_response: CampaignReadResponse = CampaignReadResponse(
+            id=FIXED_BRAND_ID,
+            name="My Campaign",
+            slug="my-campaign",
+            hashtag="#my-campaign",
+            campaign_type=CampaignType.SPOTMU,
+            advertisement_type=AdvertisementType.CAROUSEL,
+            status=CampaignStatus.NOT_STARTED,
+            platforms=[Platform.INSTAGRAM],
+            account_count=0,
+            interest_count=1,
+            created_at=FIXED_TIMESTAMP,
+            updated_at=FIXED_TIMESTAMP,
+            created_by=None,
+        )
+        search_hit: SpotmuInterestSearchHitResponse = SpotmuInterestSearchHitResponse(
+            slug="ai-agents",
+            title="AI Agents",
+            spotmu_interest_id="s4ce16604dd1accb",
+        )
+
+        self.assertEqual(
+            campaign_create_request.advertisement_type,
+            AdvertisementType.CAROUSEL,
+        )
+        self.assertEqual(campaign_create_request.interests[0].slug, "ai-agents")
+        self.assertEqual(campaign_read_response.status, CampaignStatus.NOT_STARTED)
+        self.assertEqual(campaign_read_response.hashtag, "#my-campaign")
+        self.assertEqual(search_hit.slug, "ai-agents")
 
 
 if __name__ == "__main__":

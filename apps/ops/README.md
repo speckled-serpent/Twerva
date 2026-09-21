@@ -53,8 +53,9 @@ admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
 
 ### Walk the loop in the browser
 
-1. **Sources** — list (or create) a source item → **Generate carousel**
-   (optional cluster so schedule can match the account’s cluster).
+1. **Campaigns** — **New Campaign** (Spotmu + carousel + platforms +
+   optional accounts + live Spotmu interest search). Saves `not_started`
+   only — no generate on this page.
 2. **Queue** — edit caption if needed → **Approve** (or Reject).
 3. **Accounts** — create a cluster + account if none exist (set
    `cadence_cap_per_day` if you want the cap enforced).

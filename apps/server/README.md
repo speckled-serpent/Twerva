@@ -93,7 +93,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`artifact_template_id`** (parent `ops_users_role_rbac`).
+Current head: **`campaigns_create_ui`** (parent `artifact_template_id`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -119,7 +119,7 @@ alembic current
 ```
 
 `alembic current` opens Postgres on `127.0.0.1:5432` using `DATABASE_URL`.
-After `alembic upgrade head` it should report `ops_users_role_rbac (head)`.
+After `alembic upgrade head` it should report `campaigns_create_ui (head)`.
 
 Local equivalent (your own `DATABASE_URL`):
 

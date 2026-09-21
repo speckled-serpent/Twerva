@@ -174,7 +174,7 @@ export function QueuePage(): ReactElement {
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 
       {loadError !== null ? null : draftArtifacts.length === 0 ? (
-        <p>No drafts. Generate a carousel on Sources.</p>
+        <p>No drafts yet. Campaign start / generate is not on this page.</p>
       ) : (
         <ul className="card-list">
           {draftArtifacts.map((draftArtifact: ArtifactReadResponse): ReactElement => {

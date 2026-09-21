@@ -287,3 +287,77 @@ td {
   gap: 0.5rem;
   margin-top: 0.35rem;
 }
+
+.page-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.campaign-form {
+  max-width: 42rem;
+}
+
+.form-fieldset {
+  border: 1px solid #ccc;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field-hint,
+.empty-hint {
+  margin: 0;
+  color: #4a4a4a;
+  font-size: 0.85rem;
+}
+
+.inline-add-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.inline-add-row input,
+.inline-add-row select {
+  flex: 1;
+}
+
+.chip-list,
+.account-pick-list,
+.search-hit-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.chip,
+.search-hit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 0.35rem 0.5rem;
+}
+
+.checkbox-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.coming-soon-banner {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #8a7a3a;
+  background: #f7f3e2;
+  color: #5a4a10;
+}
