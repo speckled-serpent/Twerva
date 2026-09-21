@@ -7,6 +7,7 @@ from sqlalchemy.sql.schema import Table
 
 from app.models import (
     ARTIFACT_STATUS_TRANSITIONS,
+    CAMPAIGN_STATUS_TRANSITIONS,
     POST_JOB_STATUS_TRANSITIONS,
     Account,
     AdvertisementType,
@@ -222,7 +223,7 @@ class DomainEnumTests(unittest.TestCase):
         self.assertIn("role", set(OpsUser.__table__.columns.keys()))
 
     def test_campaign_closed_vocabularies(self) -> None:
-        """Campaign type/format/status match the create-only slice."""
+        """Campaign type/format/status match the lifecycle slice."""
 
         self.assertEqual(
             {member.value for member in CampaignType},
@@ -234,11 +235,19 @@ class DomainEnumTests(unittest.TestCase):
         )
         self.assertEqual(
             {member.value for member in CampaignStatus},
-            {"not_started"},
+            {"ready", "running", "paused", "finished"},
         )
         self.assertIn("slug", set(Campaign.__table__.columns.keys()))
         self.assertIn("hashtag", set(Campaign.__table__.columns.keys()))
         self.assertIn("platforms", set(Campaign.__table__.columns.keys()))
+        self.assertEqual(
+            CAMPAIGN_STATUS_TRANSITIONS[CampaignStatus.READY],
+            frozenset({CampaignStatus.RUNNING}),
+        )
+        self.assertEqual(
+            CAMPAIGN_STATUS_TRANSITIONS[CampaignStatus.FINISHED],
+            frozenset(),
+        )
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

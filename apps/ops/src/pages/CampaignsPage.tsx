@@ -1,99 +1,74 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-  type ReactElement,
-} from "react";
+import { useEffect, useState, type ReactElement } from "react";
 
 import {
-  createCampaign,
-  listAccounts,
+  fetchCampaignById,
+  finishCampaign,
   listCampaigns,
-  searchSpotmuInterests,
+  pauseCampaign,
+  resumeCampaign,
+  startCampaign,
 } from "../api/client";
 import type {
-  AccountReadResponse,
+  CampaignAccountReadResponse,
+  CampaignInterestReadResponse,
   CampaignReadResponse,
-  CampaignType,
-  Platform,
-  SpotmuInterestSearchHit,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import {
+  CampaignStatusBadge,
+  campaignLifecycleActionLabel,
+  campaignLifecycleActionPastLabel,
+  campaignStatusLabel,
+  formatCampaignPlatforms,
+  formatCampaignTimestamp,
+  listAllowedCampaignLifecycleActions,
+  type CampaignLifecycleAction,
+} from "./campaignDisplay";
 
-type CampaignsView = "list" | "create";
-
-interface SelectedInterest {
-  slug: string;
-  title: string;
-  spotmu_interest_id: string | null;
+export interface CampaignsPageProps {
+  openedCampaignId: string | null;
+  statusMessage: string;
+  onOpenedCampaignIdChange: (campaignId: string | null) => void;
+  onStatusMessageChange: (statusMessage: string) => void;
 }
 
-const AVAILABLE_PLATFORMS: Platform[] = ["instagram", "tiktok"];
-
 /**
- * Campaigns page: list saved campaigns or create a not-started definition.
+ * Campaigns tab: list every campaign; selecting one opens a basic detail view.
  *
- * @returns The Campaigns page
+ * @param props - Opened campaign id, banner, and navigation callbacks
+ * @returns The Campaigns list or detail
  */
-export function CampaignsPage(): ReactElement {
+export function CampaignsPage({
+  openedCampaignId,
+  statusMessage,
+  onOpenedCampaignIdChange,
+  onStatusMessageChange,
+}: CampaignsPageProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
-  const [activeView, setActiveView] = useState<CampaignsView>("list");
   const [campaigns, setCampaigns] = useState<CampaignReadResponse[]>([]);
-  const [accounts, setAccounts] = useState<AccountReadResponse[]>([]);
+  const [selectedCampaign, setSelectedCampaign] = useState<CampaignReadResponse | null>(
+    null,
+  );
   const [loadError, setLoadError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<unknown>(null);
-  const [statusMessage, setStatusMessage] = useState<string>("");
   const [isBusy, setIsBusy] = useState<boolean>(false);
-
-  const [campaignName, setCampaignName] = useState<string>("");
-  const [campaignType, setCampaignType] = useState<CampaignType>("spotmu");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
-  const [platformToAdd, setPlatformToAdd] = useState<Platform>("instagram");
-  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
-  const [selectedInterests, setSelectedInterests] = useState<SelectedInterest[]>([]);
-  const [interestQuery, setInterestQuery] = useState<string>("");
-  const [interestHits, setInterestHits] = useState<SpotmuInterestSearchHit[]>([]);
-  const [isSearchingInterests, setIsSearchingInterests] = useState<boolean>(false);
-  const [interestSearchError, setInterestSearchError] = useState<unknown>(null);
-
-  const filteredAccounts: AccountReadResponse[] = useMemo((): AccountReadResponse[] => {
-    if (selectedPlatforms.length === 0) {
-      return [];
-    }
-
-    return accounts.filter((account: AccountReadResponse): boolean => {
-      return selectedPlatforms.includes(account.platform);
-    });
-  }, [accounts, selectedPlatforms]);
-
-  const reloadLists = async (): Promise<void> => {
-
-    const loadedCampaigns: CampaignReadResponse[] = await listCampaigns();
-    const loadedAccounts: AccountReadResponse[] = await listAccounts();
-
-    setCampaigns(loadedCampaigns);
-    setAccounts(loadedAccounts);
-  };
 
   useEffect((): (() => void) => {
     let isCancelled: boolean = false;
 
-    const loadPage = async (): Promise<void> => {
+    const loadList = async (): Promise<void> => {
 
       try {
         const loadedCampaigns: CampaignReadResponse[] = await listCampaigns();
-        const loadedAccounts: AccountReadResponse[] = await listAccounts();
 
         if (isCancelled) {
           return;
         }
 
         setCampaigns(loadedCampaigns);
-        setAccounts(loadedAccounts);
         setLoadError(null);
       } catch (caughtError: unknown) {
         if (isCancelled) {
@@ -104,216 +79,89 @@ export function CampaignsPage(): ReactElement {
       }
     };
 
-    void loadPage();
+    void loadList();
 
     return (): void => {
       isCancelled = true;
     };
   }, []);
 
-  const resetCreateForm = (): void => {
+  useEffect((): (() => void) => {
+    let isCancelled: boolean = false;
 
-    setCampaignName("");
-    setCampaignType("spotmu");
-    setSelectedPlatforms([]);
-    setPlatformToAdd("instagram");
-    setSelectedAccountIds([]);
-    setSelectedInterests([]);
-    setInterestQuery("");
-    setInterestHits([]);
-    setInterestSearchError(null);
-  };
+    if (openedCampaignId === null) {
+      setSelectedCampaign(null);
 
-  const handleOpenCreate = (): void => {
-
-    resetCreateForm();
-    setActionError(null);
-    setStatusMessage("");
-    setActiveView("create");
-  };
-
-  const handleCancelCreate = (): void => {
-
-    resetCreateForm();
-    setActionError(null);
-    setActiveView("list");
-  };
-
-  const handleAddPlatform = (): void => {
-
-    if (selectedPlatforms.includes(platformToAdd)) {
-      return;
+      return (): void => {
+        isCancelled = true;
+      };
     }
 
-    setSelectedPlatforms([...selectedPlatforms, platformToAdd]);
-    setSelectedAccountIds((currentAccountIds: string[]): string[] => {
-      return currentAccountIds.filter((accountId: string): boolean => {
-        const matchingAccount: AccountReadResponse | undefined = accounts.find(
-          (account: AccountReadResponse): boolean => {
-            return account.id === accountId;
-          },
+    const loadDetail = async (): Promise<void> => {
+
+      try {
+        const loadedCampaign: CampaignReadResponse = await fetchCampaignById(
+          openedCampaignId,
         );
 
-        if (matchingAccount === undefined) {
-          return false;
+        if (isCancelled) {
+          return;
         }
 
-        const nextPlatforms: Platform[] = [...selectedPlatforms, platformToAdd];
-
-        return nextPlatforms.includes(matchingAccount.platform);
-      });
-    });
-  };
-
-  const handleRemovePlatform = (platform: Platform): void => {
-
-    const nextPlatforms: Platform[] = selectedPlatforms.filter(
-      (selectedPlatform: Platform): boolean => {
-        return selectedPlatform !== platform;
-      },
-    );
-
-    setSelectedPlatforms(nextPlatforms);
-    setSelectedAccountIds((currentAccountIds: string[]): string[] => {
-      return currentAccountIds.filter((accountId: string): boolean => {
-        const matchingAccount: AccountReadResponse | undefined = accounts.find(
-          (account: AccountReadResponse): boolean => {
-            return account.id === accountId;
-          },
-        );
-
-        if (matchingAccount === undefined) {
-          return false;
+        setSelectedCampaign(loadedCampaign);
+        setLoadError(null);
+      } catch (caughtError: unknown) {
+        if (isCancelled) {
+          return;
         }
 
-        return nextPlatforms.includes(matchingAccount.platform);
-      });
-    });
-  };
-
-  const handleToggleAccount = (accountId: string): void => {
-
-    if (selectedAccountIds.includes(accountId)) {
-      setSelectedAccountIds(
-        selectedAccountIds.filter((selectedAccountId: string): boolean => {
-          return selectedAccountId !== accountId;
-        }),
-      );
-
-      return;
-    }
-
-    setSelectedAccountIds([...selectedAccountIds, accountId]);
-  };
-
-  const handleSearchInterests = async (): Promise<void> => {
-
-    const trimmedQuery: string = interestQuery.trim();
-
-    if (trimmedQuery === "") {
-      setInterestHits([]);
-      setInterestSearchError(null);
-
-      return;
-    }
-
-    setIsSearchingInterests(true);
-    setInterestSearchError(null);
-
-    try {
-      const loadedHits: SpotmuInterestSearchHit[] = await searchSpotmuInterests(
-        trimmedQuery,
-        10,
-      );
-
-      setInterestHits(loadedHits);
-    } catch (caughtError: unknown) {
-      setInterestHits([]);
-      setInterestSearchError(caughtError);
-    } finally {
-      setIsSearchingInterests(false);
-    }
-  };
-
-  const handleAddInterest = (searchHit: SpotmuInterestSearchHit): void => {
-
-    const alreadySelected: boolean = selectedInterests.some(
-      (selectedInterest: SelectedInterest): boolean => {
-        return selectedInterest.slug === searchHit.slug;
-      },
-    );
-
-    if (alreadySelected) {
-      return;
-    }
-
-    const nextInterest: SelectedInterest = {
-      slug: searchHit.slug,
-      title: searchHit.title,
-      spotmu_interest_id: searchHit.spotmu_interest_id,
+        setSelectedCampaign(null);
+        setLoadError(caughtError);
+      }
     };
 
-    setSelectedInterests([...selectedInterests, nextInterest]);
+    void loadDetail();
+
+    return (): void => {
+      isCancelled = true;
+    };
+  }, [openedCampaignId]);
+
+  const reloadCampaignsAfterAction = async (
+    updatedCampaign: CampaignReadResponse,
+    nextStatusMessage: string,
+  ): Promise<void> => {
+
+    const loadedCampaigns: CampaignReadResponse[] = await listCampaigns();
+
+    setCampaigns(loadedCampaigns);
+    setSelectedCampaign(updatedCampaign);
+    onStatusMessageChange(nextStatusMessage);
   };
 
-  const handleRemoveInterest = (slug: string): void => {
+  const handleLifecycleAction = async (
+    lifecycleAction: CampaignLifecycleAction,
+  ): Promise<void> => {
 
-    setSelectedInterests(
-      selectedInterests.filter((selectedInterest: SelectedInterest): boolean => {
-        return selectedInterest.slug !== slug;
-      }),
-    );
-  };
-
-  const handleCreateCampaign = async (formEvent: FormEvent): Promise<void> => {
-
-    formEvent.preventDefault();
-
-    if (campaignType !== "spotmu") {
-      return;
-    }
-
-    const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
-      readCampaignCreateRequirements(
-        campaignName,
-        selectedPlatforms,
-        selectedAccountIds,
-        selectedInterests,
-      ),
-    );
-
-    if (missingCreateLabels.length > 0) {
-      const missingListText: string = missingCreateLabels.join(", ");
-
-      setActionError(new Error(`Cannot create campaign: missing ${missingListText}.`));
-
+    if (selectedCampaign === null) {
       return;
     }
 
     setIsBusy(true);
     setActionError(null);
-    setStatusMessage("");
+    onStatusMessageChange("");
 
     try {
-      const createdCampaign: CampaignReadResponse = await createCampaign({
-        name: campaignName,
-        campaign_type: "spotmu",
-        advertisement_type: "carousel",
-        platforms: selectedPlatforms,
-        account_ids: selectedAccountIds,
-        interests: selectedInterests.map((selectedInterest: SelectedInterest) => {
-          return {
-            slug: selectedInterest.slug,
-            title: selectedInterest.title,
-            spotmu_interest_id: selectedInterest.spotmu_interest_id,
-          };
-        }),
-      });
+      const updatedCampaign: CampaignReadResponse = await runCampaignLifecycleAction(
+        selectedCampaign.id,
+        lifecycleAction,
+      );
+      const statusLabel: string = campaignStatusLabel(updatedCampaign.status);
 
-      setStatusMessage(`Created campaign ${createdCampaign.name} (${createdCampaign.status}).`);
-      resetCreateForm();
-      await reloadLists();
-      setActiveView("list");
+      await reloadCampaignsAfterAction(
+        updatedCampaign,
+        `${campaignLifecycleActionPastLabel(lifecycleAction)} ${updatedCampaign.name} (${statusLabel}).`,
+      );
     } catch (caughtError: unknown) {
       setActionError(caughtError);
     } finally {
@@ -321,82 +169,64 @@ export function CampaignsPage(): ReactElement {
     }
   };
 
+  if (openedCampaignId !== null) {
+    return (
+      <CampaignDetailView
+        selectedCampaign={selectedCampaign}
+        canWrite={canWrite}
+        isBusy={isBusy}
+        loadError={loadError}
+        actionError={actionError}
+        statusMessage={statusMessage}
+        onBack={(): void => {
+          onOpenedCampaignIdChange(null);
+          setActionError(null);
+        }}
+        onLifecycleAction={handleLifecycleAction}
+      />
+    );
+  }
+
   return (
-    <section>
-      {activeView === "list" ? (
-        <CampaignListView
-          campaigns={campaigns}
-          canWrite={canWrite}
-          loadError={loadError}
-          actionError={actionError}
-          statusMessage={statusMessage}
-          onNewCampaign={handleOpenCreate}
-        />
-      ) : (
-        <NewCampaignForm
-          canWrite={canWrite}
-          isBusy={isBusy}
-          actionError={actionError}
-          campaignName={campaignName}
-          campaignType={campaignType}
-          selectedPlatforms={selectedPlatforms}
-          platformToAdd={platformToAdd}
-          filteredAccounts={filteredAccounts}
-          selectedAccountIds={selectedAccountIds}
-          selectedInterests={selectedInterests}
-          interestQuery={interestQuery}
-          interestHits={interestHits}
-          isSearchingInterests={isSearchingInterests}
-          interestSearchError={interestSearchError}
-          onCampaignNameChange={setCampaignName}
-          onCampaignTypeChange={setCampaignType}
-          onPlatformToAddChange={setPlatformToAdd}
-          onAddPlatform={handleAddPlatform}
-          onRemovePlatform={handleRemovePlatform}
-          onToggleAccount={handleToggleAccount}
-          onInterestQueryChange={setInterestQuery}
-          onSearchInterests={handleSearchInterests}
-          onAddInterest={handleAddInterest}
-          onRemoveInterest={handleRemoveInterest}
-          onSubmit={handleCreateCampaign}
-          onCancel={handleCancelCreate}
-        />
-      )}
-    </section>
+    <CampaignListView
+      campaigns={campaigns}
+      loadError={loadError}
+      actionError={actionError}
+      statusMessage={statusMessage}
+      onSelectCampaign={(campaignId: string): void => {
+        setActionError(null);
+        onOpenedCampaignIdChange(campaignId);
+      }}
+    />
   );
 }
 
 interface CampaignListViewProps {
   campaigns: CampaignReadResponse[];
-  canWrite: boolean;
   loadError: unknown;
   actionError: unknown;
   statusMessage: string;
-  onNewCampaign: () => void;
+  onSelectCampaign: (campaignId: string) => void;
 }
 
 function CampaignListView({
   campaigns,
-  canWrite,
   loadError,
   actionError,
   statusMessage,
-  onNewCampaign,
+  onSelectCampaign,
 }: CampaignListViewProps): ReactElement {
 
   return (
-    <>
+    <section>
       <div className="page-header-row">
         <div>
           <h1>Campaigns</h1>
           <p className="lede">
-            Marketing campaigns (name, platforms, accounts, Spotmu interests).
-            Create stores a definition only — it does not start or generate.
+            All saved campaigns. Open a row for details and lifecycle actions
+            (Start / Pause / Resume / Finish). Create lives on New Campaign.
           </p>
         </div>
-        <button type="button" disabled={!canWrite} onClick={onNewCampaign}>
-          New Campaign
-        </button>
       </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
@@ -404,432 +234,234 @@ function CampaignListView({
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 
       {loadError !== null ? null : campaigns.length === 0 ? (
-        <p>No campaigns yet. Create a Spotmu campaign to persist a draft definition.</p>
+        <p>No campaigns yet. Use New Campaign to persist a Ready definition.</p>
       ) : (
         <table>
           <thead>
             <tr>
               <th>Name</th>
               <th>Type</th>
+              <th>Status</th>
               <th>Platforms</th>
               <th>Interests</th>
               <th>Accounts</th>
-              <th>Status</th>
               <th>Created</th>
+              <th>View</th>
             </tr>
           </thead>
           <tbody>
             {campaigns.map((campaign: CampaignReadResponse): ReactElement => (
-              <tr key={campaign.id}>
+              <tr
+                key={campaign.id}
+                className="clickable-row"
+                onClick={(): void => {
+                  onSelectCampaign(campaign.id);
+                }}
+              >
                 <td>{campaign.name}</td>
                 <td>{campaign.campaign_type}</td>
-                <td>{formatPlatforms(campaign.platforms)}</td>
+                <td>
+                  <CampaignStatusBadge campaignStatus={campaign.status} />
+                </td>
+                <td>{formatCampaignPlatforms(campaign.platforms)}</td>
                 <td>{campaign.interest_count}</td>
                 <td>{campaign.account_count}</td>
-                <td>{campaign.status}</td>
-                <td className="mono">{formatCreatedAt(campaign.created_at)}</td>
+                <td className="mono">{formatCampaignTimestamp(campaign.created_at)}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={(clickEvent): void => {
+                      clickEvent.stopPropagation();
+                      onSelectCampaign(campaign.id);
+                    }}
+                  >
+                    View
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-    </>
+    </section>
   );
 }
 
-interface NewCampaignFormProps {
+interface CampaignDetailViewProps {
+  selectedCampaign: CampaignReadResponse | null;
   canWrite: boolean;
   isBusy: boolean;
+  loadError: unknown;
   actionError: unknown;
-  campaignName: string;
-  campaignType: CampaignType;
-  selectedPlatforms: Platform[];
-  platformToAdd: Platform;
-  filteredAccounts: AccountReadResponse[];
-  selectedAccountIds: string[];
-  selectedInterests: SelectedInterest[];
-  interestQuery: string;
-  interestHits: SpotmuInterestSearchHit[];
-  isSearchingInterests: boolean;
-  interestSearchError: unknown;
-  onCampaignNameChange: (campaignName: string) => void;
-  onCampaignTypeChange: (campaignType: CampaignType) => void;
-  onPlatformToAddChange: (platform: Platform) => void;
-  onAddPlatform: () => void;
-  onRemovePlatform: (platform: Platform) => void;
-  onToggleAccount: (accountId: string) => void;
-  onInterestQueryChange: (query: string) => void;
-  onSearchInterests: () => Promise<void>;
-  onAddInterest: (searchHit: SpotmuInterestSearchHit) => void;
-  onRemoveInterest: (slug: string) => void;
-  onSubmit: (formEvent: FormEvent) => Promise<void>;
-  onCancel: () => void;
+  statusMessage: string;
+  onBack: () => void;
+  onLifecycleAction: (lifecycleAction: CampaignLifecycleAction) => Promise<void>;
 }
 
-function NewCampaignForm({
+function CampaignDetailView({
+  selectedCampaign,
   canWrite,
   isBusy,
+  loadError,
   actionError,
-  campaignName,
-  campaignType,
-  selectedPlatforms,
-  platformToAdd,
-  filteredAccounts,
-  selectedAccountIds,
-  selectedInterests,
-  interestQuery,
-  interestHits,
-  isSearchingInterests,
-  interestSearchError,
-  onCampaignNameChange,
-  onCampaignTypeChange,
-  onPlatformToAddChange,
-  onAddPlatform,
-  onRemovePlatform,
-  onToggleAccount,
-  onInterestQueryChange,
-  onSearchInterests,
-  onAddInterest,
-  onRemoveInterest,
-  onSubmit,
-  onCancel,
-}: NewCampaignFormProps): ReactElement {
+  statusMessage,
+  onBack,
+  onLifecycleAction,
+}: CampaignDetailViewProps): ReactElement {
 
-  const isOtherType: boolean = campaignType === "other";
-  const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
-    readCampaignCreateRequirements(
-      campaignName,
-      selectedPlatforms,
-      selectedAccountIds,
-      selectedInterests,
-    ),
-  );
-  const canCreate: boolean =
-    canWrite && !isBusy && !isOtherType && missingCreateLabels.length === 0;
+  const allowedActions: CampaignLifecycleAction[] =
+    selectedCampaign === null
+      ? []
+      : listAllowedCampaignLifecycleActions(selectedCampaign.status);
 
   return (
-    <>
+    <section>
       <div className="page-header-row">
         <div>
-          <h1>New Campaign</h1>
+          <h1>{selectedCampaign === null ? "Campaign" : selectedCampaign.name}</h1>
           <p className="lede">
-            Save a not-started campaign definition. Start, generate, and schedule
-            are not in this flow.
+            Basic campaign record. Start flips status only — it does not ingest
+            or generate yet.
           </p>
         </div>
-        <button type="button" onClick={onCancel}>
+        <button type="button" onClick={onBack}>
           Back to list
         </button>
       </div>
       <ReadOnlyNotice />
+      <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
+      {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 
-      <form
-        className="stack-form campaign-form"
-        onSubmit={(formEvent: FormEvent): void => {
-          void onSubmit(formEvent);
-        }}
-      >
-        <label>
-          Campaign name
-          <input
-            value={campaignName}
-            onChange={(changeEvent): void => {
-              onCampaignNameChange(changeEvent.target.value);
-            }}
-            required={!isOtherType}
-            disabled={!canWrite || isBusy}
-          />
-        </label>
+      {selectedCampaign === null ? (
+        loadError === null ? <p>Loading campaign…</p> : null
+      ) : (
+        <>
+          <dl className="campaign-detail-list">
+            <dt>Name</dt>
+            <dd>{selectedCampaign.name}</dd>
+            <dt>Hashtag</dt>
+            <dd className="mono">{selectedCampaign.hashtag}</dd>
+            <dt>Slug</dt>
+            <dd className="mono">{selectedCampaign.slug}</dd>
+            <dt>Status</dt>
+            <dd>
+              <CampaignStatusBadge campaignStatus={selectedCampaign.status} />
+            </dd>
+            <dt>Type</dt>
+            <dd>{selectedCampaign.campaign_type}</dd>
+            <dt>Advertisement</dt>
+            <dd>{selectedCampaign.advertisement_type}</dd>
+            <dt>Platforms</dt>
+            <dd>{formatCampaignPlatforms(selectedCampaign.platforms)}</dd>
+            <dt>Accounts</dt>
+            <dd>
+              <CampaignAccountList accounts={selectedCampaign.accounts} />
+            </dd>
+            <dt>Spotmu interests</dt>
+            <dd>
+              <CampaignInterestList interests={selectedCampaign.interests} />
+            </dd>
+            <dt>Created</dt>
+            <dd className="mono">{formatCampaignTimestamp(selectedCampaign.created_at)}</dd>
+            <dt>Updated</dt>
+            <dd className="mono">{formatCampaignTimestamp(selectedCampaign.updated_at)}</dd>
+            <dt>Created by</dt>
+            <dd className="mono">
+              {selectedCampaign.created_by === null ? "—" : selectedCampaign.created_by}
+            </dd>
+          </dl>
 
-        <label>
-          Campaign type
-          <select
-            value={campaignType}
-            onChange={(changeEvent): void => {
-              onCampaignTypeChange(changeEvent.target.value as CampaignType);
-            }}
-            disabled={!canWrite || isBusy}
-          >
-            <option value="spotmu">Spotmu</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
+          {canWrite ? (
+            <div className="button-row">
+              {(["start", "pause", "resume", "finish"] as CampaignLifecycleAction[]).map(
+                (lifecycleAction: CampaignLifecycleAction): ReactElement => {
+                  const isAllowed: boolean = allowedActions.includes(lifecycleAction);
 
-        {isOtherType ? (
-          <p className="coming-soon-banner" role="status">
-            Not implemented yet. Coming soon.
-          </p>
-        ) : (
-          <>
-            <label>
-              Advertisement type
-              <select value="carousel" disabled={true}>
-                <option value="carousel">Carousel</option>
-              </select>
-            </label>
-
-            <fieldset className="form-fieldset">
-              <legend>Platforms</legend>
-              <p className="field-hint">Instagram and TikTok only for now.</p>
-              <div className="inline-add-row">
-                <select
-                  value={platformToAdd}
-                  onChange={(changeEvent): void => {
-                    onPlatformToAddChange(changeEvent.target.value as Platform);
-                  }}
-                  disabled={!canWrite || isBusy}
-                >
-                  {AVAILABLE_PLATFORMS.map((platform: Platform): ReactElement => (
-                    <option key={platform} value={platform}>
-                      {platform}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={!canWrite || isBusy || selectedPlatforms.includes(platformToAdd)}
-                  onClick={onAddPlatform}
-                >
-                  +
-                </button>
-              </div>
-              {selectedPlatforms.length === 0 ? (
-                <p className="empty-hint">No platforms added yet.</p>
-              ) : (
-                <ul className="chip-list">
-                  {selectedPlatforms.map((platform: Platform): ReactElement => (
-                    <li key={platform} className="chip">
-                      <span>{platform}</span>
-                      <button
-                        type="button"
-                        disabled={!canWrite || isBusy}
-                        onClick={(): void => {
-                          onRemovePlatform(platform);
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                  return (
+                    <button
+                      key={lifecycleAction}
+                      type="button"
+                      disabled={!isAllowed || isBusy}
+                      className={lifecycleAction === "finish" ? "danger" : undefined}
+                      onClick={(): void => {
+                        void onLifecycleAction(lifecycleAction);
+                      }}
+                    >
+                      {isBusy && isAllowed
+                        ? "Saving…"
+                        : campaignLifecycleActionLabel(lifecycleAction)}
+                    </button>
+                  );
+                },
               )}
-            </fieldset>
-
-            <fieldset className="form-fieldset">
-              <legend>Accounts</legend>
-              <p className="field-hint">
-                Select at least one Instagram / TikTok handle that will publish later.
-              </p>
-              {selectedPlatforms.length === 0 ? (
-                <p className="empty-hint">Add a platform to see matching accounts.</p>
-              ) : filteredAccounts.length === 0 ? (
-                <p className="empty-hint">
-                  No accounts on the selected platforms. Add an account first.
-                </p>
-              ) : (
-                <ul className="account-pick-list">
-                  {filteredAccounts.map((account: AccountReadResponse): ReactElement => {
-                    const isChecked: boolean = selectedAccountIds.includes(account.id);
-
-                    return (
-                      <li key={account.id}>
-                        <label className="checkbox-row">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            disabled={!canWrite || isBusy}
-                            onChange={(): void => {
-                              onToggleAccount(account.id);
-                            }}
-                          />
-                          <span>
-                            {account.handle} ({account.platform})
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </fieldset>
-
-            <fieldset className="form-fieldset">
-              <legend>Interest sources</legend>
-              <p className="field-hint">
-                Search live Spotmu interests and add at least one. This does not
-                ingest or generate carousels.
-              </p>
-              <div className="inline-add-row">
-                <input
-                  type="search"
-                  placeholder="Search Spotmu interests"
-                  value={interestQuery}
-                  onChange={(changeEvent): void => {
-                    onInterestQueryChange(changeEvent.target.value);
-                  }}
-                  onKeyDown={(keyboardEvent): void => {
-                    if (keyboardEvent.key !== "Enter") {
-                      return;
-                    }
-
-                    keyboardEvent.preventDefault();
-                    void onSearchInterests();
-                  }}
-                  disabled={!canWrite || isBusy}
-                />
-                <button
-                  type="button"
-                  disabled={!canWrite || isBusy || isSearchingInterests || interestQuery.trim() === ""}
-                  onClick={(): void => {
-                    void onSearchInterests();
-                  }}
-                >
-                  {isSearchingInterests ? "Searching…" : "Search"}
-                </button>
-              </div>
-              <ErrorBanner error={interestSearchError} />
-              {interestHits.length === 0 ? null : (
-                <ul className="search-hit-list">
-                  {interestHits.map((searchHit: SpotmuInterestSearchHit): ReactElement => {
-                    const alreadyAdded: boolean = selectedInterests.some(
-                      (selectedInterest: SelectedInterest): boolean => {
-                        return selectedInterest.slug === searchHit.slug;
-                      },
-                    );
-
-                    return (
-                      <li key={searchHit.slug} className="search-hit-row">
-                        <span>
-                          {searchHit.title}
-                          <span className="mono"> {searchHit.slug}</span>
-                        </span>
-                        <button
-                          type="button"
-                          disabled={!canWrite || isBusy || alreadyAdded}
-                          onClick={(): void => {
-                            onAddInterest(searchHit);
-                          }}
-                        >
-                          {alreadyAdded ? "Added" : "Add"}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {selectedInterests.length === 0 ? (
-                <p className="empty-hint">No interests added yet.</p>
-              ) : (
-                <ul className="chip-list">
-                  {selectedInterests.map((selectedInterest: SelectedInterest): ReactElement => (
-                    <li key={selectedInterest.slug} className="chip">
-                      <span>
-                        {selectedInterest.title}
-                        <span className="mono"> {selectedInterest.slug}</span>
-                      </span>
-                      <button
-                        type="button"
-                        disabled={!canWrite || isBusy}
-                        onClick={(): void => {
-                          onRemoveInterest(selectedInterest.slug);
-                        }}
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </fieldset>
-          </>
-        )}
-
-        {isOtherType || !canWrite || isBusy || missingCreateLabels.length === 0 ? null : (
-          <p className="field-hint">
-            Add {missingCreateLabels.join(", ")} before creating.
-          </p>
-        )}
-        <div className="button-row">
-          {isOtherType ? null : (
-            <button type="submit" disabled={!canCreate}>
-              {isBusy ? "Saving…" : "Create Campaign"}
-            </button>
-          )}
-          <button type="button" onClick={onCancel}>
-            Cancel
-          </button>
-        </div>
-      </form>
-    </>
+            </div>
+          ) : null}
+        </>
+      )}
+    </section>
   );
 }
 
-interface CampaignCreateRequirements {
-  hasName: boolean;
-  hasPlatform: boolean;
-  hasAccount: boolean;
-  hasInterest: boolean;
+interface CampaignAccountListProps {
+  accounts: CampaignAccountReadResponse[];
 }
 
-function readCampaignCreateRequirements(
-  campaignName: string,
-  selectedPlatforms: Platform[],
-  selectedAccountIds: string[],
-  selectedInterests: SelectedInterest[],
-): CampaignCreateRequirements {
+function CampaignAccountList({ accounts }: CampaignAccountListProps): ReactElement {
 
-  const campaignCreateRequirements: CampaignCreateRequirements = {
-    hasName: campaignName.trim() !== "",
-    hasPlatform: selectedPlatforms.length > 0,
-    hasAccount: selectedAccountIds.length > 0,
-    hasInterest: selectedInterests.length > 0,
-  };
+  if (accounts.length === 0) {
+    return <span>—</span>;
+  }
 
-  return campaignCreateRequirements;
+  return (
+    <ul className="campaign-detail-sublist">
+      {accounts.map((account: CampaignAccountReadResponse): ReactElement => (
+        <li key={account.id}>
+          {account.handle} ({account.platform})
+        </li>
+      ))}
+    </ul>
+  );
 }
 
-function listMissingCampaignCreateLabels(
-  campaignCreateRequirements: CampaignCreateRequirements,
-): string[] {
-
-  const missingLabels: string[] = [];
-
-  if (!campaignCreateRequirements.hasName) {
-    missingLabels.push("a campaign name");
-  }
-
-  if (!campaignCreateRequirements.hasPlatform) {
-    missingLabels.push("at least one platform");
-  }
-
-  if (!campaignCreateRequirements.hasAccount) {
-    missingLabels.push("at least one account");
-  }
-
-  if (!campaignCreateRequirements.hasInterest) {
-    missingLabels.push("at least one Spotmu interest");
-  }
-
-  return missingLabels;
+interface CampaignInterestListProps {
+  interests: CampaignInterestReadResponse[];
 }
 
-function formatPlatforms(platforms: Platform[]): string {
+function CampaignInterestList({ interests }: CampaignInterestListProps): ReactElement {
 
-  if (platforms.length === 0) {
-    return "—";
+  if (interests.length === 0) {
+    return <span>—</span>;
   }
 
-  return platforms.join(", ");
+  return (
+    <ul className="campaign-detail-sublist">
+      {interests.map((interest: CampaignInterestReadResponse): ReactElement => (
+        <li key={interest.slug}>
+          {interest.title === null || interest.title === "" ? interest.slug : interest.title}
+          <span className="mono"> {interest.slug}</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
-function formatCreatedAt(createdAt: string): string {
+async function runCampaignLifecycleAction(
+  campaignId: string,
+  lifecycleAction: CampaignLifecycleAction,
+): Promise<CampaignReadResponse> {
 
-  const parsedDate: Date = new Date(createdAt);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return createdAt;
+  if (lifecycleAction === "start") {
+    return startCampaign(campaignId);
   }
 
-  return parsedDate.toISOString().replace("T", " ").slice(0, 19);
+  if (lifecycleAction === "pause") {
+    return pauseCampaign(campaignId);
+  }
+
+  if (lifecycleAction === "resume") {
+    return resumeCampaign(campaignId);
+  }
+
+  return finishCampaign(campaignId);
 }

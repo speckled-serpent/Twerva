@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 os.environ.setdefault("TWERVA_ENV", "test")
 
+from fastapi import HTTPException
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
@@ -20,7 +21,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.api.v1.accounts import create_account, get_account_by_id
 from app.api.v1.artifacts import create_artifact, get_artifact_by_id
 from app.api.v1.brands import create_brand, get_brand_by_id, list_brands
-from app.api.v1.campaigns import create_campaign, get_campaign_by_id, list_campaigns
+from app.api.v1.campaigns import (
+    create_campaign,
+    finish_campaign_by_id,
+    get_campaign_by_id,
+    list_campaigns,
+    pause_campaign_by_id,
+    resume_campaign_by_id,
+    start_campaign_by_id,
+)
 from app.api.v1.clusters import (
     attach_source_item_to_cluster,
     create_cluster,
@@ -248,7 +257,7 @@ class ApiPersistTests(unittest.TestCase):
         self.assertEqual(fetched_post_job.status, PostJobStatus.SCHEDULED)
 
     def test_create_and_list_spotmu_campaign(self) -> None:
-        """Persist a not-started Spotmu campaign with accounts and interests."""
+        """Persist a ready Spotmu campaign with accounts and interests."""
 
         run_suffix: str = uuid.uuid4().hex[:8]
         created_brand = create_brand(
@@ -303,7 +312,7 @@ class ApiPersistTests(unittest.TestCase):
         )
 
         self.assertIn(created_campaign.id, listed_campaign_ids)
-        self.assertEqual(created_campaign.status, CampaignStatus.NOT_STARTED)
+        self.assertEqual(created_campaign.status, CampaignStatus.READY)
         self.assertEqual(created_campaign.slug, f"my-campaign-{run_suffix}")
         self.assertEqual(created_campaign.hashtag, f"#my-campaign-{run_suffix}")
         self.assertEqual(created_campaign.account_count, 1)
@@ -313,6 +322,80 @@ class ApiPersistTests(unittest.TestCase):
             {interest.slug for interest in fetched_campaign.interests},
             {"ai-agents", "anthropic"},
         )
+
+    def test_campaign_lifecycle_happy_path_and_illegal_finish_from_ready(self) -> None:
+        """Create defaults to ready; start/pause/resume/finish persist; ready cannot finish."""
+
+        run_suffix: str = uuid.uuid4().hex[:8]
+        created_brand = create_brand(
+            BrandCreateRequest(
+                slug=f"lifecycle-brand-{run_suffix}",
+                name="Lifecycle Brand",
+            ),
+            self.our_database_session,
+        )
+        created_cluster = create_cluster(
+            ClusterCreateRequest(
+                brand_id=created_brand.id,
+                slug=f"lifecycle-lane-{run_suffix}",
+                name="Lifecycle lane",
+            ),
+            self.our_database_session,
+        )
+        created_account = create_account(
+            AccountCreateRequest(
+                cluster_id=created_cluster.id,
+                platform=Platform.INSTAGRAM,
+                handle=f"lifecycle_{run_suffix}",
+            ),
+            self.our_database_session,
+        )
+        ready_campaign = create_campaign(
+            CampaignCreateRequest(
+                name=f"Lifecycle Campaign {run_suffix}",
+                campaign_type=CampaignType.SPOTMU,
+                advertisement_type=AdvertisementType.CAROUSEL,
+                platforms=[Platform.INSTAGRAM],
+                account_ids=[created_account.id],
+                interests=[
+                    CampaignInterestWrite(slug="ai-agents", title="AI Agents"),
+                ],
+            ),
+            self.our_database_session,
+            None,
+        )
+
+        self.assertEqual(ready_campaign.status, CampaignStatus.READY)
+
+        with self.assertRaises(HTTPException) as raised_finish:
+            finish_campaign_by_id(ready_campaign.id, self.our_database_session)
+
+        self.assertEqual(raised_finish.exception.status_code, 400)
+        still_ready = get_campaign_by_id(ready_campaign.id, self.our_database_session)
+        self.assertEqual(still_ready.status, CampaignStatus.READY)
+
+        started_campaign = start_campaign_by_id(
+            ready_campaign.id,
+            self.our_database_session,
+        )
+        paused_campaign = pause_campaign_by_id(
+            started_campaign.id,
+            self.our_database_session,
+        )
+        resumed_campaign = resume_campaign_by_id(
+            paused_campaign.id,
+            self.our_database_session,
+        )
+        finished_campaign = finish_campaign_by_id(
+            resumed_campaign.id,
+            self.our_database_session,
+        )
+
+        self.assertEqual(started_campaign.status, CampaignStatus.RUNNING)
+        self.assertEqual(paused_campaign.status, CampaignStatus.PAUSED)
+        self.assertEqual(resumed_campaign.status, CampaignStatus.RUNNING)
+        self.assertEqual(finished_campaign.status, CampaignStatus.FINISHED)
+        self.assertEqual(finished_campaign.accounts[0].handle, f"lifecycle_{run_suffix}")
 
 
 if __name__ == "__main__":

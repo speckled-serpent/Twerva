@@ -361,3 +361,69 @@ td {
   background: #f7f3e2;
   color: #5a4a10;
 }
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row:hover {
+  background: #ecece6;
+}
+
+.campaign-status-badge {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid #888;
+  background: #fff;
+  font-size: 0.8rem;
+}
+
+.campaign-status-badge.is-ready {
+  border-color: #6a7a8a;
+  background: #eef2f6;
+  color: #2a3a4a;
+}
+
+.campaign-status-badge.is-running {
+  border-color: #3a7a3a;
+  background: #eaf6ea;
+  color: #1a5a1a;
+}
+
+.campaign-status-badge.is-paused {
+  border-color: #8a7a3a;
+  background: #f7f3e2;
+  color: #5a4a10;
+}
+
+.campaign-status-badge.is-finished {
+  border-color: #888;
+  background: #eee;
+  color: #4a4a4a;
+}
+
+.campaign-detail-list {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: 0.35rem 0.75rem;
+  margin: 0 0 1rem;
+  max-width: 48rem;
+}
+
+.campaign-detail-list dt {
+  font-weight: 600;
+  color: #4a4a4a;
+}
+
+.campaign-detail-list dd {
+  margin: 0;
+}
+
+.campaign-detail-sublist {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}

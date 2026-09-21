@@ -4,6 +4,7 @@ import type { OpsUserRole } from "../api/types";
 
 export type OpsPageId =
   | "campaigns"
+  | "new-campaign"
   | "queue"
   | "schedule"
   | "accounts"
@@ -29,6 +30,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { pageId: "campaigns", label: "Campaigns" },
+  { pageId: "new-campaign", label: "New Campaign" },
   { pageId: "queue", label: "Queue" },
   { pageId: "schedule", label: "Schedule" },
   { pageId: "accounts", label: "Accounts" },

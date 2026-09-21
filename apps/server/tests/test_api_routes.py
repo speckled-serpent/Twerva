@@ -19,6 +19,10 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/source-items/{source_item_id}",
         "/api/v1/campaigns",
         "/api/v1/campaigns/{campaign_id}",
+        "/api/v1/campaigns/{campaign_id}/start",
+        "/api/v1/campaigns/{campaign_id}/pause",
+        "/api/v1/campaigns/{campaign_id}/resume",
+        "/api/v1/campaigns/{campaign_id}/finish",
         "/api/v1/spotmu/interests/search",
         "/api/v1/clusters",
         "/api/v1/clusters/{cluster_id}",
@@ -148,6 +152,20 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         self.assertIn("patch", artifact_item_methods)
         self.assertIn("get", artifact_item_methods)
         self.assertIn("post", schedule_methods)
+
+    def test_campaign_lifecycle_routes_accept_post(self) -> None:
+        """Start / pause / resume / finish are POST actions on a campaign."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        start_methods: set[str] = methods_by_path["/api/v1/campaigns/{campaign_id}/start"]
+        pause_methods: set[str] = methods_by_path["/api/v1/campaigns/{campaign_id}/pause"]
+        resume_methods: set[str] = methods_by_path["/api/v1/campaigns/{campaign_id}/resume"]
+        finish_methods: set[str] = methods_by_path["/api/v1/campaigns/{campaign_id}/finish"]
+
+        self.assertIn("post", start_methods)
+        self.assertIn("post", pause_methods)
+        self.assertIn("post", resume_methods)
+        self.assertIn("post", finish_methods)
 
     def test_publish_run_route_accepts_post(self) -> None:
         """1.6c-i: POST /api/v1/publish/run/{post_job_id} is registered."""

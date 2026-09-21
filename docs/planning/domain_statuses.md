@@ -204,19 +204,37 @@ sleep). Already `published` / `measured` / `publishing` is HTTP 409.
 `AYRSHARE_API_KEY` is set; live HTTP is **not** wired in 1.6 (see
 `docs/reports/task_1_6_publish_spike.md`).
 
-## Campaign (create-only)
+## Campaign (`campaign_status`)
 
-Closed vocabularies on `campaigns` (Alembic `campaigns_create_ui`):
+Closed vocabularies on `campaigns` (Alembic `campaigns_create_ui`,
+lifecycle values in `campaign_status_lifecycle`):
 
 | Enum | Values |
 |---|---|
 | `campaign_type` | `spotmu`, `other` |
 | `advertisement_type` | `carousel` |
-| `campaign_status` | `not_started` |
+| `campaign_status` | `ready`, `running`, `paused`, `finished` |
 
-Create persists a definition only. `other` is rejected by the API
-(`400`). Start / generate / schedule are not implemented on this
-object yet. `slug` and `hashtag` (`#slug`) are unique and derived
-from `name`. Platforms are a JSONB list of `instagram` / `tiktok`.
-Accounts and Spotmu interests live on `campaign_accounts` and
+Create persists a definition with status **`ready`**. `other` is
+rejected by the API (`400`). `slug` and `hashtag` (`#slug`) are unique
+and derived from `name`. Platforms are a JSONB list of `instagram` /
+`tiktok`. Accounts and Spotmu interests live on `campaign_accounts` and
 `campaign_interests`.
+
+Existing rows stored as `not_started` (create-only slice) become
+`ready` by renaming the enum value.
+
+Start / pause / resume / finish are **status flips only** — they do not
+ingest interests or generate carousels. Illegal transitions and
+already-in-target actions are HTTP **400**.
+
+Allowed transitions (also `CAMPAIGN_STATUS_TRANSITIONS`):
+
+| Action | From | To |
+|---|---|---|
+| `POST .../start` | `ready` | `running` |
+| `POST .../pause` | `running` | `paused` |
+| `POST .../resume` | `paused` | `running` |
+| `POST .../finish` | `running`, `paused` | `finished` |
+
+`ready` cannot jump to `finished`. `finished` is terminal.

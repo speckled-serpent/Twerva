@@ -1,8 +1,9 @@
-"""Campaign create/list/get routes. Persist definition only."""
+"""Campaign create/list/get plus start/pause/resume/finish status actions."""
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -18,6 +19,13 @@ from app.api.v1.schemas import (
     CampaignReadResponse,
 )
 from app.auth.dependencies import require_authenticated_ops_operator
+from app.campaigns.errors import CampaignLifecycleError
+from app.campaigns.lifecycle import (
+    finish_campaign,
+    pause_campaign,
+    resume_campaign,
+    start_campaign,
+)
 from app.campaigns.slug import (
     allocate_unique_campaign_slug,
     hashtag_from_campaign_slug,
@@ -62,7 +70,7 @@ def create_campaign(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
 ) -> CampaignReadResponse:
-    """Persist a not-started campaign definition. No ingest or generate."""
+    """Persist a ready campaign definition. No ingest or generate."""
 
     if campaign_create_request.campaign_type == CampaignType.OTHER:
         raise HTTPException(
@@ -111,7 +119,7 @@ def create_campaign(
         hashtag=campaign_hashtag,
         campaign_type=campaign_create_request.campaign_type,
         advertisement_type=campaign_create_request.advertisement_type,
-        status=CampaignStatus.NOT_STARTED,
+        status=CampaignStatus.READY,
         platforms=platform_values,
         created_by=None if current_ops_operator is None else current_ops_operator.id,
     )
@@ -193,6 +201,74 @@ def get_campaign_by_id(
     return campaign_read_response
 
 
+@campaigns_router.post("/{campaign_id}/start", response_model=CampaignReadResponse)
+def start_campaign_by_id(
+    campaign_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> CampaignReadResponse:
+    """Move a ready campaign to running. Does not ingest or generate."""
+
+    campaign_read_response: CampaignReadResponse = _apply_campaign_lifecycle_action_and_reload(
+        campaign_id,
+        our_database_session,
+        start_campaign,
+        "Campaign could not be started (conflict).",
+    )
+
+    return campaign_read_response
+
+
+@campaigns_router.post("/{campaign_id}/pause", response_model=CampaignReadResponse)
+def pause_campaign_by_id(
+    campaign_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> CampaignReadResponse:
+    """Move a running campaign to paused."""
+
+    campaign_read_response: CampaignReadResponse = _apply_campaign_lifecycle_action_and_reload(
+        campaign_id,
+        our_database_session,
+        pause_campaign,
+        "Campaign could not be paused (conflict).",
+    )
+
+    return campaign_read_response
+
+
+@campaigns_router.post("/{campaign_id}/resume", response_model=CampaignReadResponse)
+def resume_campaign_by_id(
+    campaign_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> CampaignReadResponse:
+    """Move a paused campaign back to running."""
+
+    campaign_read_response: CampaignReadResponse = _apply_campaign_lifecycle_action_and_reload(
+        campaign_id,
+        our_database_session,
+        resume_campaign,
+        "Campaign could not be resumed (conflict).",
+    )
+
+    return campaign_read_response
+
+
+@campaigns_router.post("/{campaign_id}/finish", response_model=CampaignReadResponse)
+def finish_campaign_by_id(
+    campaign_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> CampaignReadResponse:
+    """Move a running or paused campaign to finished."""
+
+    campaign_read_response: CampaignReadResponse = _apply_campaign_lifecycle_action_and_reload(
+        campaign_id,
+        our_database_session,
+        finish_campaign,
+        "Campaign could not be finished (conflict).",
+    )
+
+    return campaign_read_response
+
+
 def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
     """Map a Campaign row plus joins to the read schema.
 
@@ -245,6 +321,55 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
         created_at=campaign.created_at,
         updated_at=campaign.updated_at,
         created_by=campaign.created_by,
+    )
+
+    return campaign_read_response
+
+
+def _apply_campaign_lifecycle_action_and_reload(
+    campaign_id: uuid.UUID,
+    our_database_session: Session,
+    apply_lifecycle_action: Callable[[Campaign], Campaign],
+    conflict_detail: str,
+) -> CampaignReadResponse:
+    """Load a campaign, apply a status action, commit, and reload joins.
+
+    Args:
+        campaign_id: Campaign primary key.
+        our_database_session: Request-scoped SQLAlchemy session.
+        apply_lifecycle_action: start / pause / resume / finish mutator.
+        conflict_detail: Message if the commit hits an integrity error.
+
+    Returns:
+        Serialized campaign after the status change.
+
+    Raises:
+        HTTPException: 404 if missing; 400 on illegal or already-target status.
+    """
+
+    found_campaign: Campaign = fetch_campaign_by_id_or_raise(
+        campaign_id,
+        our_database_session,
+    )
+
+    try:
+        apply_lifecycle_action(found_campaign)
+    except CampaignLifecycleError as lifecycle_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(lifecycle_error),
+        ) from lifecycle_error
+
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail=conflict_detail,
+    )
+    reloaded_campaign: Campaign = _load_campaign_with_joins(
+        campaign_id,
+        our_database_session,
+    )
+    campaign_read_response: CampaignReadResponse = serialize_campaign(
+        reloaded_campaign,
     )
 
     return campaign_read_response

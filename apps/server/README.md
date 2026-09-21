@@ -93,7 +93,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`campaigns_create_ui`** (parent `artifact_template_id`).
+Current head: **`campaign_status_lifecycle`** (parent `campaigns_create_ui`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -119,7 +119,7 @@ alembic current
 ```
 
 `alembic current` opens Postgres on `127.0.0.1:5432` using `DATABASE_URL`.
-After `alembic upgrade head` it should report `campaigns_create_ui (head)`.
+After `alembic upgrade head` it should report `campaign_status_lifecycle (head)`.
 
 Local equivalent (your own `DATABASE_URL`):
 
@@ -169,7 +169,10 @@ curl -sS -b /tmp/twerva-ops.jar http://127.0.0.1:8000/api/v1/brands
 ## HTTP API (`/api/v1`)
 
 Cookie auth (see above). `POST` + `GET` list + `GET` by id for Brand, SourceItem, Cluster,
-Account, Artifact (includes `status`), and PostJob (includes `status`).
+Account, Artifact (includes `status`), PostJob (includes `status`), and
+Campaign (includes `status`). Campaign create stores `ready`. Lifecycle
+actions are `POST /api/v1/campaigns/{id}/start|pause|resume|finish`
+(status flip only; HTTP 400 on illegal or already-in-target).
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
 are Phase 1.5. `POST /api/v1/publish/run/{post_job_id}` mock-publishes a

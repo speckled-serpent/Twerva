@@ -92,11 +92,14 @@ class AdvertisementType(enum.StrEnum):
 class CampaignStatus(enum.StrEnum):
     """Lifecycle of a Campaign.
 
-    Create persists `not_started` only. Start / generate / schedule are
-    out of scope for the campaign-create slice.
+    Create persists `ready`. Start / pause / resume / finish flip status
+    only; they do not ingest or generate.
     """
 
-    NOT_STARTED = "not_started"
+    READY = "ready"
+    RUNNING = "running"
+    PAUSED = "paused"
+    FINISHED = "finished"
 
 
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
@@ -105,6 +108,17 @@ ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ),
     ArtifactStatus.APPROVED: frozenset({ArtifactStatus.REJECTED}),
     ArtifactStatus.REJECTED: frozenset(),
+}
+
+CAMPAIGN_STATUS_TRANSITIONS: dict[CampaignStatus, frozenset[CampaignStatus]] = {
+    CampaignStatus.READY: frozenset({CampaignStatus.RUNNING}),
+    CampaignStatus.RUNNING: frozenset(
+        {CampaignStatus.PAUSED, CampaignStatus.FINISHED},
+    ),
+    CampaignStatus.PAUSED: frozenset(
+        {CampaignStatus.RUNNING, CampaignStatus.FINISHED},
+    ),
+    CampaignStatus.FINISHED: frozenset(),
 }
 
 POST_JOB_STATUS_TRANSITIONS: dict[PostJobStatus, frozenset[PostJobStatus]] = {
