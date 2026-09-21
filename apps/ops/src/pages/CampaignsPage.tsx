@@ -21,6 +21,7 @@ import {
   campaignLifecycleActionLabel,
   campaignLifecycleActionPastLabel,
   campaignStatusLabel,
+  campaignTypeLabel,
   formatCampaignPlatforms,
   formatCampaignTimestamp,
   listAllowedCampaignLifecycleActions,
@@ -259,7 +260,7 @@ function CampaignListView({
                 }}
               >
                 <td>{campaign.name}</td>
-                <td>{campaign.campaign_type}</td>
+                <td>{campaignTypeLabel(campaign.campaign_type)}</td>
                 <td>
                   <CampaignStatusBadge campaignStatus={campaign.status} />
                 </td>
@@ -349,7 +350,7 @@ function CampaignDetailView({
               <CampaignStatusBadge campaignStatus={selectedCampaign.status} />
             </dd>
             <dt>Type</dt>
-            <dd>{selectedCampaign.campaign_type}</dd>
+            <dd>{campaignTypeLabel(selectedCampaign.campaign_type)}</dd>
             <dt>Advertisement</dt>
             <dd>{selectedCampaign.advertisement_type}</dd>
             <dt>Platforms</dt>

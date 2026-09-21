@@ -227,7 +227,7 @@ class DomainEnumTests(unittest.TestCase):
 
         self.assertEqual(
             {member.value for member in CampaignType},
-            {"spotmu", "other"},
+            {"spotmu", "spotmu_test", "other"},
         )
         self.assertEqual(
             {member.value for member in AdvertisementType},

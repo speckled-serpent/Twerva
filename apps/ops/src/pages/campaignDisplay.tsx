@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-import type { CampaignStatus, Platform } from "../api/types";
+import type { CampaignStatus, CampaignType, Platform } from "../api/types";
 
 export type CampaignLifecycleAction = "start" | "pause" | "resume" | "finish";
 
@@ -9,6 +9,12 @@ const CAMPAIGN_STATUS_LABELS: Record<CampaignStatus, string> = {
   running: "Running",
   paused: "Paused",
   finished: "Finished",
+};
+
+const CAMPAIGN_TYPE_LABELS: Record<CampaignType, string> = {
+  spotmu: "Spotmu",
+  spotmu_test: "Spotmu - test",
+  other: "Other",
 };
 
 const CAMPAIGN_LIFECYCLE_ACTION_LABELS: Record<CampaignLifecycleAction, string> = {
@@ -24,6 +30,32 @@ const CAMPAIGN_LIFECYCLE_ACTION_PAST_LABELS: Record<CampaignLifecycleAction, str
   resume: "Resumed",
   finish: "Finished",
 };
+
+/**
+ * Return the operator-facing label for a stored campaign type.
+ *
+ * @param campaignType - Stored campaign type
+ * @returns Spotmu / Spotmu - test / Other
+ */
+export function campaignTypeLabel(campaignType: CampaignType): string {
+
+  const typeLabel: string = CAMPAIGN_TYPE_LABELS[campaignType];
+
+  return typeLabel;
+}
+
+/**
+ * Return whether New Campaign requires a linked social account.
+ *
+ * @param campaignType - Selected campaign type
+ * @returns True only for production Spotmu
+ */
+export function campaignTypeRequiresLinkedAccount(campaignType: CampaignType): boolean {
+
+  const requiresLinkedAccount: boolean = campaignType === "spotmu";
+
+  return requiresLinkedAccount;
+}
 
 /**
  * Return the operator-facing label for a stored campaign status.

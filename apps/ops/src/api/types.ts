@@ -13,7 +13,7 @@ export type AccountStatus = "active" | "paused" | "disabled";
 
 export type SourceType = "spotmu_interest" | "brand_product" | "editorial_brief";
 
-export type CampaignType = "spotmu" | "other";
+export type CampaignType = "spotmu" | "spotmu_test" | "other";
 
 export type AdvertisementType = "carousel";
 

@@ -12,6 +12,7 @@ OPS_USERS_ROLE_REVISION_ID: str = "ops_users_role_rbac"
 ARTIFACT_TEMPLATE_ID_REVISION_ID: str = "artifact_template_id"
 CAMPAIGNS_CREATE_UI_REVISION_ID: str = "campaigns_create_ui"
 CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID: str = "campaign_status_lifecycle"
+CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID: str = "campaign_type_spotmu_test"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -42,6 +43,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{DOMAIN_REVISION_ID}.py",
                 f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
                 f"{CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID}.py",
+                f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py",
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
@@ -146,8 +148,8 @@ class AlembicInitializationTests(unittest.TestCase):
             ARTIFACT_TEMPLATE_ID_REVISION_ID,
         )
 
-    def test_campaign_status_lifecycle_revision_is_the_current_head(self) -> None:
-        """campaign_status_lifecycle is the current head after campaigns_create_ui."""
+    def test_campaign_status_lifecycle_revision_follows_campaigns_create_ui(self) -> None:
+        """campaign_status_lifecycle follows campaigns_create_ui."""
 
         assigned_values: dict[str, object] = _revision_module_constants(
             SERVER_ROOT_DIRECTORY
@@ -177,6 +179,32 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("ADD VALUE 'running'", revision_source)
         self.assertIn("ADD VALUE 'paused'", revision_source)
         self.assertIn("ADD VALUE 'finished'", revision_source)
+
+    def test_campaign_type_spotmu_test_revision_is_the_current_head(self) -> None:
+        """campaign_type_spotmu_test is the current head after lifecycle."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py",
+        )
+        revision_source: str = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID,
+        )
+        self.assertIn("ADD VALUE 'spotmu_test'", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""
