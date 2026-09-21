@@ -60,11 +60,18 @@ with a clear detail string for the ops form.
 
 ## Verified
 
-- Server unit tests: 188 collected, 14 persist skips (no Postgres in
-  this environment). Includes slug, schemas, routes, models, Alembic
-  head, mocked Spotmu search, Other-type 400.
+- Server unit tests: 188 collected. Persist campaign create/list/get
+  passed against local Postgres (`alembic upgrade head` →
+  `campaigns_create_ui`). Health still import-light without
+  `DATABASE_URL`.
+- Live HTTP on local uvicorn: guest Spotmu search (`q=ai`), `other`
+  create is 400, Spotmu campaign persists `not_started` with slug
+  `#spring-launch`, two interests, one account.
 - `npm run build` in `apps/ops` (`tsc -b` + Vite `dist/`).
-- Health still import-light (`GET /health` without `DATABASE_URL`).
+- Browser (Vite `:5173` + API): login → Campaigns list → Other
+  coming-soon → New Spotmu campaign with platforms, account, live
+  interest search/add/remove → list shows `not_started`. Queue and
+  Accounts still load.
 
 ## Out of scope
 
