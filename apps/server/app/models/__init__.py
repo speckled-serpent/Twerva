@@ -9,8 +9,8 @@ code may omit ``id`` on insert. The first domain migration enables the
 it in core (PostgreSQL 13+ also provides ``gen_random_uuid()`` in core).
 
 Closed vocabularies are native Postgres ENUM types. Allowed values and
-``PostJobStatus`` transitions live in ``app.models.enums`` and
-``docs/planning/domain_statuses.md``.
+``PostJobStatus`` / ``CampaignStatus`` transitions live in
+``app.models.enums`` and ``docs/planning/domain_statuses.md``.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -32,6 +32,7 @@ from app.models.enums import (
     ARTIFACT_STATUS_ENUM,
     ARTIFACT_STATUS_TRANSITIONS,
     CAMPAIGN_STATUS_ENUM,
+    CAMPAIGN_STATUS_TRANSITIONS,
     CAMPAIGN_TYPE_ENUM,
     OPS_USER_ROLE_ENUM,
     PLATFORM_ENUM,
@@ -71,6 +72,7 @@ __all__ = [
     "Base",
     "Brand",
     "CAMPAIGN_STATUS_ENUM",
+    "CAMPAIGN_STATUS_TRANSITIONS",
     "CAMPAIGN_TYPE_ENUM",
     "Campaign",
     "CampaignAccount",

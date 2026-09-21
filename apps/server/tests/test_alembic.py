@@ -11,6 +11,7 @@ OPS_USERS_REVISION_ID: str = "ops_users_web_auth"
 OPS_USERS_ROLE_REVISION_ID: str = "ops_users_role_rbac"
 ARTIFACT_TEMPLATE_ID_REVISION_ID: str = "artifact_template_id"
 CAMPAIGNS_CREATE_UI_REVISION_ID: str = "campaigns_create_ui"
+CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID: str = "campaign_status_lifecycle"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -40,6 +41,7 @@ class AlembicInitializationTests(unittest.TestCase):
             [
                 f"{DOMAIN_REVISION_ID}.py",
                 f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
+                f"{CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID}.py",
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
@@ -125,8 +127,8 @@ class AlembicInitializationTests(unittest.TestCase):
             OPS_USERS_ROLE_REVISION_ID,
         )
 
-    def test_campaigns_create_ui_revision_is_the_current_head(self) -> None:
-        """campaigns_create_ui is the current head after artifact_template_id."""
+    def test_campaigns_create_ui_revision_follows_artifact_template_id(self) -> None:
+        """campaigns_create_ui follows artifact_template_id."""
 
         assigned_values: dict[str, object] = _revision_module_constants(
             SERVER_ROOT_DIRECTORY
@@ -143,6 +145,38 @@ class AlembicInitializationTests(unittest.TestCase):
             assigned_values.get("down_revision"),
             ARTIFACT_TEMPLATE_ID_REVISION_ID,
         )
+
+    def test_campaign_status_lifecycle_revision_is_the_current_head(self) -> None:
+        """campaign_status_lifecycle is the current head after campaigns_create_ui."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID}.py",
+        )
+        revision_source: str = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID}.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAMPAIGNS_CREATE_UI_REVISION_ID,
+        )
+        self.assertIn(
+            "ALTER TYPE campaign_status RENAME VALUE 'not_started' TO 'ready'",
+            revision_source,
+        )
+        self.assertIn("ADD VALUE 'running'", revision_source)
+        self.assertIn("ADD VALUE 'paused'", revision_source)
+        self.assertIn("ADD VALUE 'finished'", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

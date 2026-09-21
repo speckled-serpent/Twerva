@@ -334,7 +334,7 @@ class ApiSchemaTests(unittest.TestCase):
             hashtag="#my-campaign",
             campaign_type=CampaignType.SPOTMU,
             advertisement_type=AdvertisementType.CAROUSEL,
-            status=CampaignStatus.NOT_STARTED,
+            status=CampaignStatus.READY,
             platforms=[Platform.INSTAGRAM],
             account_count=0,
             interest_count=1,
@@ -353,7 +353,7 @@ class ApiSchemaTests(unittest.TestCase):
             AdvertisementType.CAROUSEL,
         )
         self.assertEqual(campaign_create_request.interests[0].slug, "ai-agents")
-        self.assertEqual(campaign_read_response.status, CampaignStatus.NOT_STARTED)
+        self.assertEqual(campaign_read_response.status, CampaignStatus.READY)
         self.assertEqual(campaign_read_response.hashtag, "#my-campaign")
         self.assertEqual(search_hit.slug, "ai-agents")
 

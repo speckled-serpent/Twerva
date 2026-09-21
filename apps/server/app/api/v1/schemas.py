@@ -31,7 +31,7 @@ class CampaignCreateRequest(BaseModel):
     """Body for `POST /api/v1/campaigns`.
 
     Slug and hashtag are generated from ``name``. Status is always
-    ``not_started``. ``other`` campaign types are rejected by the handler.
+    ``ready``. ``other`` campaign types are rejected by the handler.
     Spotmu create requires a non-empty name plus at least one platform,
     account id, and interest after the handler strips and dedupes.
     Empty lists stay allowed on the model so ``other`` still parses.

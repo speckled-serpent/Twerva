@@ -53,15 +53,17 @@ admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
 
 ### Walk the loop in the browser
 
-1. **Campaigns** — **New Campaign** (Spotmu + carousel + platforms +
-   optional accounts + live Spotmu interest search). Saves `not_started`
-   only — no generate on this page.
-2. **Queue** — edit caption if needed → **Approve** (or Reject).
-3. **Accounts** — create a cluster + account if none exist (set
+1. **New Campaign** — Spotmu + carousel + platforms + accounts + live
+   Spotmu interest search. Saves `ready` only — no generate on this page.
+   Success opens the new campaign on **Campaigns**.
+2. **Campaigns** — list all campaigns; open a row for details and
+   Start / Pause / Resume / Finish (admin). Readers see data only.
+3. **Queue** — edit caption if needed → **Approve** (or Reject).
+4. **Accounts** — create a cluster + account if none exist (set
    `cadence_cap_per_day` if you want the cap enforced).
-4. **Schedule** — pick the approved artifact + account + time → **Schedule**
+5. **Schedule** — pick the approved artifact + account + time → **Schedule**
    → **Mock publish** on the new post job.
-5. **Results** — pick the cluster → median summary + agent-summary pane.
+6. **Results** — pick the cluster → median summary + agent-summary pane.
    **POST stub metrics** on a mock-published job (`platform_post_id` starts
    with `mock-`) so `median_views` is no longer null. Steer buttons live on
    **Accounts**.

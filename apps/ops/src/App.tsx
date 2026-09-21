@@ -6,15 +6,17 @@ import {
   fetchHealthStatus,
   logoutOpsOperator,
 } from "./api/client";
-import type { HealthReadResponse, OpsUserReadResponse } from "./api/types";
+import type { CampaignReadResponse, HealthReadResponse, OpsUserReadResponse } from "./api/types";
 import { NavBar, type OpsPageId } from "./components/NavBar";
 import { AccountPage } from "./pages/AccountPage";
 import { AccountsPage } from "./pages/AccountsPage";
+import { CampaignsPage } from "./pages/CampaignsPage";
+import { campaignStatusLabel } from "./pages/campaignDisplay";
 import { LoginPage } from "./pages/LoginPage";
+import { NewCampaignPage } from "./pages/NewCampaignPage";
 import { QueuePage } from "./pages/QueuePage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SchedulePage } from "./pages/SchedulePage";
-import { CampaignsPage } from "./pages/CampaignsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { OpsSessionContext, isAdminOpsRole } from "./session/OpsSessionContext";
 
@@ -32,6 +34,8 @@ export function App(): ReactElement {
     null,
   );
   const [activePageId, setActivePageId] = useState<OpsPageId>("campaigns");
+  const [openedCampaignId, setOpenedCampaignId] = useState<string | null>(null);
+  const [campaignStatusMessage, setCampaignStatusMessage] = useState<string>("");
   const [healthLabel, setHealthLabel] = useState<string>("API: checking…");
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -158,6 +162,10 @@ export function App(): ReactElement {
           activePageId={safeActivePageId}
           onNavigate={(pageId: OpsPageId): void => {
             setActivePageId(pageId);
+
+            if (pageId === "campaigns") {
+              setOpenedCampaignId(null);
+            }
           }}
           healthLabel={healthLabel}
           signedInUsername={signedInOperator.username}
@@ -167,16 +175,57 @@ export function App(): ReactElement {
             void handleLogout();
           }}
         />
-        <main className="ops-main">{renderActivePage(safeActivePageId)}</main>
+        <main className="ops-main">
+          {renderActivePage(
+            safeActivePageId,
+            openedCampaignId,
+            campaignStatusMessage,
+            setOpenedCampaignId,
+            setCampaignStatusMessage,
+            setActivePageId,
+          )}
+        </main>
       </div>
     </OpsSessionContext.Provider>
   );
 }
 
-function renderActivePage(activePageId: OpsPageId): ReactElement {
+function renderActivePage(
+  activePageId: OpsPageId,
+  openedCampaignId: string | null,
+  campaignStatusMessage: string,
+  onOpenedCampaignIdChange: (campaignId: string | null) => void,
+  onCampaignStatusMessageChange: (statusMessage: string) => void,
+  onNavigate: (pageId: OpsPageId) => void,
+): ReactElement {
 
   if (activePageId === "campaigns") {
-    return <CampaignsPage />;
+    return (
+      <CampaignsPage
+        openedCampaignId={openedCampaignId}
+        statusMessage={campaignStatusMessage}
+        onOpenedCampaignIdChange={onOpenedCampaignIdChange}
+        onStatusMessageChange={onCampaignStatusMessageChange}
+      />
+    );
+  }
+
+  if (activePageId === "new-campaign") {
+    return (
+      <NewCampaignPage
+        onCreated={(createdCampaign: CampaignReadResponse): void => {
+          onCampaignStatusMessageChange(
+            `Created campaign ${createdCampaign.name} (${campaignStatusLabel(createdCampaign.status)}).`,
+          );
+          onOpenedCampaignIdChange(createdCampaign.id);
+          onNavigate("campaigns");
+        }}
+        onCancel={(): void => {
+          onOpenedCampaignIdChange(null);
+          onNavigate("campaigns");
+        }}
+      />
+    );
   }
 
   if (activePageId === "queue") {

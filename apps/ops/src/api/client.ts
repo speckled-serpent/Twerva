@@ -163,6 +163,11 @@ export async function listCampaigns(): Promise<CampaignReadResponse[]> {
   return requestJson<CampaignReadResponse[]>("GET", "/api/v1/campaigns");
 }
 
+export async function fetchCampaignById(campaignId: string): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>("GET", `/api/v1/campaigns/${campaignId}`);
+}
+
 export async function createCampaign(
   campaignCreateRequest: CampaignCreateRequest,
 ): Promise<CampaignReadResponse> {
@@ -172,6 +177,26 @@ export async function createCampaign(
     "/api/v1/campaigns",
     campaignCreateRequest,
   );
+}
+
+export async function startCampaign(campaignId: string): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>("POST", `/api/v1/campaigns/${campaignId}/start`);
+}
+
+export async function pauseCampaign(campaignId: string): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>("POST", `/api/v1/campaigns/${campaignId}/pause`);
+}
+
+export async function resumeCampaign(campaignId: string): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>("POST", `/api/v1/campaigns/${campaignId}/resume`);
+}
+
+export async function finishCampaign(campaignId: string): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>("POST", `/api/v1/campaigns/${campaignId}/finish`);
 }
 
 export async function searchSpotmuInterests(

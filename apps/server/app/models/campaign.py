@@ -1,4 +1,4 @@
-"""Campaign — marketing definition (not started). No generate/publish."""
+"""Campaign — marketing definition. Start does not ingest or generate."""
 
 from __future__ import annotations
 
@@ -29,9 +29,10 @@ class Campaign(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """Row in `campaigns`.
 
     Create stores a definition only: name, unique slug/hashtag, type,
-    carousel format, platforms JSON, and `not_started` status. Accounts
+    carousel format, platforms JSON, and `ready` status. Accounts
     and Spotmu interests live on the join tables. Creating a campaign
-    does not ingest interests or generate carousels.
+    does not ingest interests or generate carousels. Start / pause /
+    resume / finish change status only.
     """
 
     __tablename__ = "campaigns"
@@ -56,8 +57,8 @@ class Campaign(Base, UuidPrimaryKeyMixin, TimestampMixin):
     status: Mapped[CampaignStatus] = mapped_column(
         CAMPAIGN_STATUS_ENUM,
         nullable=False,
-        default=CampaignStatus.NOT_STARTED,
-        server_default=CampaignStatus.NOT_STARTED.value,
+        default=CampaignStatus.READY,
+        server_default=CampaignStatus.READY.value,
     )
     platforms: Mapped[list[str]] = mapped_column(
         JSONB,

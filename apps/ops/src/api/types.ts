@@ -17,7 +17,7 @@ export type CampaignType = "spotmu" | "other";
 
 export type AdvertisementType = "carousel";
 
-export type CampaignStatus = "not_started";
+export type CampaignStatus = "ready" | "running" | "paused" | "finished";
 
 export type SteerActionName = "kill" | "pause" | "double_down" | "resume";
 
