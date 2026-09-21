@@ -39,6 +39,12 @@ from app.models import (
 CAMPAIGN_TYPE_OTHER_NOT_IMPLEMENTED: str = (
     "Other campaign types are not implemented yet. Coming soon."
 )
+CAMPAIGN_NAME_REQUIRED_DETAIL: str = "Campaign name is required."
+CAMPAIGN_PLATFORMS_REQUIRED_DETAIL: str = "At least one platform is required."
+CAMPAIGN_ACCOUNTS_REQUIRED_DETAIL: str = "At least one account is required."
+CAMPAIGN_INTERESTS_REQUIRED_DETAIL: str = (
+    "At least one Spotmu interest is required."
+)
 DUPLICATE_ACCOUNT_PLATFORM_DETAIL: str = (
     "Account platform is not in the campaign platform list."
 )
@@ -69,7 +75,7 @@ def create_campaign(
     if stripped_name == "":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Campaign name is required.",
+            detail=CAMPAIGN_NAME_REQUIRED_DETAIL,
         )
 
     platform_values: list[str] = _unique_platform_values(
@@ -81,6 +87,13 @@ def create_campaign(
     unique_interests: list[CampaignInterestWrite] = _unique_interests(
         campaign_create_request.interests,
     )
+
+    _raise_if_spotmu_create_collections_empty(
+        platform_values,
+        unique_account_ids,
+        unique_interests,
+    )
+
     selected_accounts: list[Account] = _load_accounts_or_raise(
         unique_account_ids,
         our_database_session,
@@ -290,6 +303,32 @@ def _load_accounts_or_raise(
         selected_accounts.append(found_account)
 
     return selected_accounts
+
+
+def _raise_if_spotmu_create_collections_empty(
+    platform_values: list[str],
+    unique_account_ids: list[uuid.UUID],
+    unique_interests: list[CampaignInterestWrite],
+) -> None:
+    """Reject Spotmu create when required lists are empty after dedupe."""
+
+    if len(platform_values) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CAMPAIGN_PLATFORMS_REQUIRED_DETAIL,
+        )
+
+    if len(unique_account_ids) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CAMPAIGN_ACCOUNTS_REQUIRED_DETAIL,
+        )
+
+    if len(unique_interests) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CAMPAIGN_INTERESTS_REQUIRED_DETAIL,
+        )
 
 
 def _raise_if_account_platforms_mismatch(
