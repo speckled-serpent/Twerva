@@ -10,6 +10,7 @@ DOMAIN_REVISION_ID: str = "12bk_domain_schema"
 OPS_USERS_REVISION_ID: str = "ops_users_web_auth"
 OPS_USERS_ROLE_REVISION_ID: str = "ops_users_role_rbac"
 ARTIFACT_TEMPLATE_ID_REVISION_ID: str = "artifact_template_id"
+CAMPAIGNS_CREATE_UI_REVISION_ID: str = "campaigns_create_ui"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -39,6 +40,7 @@ class AlembicInitializationTests(unittest.TestCase):
             [
                 f"{DOMAIN_REVISION_ID}.py",
                 f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
+                f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
             ],
@@ -107,8 +109,8 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertEqual(assigned_values.get("revision"), OPS_USERS_ROLE_REVISION_ID)
         self.assertEqual(assigned_values.get("down_revision"), OPS_USERS_REVISION_ID)
 
-    def test_artifact_template_id_revision_is_the_current_head(self) -> None:
-        """artifact_template_id is the current head after ops_users_role_rbac."""
+    def test_artifact_template_id_revision_follows_ops_users_role(self) -> None:
+        """artifact_template_id follows ops_users_role_rbac."""
 
         assigned_values: dict[str, object] = _revision_module_constants(
             SERVER_ROOT_DIRECTORY
@@ -121,6 +123,25 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertEqual(
             assigned_values.get("down_revision"),
             OPS_USERS_ROLE_REVISION_ID,
+        )
+
+    def test_campaigns_create_ui_revision_is_the_current_head(self) -> None:
+        """campaigns_create_ui is the current head after artifact_template_id."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
+        )
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAMPAIGNS_CREATE_UI_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            ARTIFACT_TEMPLATE_ID_REVISION_ID,
         )
 
     def test_env_imports_models_package(self) -> None:

@@ -203,3 +203,20 @@ sleep). Already `published` / `measured` / `publishing` is HTTP 409.
 (`mock-{platform}-{post_job.id}`). `ayrshare` is selected only when
 `AYRSHARE_API_KEY` is set; live HTTP is **not** wired in 1.6 (see
 `docs/reports/task_1_6_publish_spike.md`).
+
+## Campaign (create-only)
+
+Closed vocabularies on `campaigns` (Alembic `campaigns_create_ui`):
+
+| Enum | Values |
+|---|---|
+| `campaign_type` | `spotmu`, `other` |
+| `advertisement_type` | `carousel` |
+| `campaign_status` | `not_started` |
+
+Create persists a definition only. `other` is rejected by the API
+(`400`). Start / generate / schedule are not implemented on this
+object yet. `slug` and `hashtag` (`#slug`) are unique and derived
+from `name`. Platforms are a JSONB list of `instagram` / `tiktok`.
+Accounts and Spotmu interests live on `campaign_accounts` and
+`campaign_interests`.

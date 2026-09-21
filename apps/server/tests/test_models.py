@@ -9,10 +9,16 @@ from app.models import (
     ARTIFACT_STATUS_TRANSITIONS,
     POST_JOB_STATUS_TRANSITIONS,
     Account,
+    AdvertisementType,
     Artifact,
     ArtifactStatus,
     Base,
     Brand,
+    Campaign,
+    CampaignAccount,
+    CampaignInterest,
+    CampaignStatus,
+    CampaignType,
     Cluster,
     MetricSnapshot,
     OpsUser,
@@ -41,6 +47,9 @@ EXPECTED_TABLE_NAMES: frozenset[str] = frozenset(
         "metric_snapshots",
         "steer_actions",
         "ops_users",
+        "campaigns",
+        "campaign_accounts",
+        "campaign_interests",
     },
 )
 
@@ -68,6 +77,9 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(MetricSnapshot.__tablename__, "metric_snapshots")
         self.assertEqual(SteerAction.__tablename__, "steer_actions")
         self.assertEqual(OpsUser.__tablename__, "ops_users")
+        self.assertEqual(Campaign.__tablename__, "campaigns")
+        self.assertEqual(CampaignAccount.__tablename__, "campaign_accounts")
+        self.assertEqual(CampaignInterest.__tablename__, "campaign_interests")
         self.assertIs(Account, AccountModel)
         self.assertIn("template_id", set(Artifact.__table__.columns.keys()))
 
@@ -208,6 +220,25 @@ class DomainEnumTests(unittest.TestCase):
             {"admin", "reader"},
         )
         self.assertIn("role", set(OpsUser.__table__.columns.keys()))
+
+    def test_campaign_closed_vocabularies(self) -> None:
+        """Campaign type/format/status match the create-only slice."""
+
+        self.assertEqual(
+            {member.value for member in CampaignType},
+            {"spotmu", "other"},
+        )
+        self.assertEqual(
+            {member.value for member in AdvertisementType},
+            {"carousel"},
+        )
+        self.assertEqual(
+            {member.value for member in CampaignStatus},
+            {"not_started"},
+        )
+        self.assertIn("slug", set(Campaign.__table__.columns.keys()))
+        self.assertIn("hashtag", set(Campaign.__table__.columns.keys()))
+        self.assertIn("platforms", set(Campaign.__table__.columns.keys()))
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

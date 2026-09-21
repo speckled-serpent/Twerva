@@ -17,6 +17,9 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/brands/{brand_id}",
         "/api/v1/source-items",
         "/api/v1/source-items/{source_item_id}",
+        "/api/v1/campaigns",
+        "/api/v1/campaigns/{campaign_id}",
+        "/api/v1/spotmu/interests/search",
         "/api/v1/clusters",
         "/api/v1/clusters/{cluster_id}",
         "/api/v1/accounts",
@@ -75,6 +78,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/accounts",
             "/api/v1/artifacts",
             "/api/v1/post-jobs",
+            "/api/v1/campaigns",
         )
 
         for collection_path in collection_paths:
@@ -204,6 +208,14 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         self.assertIn("patch", user_item_methods)
         self.assertIn("post", reset_password_methods)
 
+    def test_spotmu_interest_search_route_accepts_get(self) -> None:
+        """Ops proxy GET /api/v1/spotmu/interests/search is registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        search_methods: set[str] = methods_by_path["/api/v1/spotmu/interests/search"]
+
+        self.assertIn("get", search_methods)
+
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""
 
@@ -215,6 +227,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/accounts/{account_id}",
             "/api/v1/artifacts/{artifact_id}",
             "/api/v1/post-jobs/{post_job_id}",
+            "/api/v1/campaigns/{campaign_id}",
         )
 
         for item_path in item_paths:

@@ -13,6 +13,12 @@ export type AccountStatus = "active" | "paused" | "disabled";
 
 export type SourceType = "spotmu_interest" | "brand_product" | "editorial_brief";
 
+export type CampaignType = "spotmu" | "other";
+
+export type AdvertisementType = "carousel";
+
+export type CampaignStatus = "not_started";
+
 export type SteerActionName = "kill" | "pause" | "double_down" | "resume";
 
 export interface BrandReadResponse {
@@ -222,6 +228,58 @@ export interface ClusterAgentSummaryResponse {
 
 export interface HealthReadResponse {
   status: string;
+}
+
+export interface CampaignInterestWrite {
+  slug: string;
+  title?: string | null;
+  spotmu_interest_id?: string | null;
+}
+
+export interface CampaignCreateRequest {
+  name: string;
+  campaign_type: CampaignType;
+  advertisement_type?: AdvertisementType;
+  platforms: Platform[];
+  account_ids: string[];
+  interests: CampaignInterestWrite[];
+}
+
+export interface CampaignInterestReadResponse {
+  slug: string;
+  title: string | null;
+  spotmu_interest_id: string | null;
+}
+
+export interface CampaignAccountReadResponse {
+  id: string;
+  platform: Platform;
+  handle: string;
+}
+
+export interface CampaignReadResponse {
+  id: string;
+  name: string;
+  slug: string;
+  hashtag: string;
+  campaign_type: CampaignType;
+  advertisement_type: AdvertisementType;
+  status: CampaignStatus;
+  platforms: Platform[];
+  account_count: number;
+  interest_count: number;
+  accounts: CampaignAccountReadResponse[];
+  interests: CampaignInterestReadResponse[];
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface SpotmuInterestSearchHit {
+  slug: string;
+  title: string;
+  spotmu_interest_id: string | null;
+  interest_heading: string | null;
 }
 
 export type OpsUserRole = "admin" | "reader";

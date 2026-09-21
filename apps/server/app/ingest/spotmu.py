@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import os
-from urllib.parse import ParseResult, urlparse
+from urllib.parse import ParseResult, urlencode, urlparse
 from xml.etree import ElementTree
 
 import httpx
@@ -24,10 +24,13 @@ DEFAULT_HTTP_TIMEOUT_SECONDS: float = 15.0
 DEFAULT_SITEMAP_SLUG_LIMIT: int = 20
 MAXIMUM_SITEMAP_SLUG_LIMIT: int = 200
 INTEREST_BY_SLUG_PATH_PREFIX: str = "/api/v1/interests/slug/"
+INTEREST_SEARCH_PATH: str = "/api/v1/interests/search"
 SITEMAP_PATH: str = "/sitemap.xml"
 PUBLIC_INTEREST_PATH_PREFIX: str = "/interest/"
 JSON_CONTENT_TYPE_NEEDLE: str = "json"
 SPOTMU_API_BASE_URL_ENVIRONMENT_NAME: str = "SPOTMU_API_BASE_URL"
+DEFAULT_INTEREST_SEARCH_LIMIT: int = 10
+MAXIMUM_INTEREST_SEARCH_LIMIT: int = 20
 
 
 class SpotmuInterestNotFoundError(Exception):
@@ -79,6 +82,15 @@ class SpotmuInterestFetch(BaseModel):
     canonical_url: str
     brand_kit_refs: dict[str, object] | None
     raw_payload: dict[str, object]
+
+
+class SpotmuInterestSearchHit(BaseModel):
+    """One guest-search hit mapped for the ops campaign form."""
+
+    slug: str
+    title: str
+    spotmu_interest_id: str | None = None
+    interest_heading: str | None = None
 
 
 def resolve_spotmu_api_base_url(api_base_url: str | None = None) -> str:
@@ -384,6 +396,215 @@ def list_spotmu_interest_slugs_from_sitemap(
     limited_interest_slugs: list[str] = interest_slugs[:resolved_limit]
 
     return limited_interest_slugs
+
+
+def build_spotmu_interest_search_url(
+    query: str,
+    api_base_url: str,
+    limit: int,
+) -> str:
+    """Build the public guest search URL.
+
+    Live probe (2026-09-21): unauthenticated
+    ``GET {origin}/api/v1/interests/search?q=`` returns a JSON array.
+    ``limit`` is honored. ``/interests/autocomplete`` is 401.
+
+    Args:
+        query: Operator search string.
+        api_base_url: Origin from ``resolve_spotmu_api_base_url``.
+        limit: Maximum hits (already clamped).
+
+    Returns:
+        Absolute URL with ``q`` and ``limit`` query params.
+    """
+
+    query_string: str = urlencode({"q": query, "limit": limit})
+    search_url: str = (
+        f"{api_base_url.rstrip('/')}{INTEREST_SEARCH_PATH}?{query_string}"
+    )
+
+    return search_url
+
+
+def search_spotmu_interests(
+    query: str,
+    api_base_url: str | None = None,
+    limit: int = DEFAULT_INTEREST_SEARCH_LIMIT,
+    http_client: httpx.Client | None = None,
+    timeout_seconds: float = DEFAULT_HTTP_TIMEOUT_SECONDS,
+) -> list[SpotmuInterestSearchHit]:
+    """GET public Spotmu interest search and map hits for ops.
+
+    Args:
+        query: Search string. Blank returns an empty list without HTTP.
+        api_base_url: Optional origin override.
+        limit: Maximum hits (clamped to 1..20).
+        http_client: Optional injected client (tests).
+        timeout_seconds: HTTP timeout.
+
+    Returns:
+        Mapped hits with ``slug``, ``title``, optional ids.
+
+    Raises:
+        SpotmuInterestNotJsonError: Non-JSON or non-array body.
+        SpotmuInterestTimeoutError: Timeout.
+        SpotmuInterestRequestError: Unexpected HTTP status.
+    """
+
+    stripped_query: str = query.strip()
+
+    if stripped_query == "":
+
+        return []
+
+    resolved_limit: int = _clamp_interest_search_limit(limit)
+    resolved_api_base_url: str = resolve_spotmu_api_base_url(api_base_url)
+    search_url: str = build_spotmu_interest_search_url(
+        stripped_query,
+        resolved_api_base_url,
+        resolved_limit,
+    )
+    http_response: httpx.Response = _get_spotmu_url(
+        search_url,
+        http_client,
+        timeout_seconds,
+        stripped_query,
+    )
+    raw_hits: list[object] = _parse_interest_search_json_array(
+        http_response,
+        search_url,
+        stripped_query,
+    )
+    mapped_hits: list[SpotmuInterestSearchHit] = []
+
+    for raw_hit in raw_hits:
+        mapped_hit: SpotmuInterestSearchHit | None = _map_interest_search_hit(
+            raw_hit,
+        )
+
+        if mapped_hit is None:
+            continue
+
+        mapped_hits.append(mapped_hit)
+
+    return mapped_hits
+
+
+def _clamp_interest_search_limit(limit: int) -> int:
+    """Clamp a caller search limit into the proxy window."""
+
+    if limit < 1:
+
+        return 1
+
+    if limit > MAXIMUM_INTEREST_SEARCH_LIMIT:
+
+        return MAXIMUM_INTEREST_SEARCH_LIMIT
+
+    return limit
+
+
+def _parse_interest_search_json_array(
+    http_response: httpx.Response,
+    search_url: str,
+    query: str,
+) -> list[object]:
+    """Validate status + JSON array for interest search.
+
+    Args:
+        http_response: Raw HTTP response.
+        search_url: URL used in error messages.
+        query: Requested query.
+
+    Returns:
+        Parsed JSON array.
+
+    Raises:
+        SpotmuInterestNotJsonError: Non-JSON or non-array body.
+        SpotmuInterestRequestError: Non-200 status.
+    """
+
+    response_status_code: int = http_response.status_code
+
+    if response_status_code != 200:
+        raise SpotmuInterestRequestError(
+            f"Spotmu interest search returned HTTP {response_status_code} "
+            f"for query {query!r} at {search_url}",
+        )
+
+    content_type_header: str = http_response.headers.get("content-type", "")
+
+    if JSON_CONTENT_TYPE_NEEDLE not in content_type_header.lower():
+        raise SpotmuInterestNotJsonError(
+            f"Spotmu interest search was not JSON for query {query!r} at "
+            f"{search_url} (content-type={content_type_header!r})",
+        )
+
+    response_text: str = http_response.text
+
+    try:
+        parsed_payload: object = json.loads(response_text)
+    except json.JSONDecodeError as json_error:
+        raise SpotmuInterestNotJsonError(
+            f"Spotmu interest search body was not valid JSON for query "
+            f"{query!r} at {search_url}",
+        ) from json_error
+
+    if not isinstance(parsed_payload, list):
+        raise SpotmuInterestNotJsonError(
+            f"Spotmu interest search JSON was not an array for query "
+            f"{query!r} at {search_url}",
+        )
+
+    raw_hits: list[object] = parsed_payload
+
+    return raw_hits
+
+
+def _map_interest_search_hit(raw_hit: object) -> SpotmuInterestSearchHit | None:
+    """Map one Spotmu search object to a slug/title hit.
+
+    Args:
+        raw_hit: One array element from the public search JSON.
+
+    Returns:
+        A hit when ``slug`` and ``title`` are present; otherwise ``None``.
+    """
+
+    if not isinstance(raw_hit, dict):
+
+        return None
+
+    raw_slug: object = raw_hit.get("slug")
+    raw_title: object = raw_hit.get("title")
+
+    if not isinstance(raw_slug, str) or raw_slug.strip() == "":
+
+        return None
+
+    if not isinstance(raw_title, str) or raw_title.strip() == "":
+
+        return None
+
+    raw_interest_hash_id: object = raw_hit.get("interest_hash_id")
+    raw_interest_heading: object = raw_hit.get("interest_heading")
+    spotmu_interest_id: str | None = None
+    interest_heading: str | None = None
+
+    if isinstance(raw_interest_hash_id, str) and raw_interest_hash_id.strip() != "":
+        spotmu_interest_id = raw_interest_hash_id.strip()
+
+    if isinstance(raw_interest_heading, str) and raw_interest_heading.strip() != "":
+        interest_heading = raw_interest_heading.strip()
+
+    mapped_hit: SpotmuInterestSearchHit = SpotmuInterestSearchHit(
+        slug=raw_slug.strip(),
+        title=raw_title.strip(),
+        spotmu_interest_id=spotmu_interest_id,
+        interest_heading=interest_heading,
+    )
+
+    return mapped_hit
 
 
 def _clamp_sitemap_slug_limit(limit: int) -> int:

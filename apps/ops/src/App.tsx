@@ -14,7 +14,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { QueuePage } from "./pages/QueuePage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SchedulePage } from "./pages/SchedulePage";
-import { SourcesPage } from "./pages/SourcesPage";
+import { CampaignsPage } from "./pages/CampaignsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { OpsSessionContext, isAdminOpsRole } from "./session/OpsSessionContext";
 
@@ -31,7 +31,7 @@ export function App(): ReactElement {
   const [signedInOperator, setSignedInOperator] = useState<OpsUserReadResponse | null>(
     null,
   );
-  const [activePageId, setActivePageId] = useState<OpsPageId>("sources");
+  const [activePageId, setActivePageId] = useState<OpsPageId>("campaigns");
   const [healthLabel, setHealthLabel] = useState<string>("API: checking…");
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -144,7 +144,7 @@ export function App(): ReactElement {
 
   const canWrite: boolean = isAdminOpsRole(signedInOperator.role);
   const safeActivePageId: OpsPageId =
-    activePageId === "users" && !canWrite ? "sources" : activePageId;
+    activePageId === "users" && !canWrite ? "campaigns" : activePageId;
 
   return (
     <OpsSessionContext.Provider
@@ -175,8 +175,8 @@ export function App(): ReactElement {
 
 function renderActivePage(activePageId: OpsPageId): ReactElement {
 
-  if (activePageId === "sources") {
-    return <SourcesPage />;
+  if (activePageId === "campaigns") {
+    return <CampaignsPage />;
   }
 
   if (activePageId === "queue") {

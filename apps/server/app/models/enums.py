@@ -72,6 +72,33 @@ class OpsUserRole(enum.StrEnum):
     READER = "reader"
 
 
+class CampaignType(enum.StrEnum):
+    """Origin of a Campaign definition.
+
+    `spotmu` is the only implemented create path. `other` is reserved so
+    the enum does not need a rewrite; the API rejects create for it.
+    """
+
+    SPOTMU = "spotmu"
+    OTHER = "other"
+
+
+class AdvertisementType(enum.StrEnum):
+    """Ad format stored on a Campaign. Only carousel is implemented."""
+
+    CAROUSEL = "carousel"
+
+
+class CampaignStatus(enum.StrEnum):
+    """Lifecycle of a Campaign.
+
+    Create persists `not_started` only. Start / generate / schedule are
+    out of scope for the campaign-create slice.
+    """
+
+    NOT_STARTED = "not_started"
+
+
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ArtifactStatus.DRAFT: frozenset(
         {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
@@ -136,3 +163,9 @@ SOURCE_TYPE_ENUM: Enum = as_postgres_enum(SourceType, "source_type")
 ACCOUNT_STATUS_ENUM: Enum = as_postgres_enum(AccountStatus, "account_status")
 STEER_ACTION_TYPE_ENUM: Enum = as_postgres_enum(SteerActionType, "steer_action_type")
 OPS_USER_ROLE_ENUM: Enum = as_postgres_enum(OpsUserRole, "ops_user_role")
+CAMPAIGN_TYPE_ENUM: Enum = as_postgres_enum(CampaignType, "campaign_type")
+ADVERTISEMENT_TYPE_ENUM: Enum = as_postgres_enum(
+    AdvertisementType,
+    "advertisement_type",
+)
+CAMPAIGN_STATUS_ENUM: Enum = as_postgres_enum(CampaignStatus, "campaign_status")

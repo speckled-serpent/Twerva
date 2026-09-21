@@ -7,13 +7,88 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import (
     AccountStatus,
+    AdvertisementType,
     ArtifactStatus,
+    CampaignStatus,
+    CampaignType,
     OpsUserRole,
     Platform,
     PostJobStatus,
     SourceType,
     SteerActionType,
 )
+
+
+class CampaignInterestWrite(BaseModel):
+    """One Spotmu interest attached on campaign create (no ingest)."""
+
+    slug: str
+    title: str | None = None
+    spotmu_interest_id: str | None = None
+
+
+class CampaignCreateRequest(BaseModel):
+    """Body for `POST /api/v1/campaigns`.
+
+    Slug and hashtag are generated from ``name``. Status is always
+    ``not_started``. ``other`` campaign types are rejected by the handler.
+    """
+
+    name: str = Field(min_length=1)
+    campaign_type: CampaignType
+    advertisement_type: AdvertisementType = AdvertisementType.CAROUSEL
+    platforms: list[Platform] = Field(default_factory=list)
+    account_ids: list[uuid.UUID] = Field(default_factory=list)
+    interests: list[CampaignInterestWrite] = Field(default_factory=list)
+
+
+class CampaignInterestReadResponse(BaseModel):
+    """Serialized campaign interest snapshot."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    title: str | None
+    spotmu_interest_id: str | None
+
+
+class CampaignAccountReadResponse(BaseModel):
+    """Serialized campaign account handle (publish later)."""
+
+    id: uuid.UUID
+    platform: Platform
+    handle: str
+
+
+class CampaignReadResponse(BaseModel):
+    """Serialized Campaign plus join counts and snapshots."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    hashtag: str
+    campaign_type: CampaignType
+    advertisement_type: AdvertisementType
+    status: CampaignStatus
+    platforms: list[Platform]
+    account_count: int
+    interest_count: int
+    accounts: list[CampaignAccountReadResponse] = Field(default_factory=list)
+    interests: list[CampaignInterestReadResponse] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+    created_by: uuid.UUID | None
+
+
+class SpotmuInterestSearchHitResponse(BaseModel):
+    """One mapped hit from the Spotmu live search proxy."""
+
+    slug: str
+    title: str
+    spotmu_interest_id: str | None = None
+    interest_heading: str | None = None
 
 
 class BrandCreateRequest(BaseModel):
