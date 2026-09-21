@@ -273,6 +273,23 @@ export function CampaignsPage(): ReactElement {
       return;
     }
 
+    const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
+      readCampaignCreateRequirements(
+        campaignName,
+        selectedPlatforms,
+        selectedAccountIds,
+        selectedInterests,
+      ),
+    );
+
+    if (missingCreateLabels.length > 0) {
+      const missingListText: string = missingCreateLabels.join(", ");
+
+      setActionError(new Error(`Cannot create campaign: missing ${missingListText}.`));
+
+      return;
+    }
+
     setIsBusy(true);
     setActionError(null);
     setStatusMessage("");
@@ -479,7 +496,16 @@ function NewCampaignForm({
 }: NewCampaignFormProps): ReactElement {
 
   const isOtherType: boolean = campaignType === "other";
-  const canCreate: boolean = canWrite && !isBusy && !isOtherType && campaignName.trim() !== "";
+  const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
+    readCampaignCreateRequirements(
+      campaignName,
+      selectedPlatforms,
+      selectedAccountIds,
+      selectedInterests,
+    ),
+  );
+  const canCreate: boolean =
+    canWrite && !isBusy && !isOtherType && missingCreateLabels.length === 0;
 
   return (
     <>
@@ -593,15 +619,13 @@ function NewCampaignForm({
             <fieldset className="form-fieldset">
               <legend>Accounts</legend>
               <p className="field-hint">
-                Instagram / TikTok handles that will publish later. Zero accounts
-                is allowed so you can test without a live handle.
+                Select at least one Instagram / TikTok handle that will publish later.
               </p>
               {selectedPlatforms.length === 0 ? (
                 <p className="empty-hint">Add a platform to see matching accounts.</p>
               ) : filteredAccounts.length === 0 ? (
                 <p className="empty-hint">
-                  No accounts on the selected platforms. You can still create the
-                  campaign.
+                  No accounts on the selected platforms. Add an account first.
                 </p>
               ) : (
                 <ul className="account-pick-list">
@@ -633,8 +657,8 @@ function NewCampaignForm({
             <fieldset className="form-fieldset">
               <legend>Interest sources</legend>
               <p className="field-hint">
-                Search live Spotmu interests and add several. This does not ingest
-                or generate carousels.
+                Search live Spotmu interests and add at least one. This does not
+                ingest or generate carousels.
               </p>
               <div className="inline-add-row">
                 <input
@@ -721,6 +745,11 @@ function NewCampaignForm({
           </>
         )}
 
+        {isOtherType || !canWrite || isBusy || missingCreateLabels.length === 0 ? null : (
+          <p className="field-hint">
+            Add {missingCreateLabels.join(", ")} before creating.
+          </p>
+        )}
         <div className="button-row">
           {isOtherType ? null : (
             <button type="submit" disabled={!canCreate}>
@@ -734,6 +763,55 @@ function NewCampaignForm({
       </form>
     </>
   );
+}
+
+interface CampaignCreateRequirements {
+  hasName: boolean;
+  hasPlatform: boolean;
+  hasAccount: boolean;
+  hasInterest: boolean;
+}
+
+function readCampaignCreateRequirements(
+  campaignName: string,
+  selectedPlatforms: Platform[],
+  selectedAccountIds: string[],
+  selectedInterests: SelectedInterest[],
+): CampaignCreateRequirements {
+
+  const campaignCreateRequirements: CampaignCreateRequirements = {
+    hasName: campaignName.trim() !== "",
+    hasPlatform: selectedPlatforms.length > 0,
+    hasAccount: selectedAccountIds.length > 0,
+    hasInterest: selectedInterests.length > 0,
+  };
+
+  return campaignCreateRequirements;
+}
+
+function listMissingCampaignCreateLabels(
+  campaignCreateRequirements: CampaignCreateRequirements,
+): string[] {
+
+  const missingLabels: string[] = [];
+
+  if (!campaignCreateRequirements.hasName) {
+    missingLabels.push("a campaign name");
+  }
+
+  if (!campaignCreateRequirements.hasPlatform) {
+    missingLabels.push("at least one platform");
+  }
+
+  if (!campaignCreateRequirements.hasAccount) {
+    missingLabels.push("at least one account");
+  }
+
+  if (!campaignCreateRequirements.hasInterest) {
+    missingLabels.push("at least one Spotmu interest");
+  }
+
+  return missingLabels;
 }
 
 function formatPlatforms(platforms: Platform[]): string {
