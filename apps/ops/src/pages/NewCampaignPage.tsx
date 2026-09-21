@@ -17,6 +17,7 @@ import type {
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { campaignTypeRequiresLinkedAccount } from "./campaignDisplay";
 
 interface SelectedInterest {
   slug: string;
@@ -226,7 +227,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
 
     formEvent.preventDefault();
 
-    if (campaignType !== "spotmu") {
+    if (campaignType === "other") {
       return;
     }
 
@@ -236,6 +237,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         selectedPlatforms,
         selectedAccountIds,
         selectedInterests,
+        campaignTypeRequiresLinkedAccount(campaignType),
       ),
     );
 
@@ -253,7 +255,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
     try {
       const createdCampaign: CampaignReadResponse = await createCampaign({
         name: campaignName,
-        campaign_type: "spotmu",
+        campaign_type: campaignType,
         advertisement_type: "carousel",
         platforms: selectedPlatforms,
         account_ids: selectedAccountIds,
@@ -275,12 +277,15 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
   };
 
   const isOtherType: boolean = campaignType === "other";
+  const isSpotmuTestType: boolean = campaignType === "spotmu_test";
+  const accountsAreRequired: boolean = campaignTypeRequiresLinkedAccount(campaignType);
   const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
     readCampaignCreateRequirements(
       campaignName,
       selectedPlatforms,
       selectedAccountIds,
       selectedInterests,
+      accountsAreRequired,
     ),
   );
   const canCreate: boolean =
@@ -332,6 +337,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
             disabled={!canWrite || isBusy}
           >
             <option value="spotmu">Spotmu</option>
+            <option value="spotmu_test">Spotmu - test</option>
             <option value="other">Other</option>
           </select>
         </label>
@@ -399,7 +405,9 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
             <fieldset className="form-fieldset">
               <legend>Accounts</legend>
               <p className="field-hint">
-                Select at least one Instagram / TikTok handle that will publish later.
+                {isSpotmuTestType
+                  ? "Test campaigns don't need a linked account. You can still pick one if you want."
+                  : "Select at least one Instagram / TikTok handle that will publish later."}
               </p>
               {selectedPlatforms.length === 0 ? (
                 <p className="empty-hint">Add a platform to see matching accounts.</p>
@@ -557,12 +565,13 @@ function readCampaignCreateRequirements(
   selectedPlatforms: Platform[],
   selectedAccountIds: string[],
   selectedInterests: SelectedInterest[],
+  accountsAreRequired: boolean,
 ): CampaignCreateRequirements {
 
   const campaignCreateRequirements: CampaignCreateRequirements = {
     hasName: campaignName.trim() !== "",
     hasPlatform: selectedPlatforms.length > 0,
-    hasAccount: selectedAccountIds.length > 0,
+    hasAccount: !accountsAreRequired || selectedAccountIds.length > 0,
     hasInterest: selectedInterests.length > 0,
   };
 

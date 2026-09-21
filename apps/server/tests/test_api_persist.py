@@ -397,6 +397,45 @@ class ApiPersistTests(unittest.TestCase):
         self.assertEqual(finished_campaign.status, CampaignStatus.FINISHED)
         self.assertEqual(finished_campaign.accounts[0].handle, f"lifecycle_{run_suffix}")
 
+    def test_create_spotmu_test_campaign_without_accounts(self) -> None:
+        """Spotmu-test persists ready with zero accounts and still lists."""
+
+        run_suffix: str = uuid.uuid4().hex[:8]
+        created_campaign = create_campaign(
+            CampaignCreateRequest(
+                name=f"Throwaway {run_suffix}",
+                campaign_type=CampaignType.SPOTMU_TEST,
+                advertisement_type=AdvertisementType.CAROUSEL,
+                platforms=[Platform.INSTAGRAM, Platform.TIKTOK],
+                account_ids=[],
+                interests=[
+                    CampaignInterestWrite(slug="ai-agents", title="AI Agents"),
+                ],
+            ),
+            self.our_database_session,
+            None,
+        )
+        listed_campaigns = list_campaigns(self.our_database_session)
+        listed_campaign_ids: set[uuid.UUID] = {
+            campaign_response.id for campaign_response in listed_campaigns
+        }
+        fetched_campaign = get_campaign_by_id(
+            created_campaign.id,
+            self.our_database_session,
+        )
+
+        self.assertIn(created_campaign.id, listed_campaign_ids)
+        self.assertEqual(created_campaign.campaign_type, CampaignType.SPOTMU_TEST)
+        self.assertEqual(created_campaign.status, CampaignStatus.READY)
+        self.assertEqual(created_campaign.account_count, 0)
+        self.assertEqual(created_campaign.accounts, [])
+        self.assertEqual(created_campaign.interest_count, 1)
+        self.assertEqual(fetched_campaign.interests[0].slug, "ai-agents")
+        self.assertEqual(
+            fetched_campaign.platforms,
+            [Platform.INSTAGRAM, Platform.TIKTOK],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

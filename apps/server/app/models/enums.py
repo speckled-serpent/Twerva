@@ -75,11 +75,13 @@ class OpsUserRole(enum.StrEnum):
 class CampaignType(enum.StrEnum):
     """Origin of a Campaign definition.
 
-    `spotmu` is the only implemented create path. `other` is reserved so
-    the enum does not need a rewrite; the API rejects create for it.
+    `spotmu` is the production create path (requires ≥1 linked account).
+    `spotmu_test` is the same create flow without required accounts.
+    `other` is reserved; the API rejects create for it.
     """
 
     SPOTMU = "spotmu"
+    SPOTMU_TEST = "spotmu_test"
     OTHER = "other"
 
 

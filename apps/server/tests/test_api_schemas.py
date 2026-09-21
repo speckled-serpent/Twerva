@@ -348,6 +348,13 @@ class ApiSchemaTests(unittest.TestCase):
             spotmu_interest_id="s4ce16604dd1accb",
         )
 
+        spotmu_test_create_request: CampaignCreateRequest = CampaignCreateRequest(
+            name="Throwaway",
+            campaign_type=CampaignType.SPOTMU_TEST,
+            platforms=[Platform.TIKTOK],
+            interests=[{"slug": "ai-agents"}],
+        )
+
         self.assertEqual(
             campaign_create_request.advertisement_type,
             AdvertisementType.CAROUSEL,
@@ -356,6 +363,11 @@ class ApiSchemaTests(unittest.TestCase):
         self.assertEqual(campaign_read_response.status, CampaignStatus.READY)
         self.assertEqual(campaign_read_response.hashtag, "#my-campaign")
         self.assertEqual(search_hit.slug, "ai-agents")
+        self.assertEqual(
+            spotmu_test_create_request.campaign_type,
+            CampaignType.SPOTMU_TEST,
+        )
+        self.assertEqual(spotmu_test_create_request.account_ids, [])
 
 
 if __name__ == "__main__":

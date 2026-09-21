@@ -211,13 +211,17 @@ lifecycle values in `campaign_status_lifecycle`):
 
 | Enum | Values |
 |---|---|
-| `campaign_type` | `spotmu`, `other` |
+| `campaign_type` | `spotmu`, `spotmu_test`, `other` |
 | `advertisement_type` | `carousel` |
 | `campaign_status` | `ready`, `running`, `paused`, `finished` |
 
 Create persists a definition with status **`ready`**. `other` is
-rejected by the API (`400`). `slug` and `hashtag` (`#slug`) are unique
-and derived from `name`. Platforms are a JSONB list of `instagram` /
+rejected by the API (`400`). `spotmu` and `spotmu_test` share the
+create flow (name, carousel, platforms, ≥1 Spotmu interest). `spotmu`
+also requires ≥1 linked account; `spotmu_test` may persist with an
+empty `account_ids` list (provided accounts still must match the
+selected platforms). `slug` and `hashtag` (`#slug`) are unique and
+derived from `name`. Platforms are a JSONB list of `instagram` /
 `tiktok`. Accounts and Spotmu interests live on `campaign_accounts` and
 `campaign_interests`.
 

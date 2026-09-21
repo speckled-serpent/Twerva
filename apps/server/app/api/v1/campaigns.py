@@ -97,6 +97,7 @@ def create_campaign(
     )
 
     _raise_if_spotmu_create_collections_empty(
+        campaign_create_request.campaign_type,
         platform_values,
         unique_account_ids,
         unique_interests,
@@ -431,11 +432,18 @@ def _load_accounts_or_raise(
 
 
 def _raise_if_spotmu_create_collections_empty(
+    campaign_type: CampaignType,
     platform_values: list[str],
     unique_account_ids: list[uuid.UUID],
     unique_interests: list[CampaignInterestWrite],
 ) -> None:
-    """Reject Spotmu create when required lists are empty after dedupe."""
+    """Reject Spotmu-family create when required lists are empty after dedupe.
+
+    ``spotmu`` requires platforms, accounts, and interests. ``spotmu_test``
+    waives accounts so throwaway campaigns can be saved without a linked
+    social handle. Provided accounts are still loaded and platform-checked
+    by the caller.
+    """
 
     if len(platform_values) == 0:
         raise HTTPException(
@@ -443,7 +451,7 @@ def _raise_if_spotmu_create_collections_empty(
             detail=CAMPAIGN_PLATFORMS_REQUIRED_DETAIL,
         )
 
-    if len(unique_account_ids) == 0:
+    if campaign_type == CampaignType.SPOTMU and len(unique_account_ids) == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=CAMPAIGN_ACCOUNTS_REQUIRED_DETAIL,
