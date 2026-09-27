@@ -6,7 +6,12 @@ import {
   fetchHealthStatus,
   logoutOpsOperator,
 } from "./api/client";
-import type { CampaignReadResponse, HealthReadResponse, OpsUserReadResponse } from "./api/types";
+import type {
+  CampaignReadResponse,
+  HealthReadResponse,
+  OpsUserReadResponse,
+  ThemeReadResponse,
+} from "./api/types";
 import { NavBar, type OpsPageId } from "./components/NavBar";
 import { AccountPage } from "./pages/AccountPage";
 import { AccountsPage } from "./pages/AccountsPage";
@@ -14,9 +19,11 @@ import { CampaignsPage } from "./pages/CampaignsPage";
 import { campaignStatusLabel } from "./pages/campaignDisplay";
 import { LoginPage } from "./pages/LoginPage";
 import { NewCampaignPage } from "./pages/NewCampaignPage";
+import { NewThemePage } from "./pages/NewThemePage";
 import { QueuePage } from "./pages/QueuePage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SchedulePage } from "./pages/SchedulePage";
+import { ThemesPage } from "./pages/ThemesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { OpsSessionContext, isAdminOpsRole } from "./session/OpsSessionContext";
 
@@ -36,6 +43,7 @@ export function App(): ReactElement {
   const [activePageId, setActivePageId] = useState<OpsPageId>("campaigns");
   const [openedCampaignId, setOpenedCampaignId] = useState<string | null>(null);
   const [campaignStatusMessage, setCampaignStatusMessage] = useState<string>("");
+  const [themeStatusMessage, setThemeStatusMessage] = useState<string>("");
   const [healthLabel, setHealthLabel] = useState<string>("API: checking…");
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -180,8 +188,10 @@ export function App(): ReactElement {
             safeActivePageId,
             openedCampaignId,
             campaignStatusMessage,
+            themeStatusMessage,
             setOpenedCampaignId,
             setCampaignStatusMessage,
+            setThemeStatusMessage,
             setActivePageId,
           )}
         </main>
@@ -194,8 +204,10 @@ function renderActivePage(
   activePageId: OpsPageId,
   openedCampaignId: string | null,
   campaignStatusMessage: string,
+  themeStatusMessage: string,
   onOpenedCampaignIdChange: (campaignId: string | null) => void,
   onCampaignStatusMessageChange: (statusMessage: string) => void,
+  onThemeStatusMessageChange: (statusMessage: string) => void,
   onNavigate: (pageId: OpsPageId) => void,
 ): ReactElement {
 
@@ -223,6 +235,24 @@ function renderActivePage(
         onCancel={(): void => {
           onOpenedCampaignIdChange(null);
           onNavigate("campaigns");
+        }}
+      />
+    );
+  }
+
+  if (activePageId === "themes") {
+    return <ThemesPage statusMessage={themeStatusMessage} />;
+  }
+
+  if (activePageId === "new-theme") {
+    return (
+      <NewThemePage
+        onCreated={(createdTheme: ThemeReadResponse): void => {
+          onThemeStatusMessageChange(`Created theme ${createdTheme.name}.`);
+          onNavigate("themes");
+        }}
+        onCancel={(): void => {
+          onNavigate("themes");
         }}
       />
     );

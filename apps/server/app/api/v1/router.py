@@ -23,6 +23,7 @@ from app.api.v1.schedule import schedule_router
 from app.api.v1.source_items import source_items_router
 from app.api.v1.spotmu import spotmu_router
 from app.api.v1.steer import steer_router
+from app.api.v1.themes import themes_router
 from app.auth.dependencies import require_ops_operator_allowed_for_request
 
 
@@ -35,6 +36,7 @@ protected_api_v1_router: APIRouter = APIRouter(
 protected_api_v1_router.include_router(brands_router)
 protected_api_v1_router.include_router(source_items_router)
 protected_api_v1_router.include_router(campaigns_router)
+protected_api_v1_router.include_router(themes_router)
 protected_api_v1_router.include_router(spotmu_router)
 protected_api_v1_router.include_router(clusters_router)
 protected_api_v1_router.include_router(steer_router)

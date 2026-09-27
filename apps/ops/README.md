@@ -58,12 +58,16 @@ admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
    Success opens the new campaign on **Campaigns**.
 2. **Campaigns** — list all campaigns; open a row for details and
    Start / Pause / Resume / Finish (admin). Readers see data only.
-3. **Queue** — edit caption if needed → **Approve** (or Reject).
-4. **Accounts** — create a cluster + account if none exist (set
+3. **Create Theme** / **Themes** — save a carousel theme (name required,
+   advertisement type locked to Carousel) and list it. Seeded Spotmu
+   Paper v1 and Bold v1 appear after `alembic upgrade head`. Readers
+   can list; only admins can create.
+4. **Queue** — edit caption if needed → **Approve** (or Reject).
+5. **Accounts** — create a cluster + account if none exist (set
    `cadence_cap_per_day` if you want the cap enforced).
-5. **Schedule** — pick the approved artifact + account + time → **Schedule**
+6. **Schedule** — pick the approved artifact + account + time → **Schedule**
    → **Mock publish** on the new post job.
-6. **Results** — pick the cluster → median summary + agent-summary pane.
+7. **Results** — pick the cluster → median summary + agent-summary pane.
    **POST stub metrics** on a mock-published job (`platform_post_id` starts
    with `mock-`) so `median_views` is no longer null. Steer buttons live on
    **Accounts**.

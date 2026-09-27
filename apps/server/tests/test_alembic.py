@@ -13,6 +13,7 @@ ARTIFACT_TEMPLATE_ID_REVISION_ID: str = "artifact_template_id"
 CAMPAIGNS_CREATE_UI_REVISION_ID: str = "campaigns_create_ui"
 CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID: str = "campaign_status_lifecycle"
 CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID: str = "campaign_type_spotmu_test"
+THEMES_CREATE_REVISION_ID: str = "themes_create"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -47,6 +48,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
+                f"{THEMES_CREATE_REVISION_ID}.py",
             ],
         )
 
@@ -180,8 +182,8 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("ADD VALUE 'paused'", revision_source)
         self.assertIn("ADD VALUE 'finished'", revision_source)
 
-    def test_campaign_type_spotmu_test_revision_is_the_current_head(self) -> None:
-        """campaign_type_spotmu_test is the current head after lifecycle."""
+    def test_campaign_type_spotmu_test_revision_follows_lifecycle(self) -> None:
+        """campaign_type_spotmu_test follows campaign_status_lifecycle."""
 
         assigned_values: dict[str, object] = _revision_module_constants(
             SERVER_ROOT_DIRECTORY
@@ -205,6 +207,32 @@ class AlembicInitializationTests(unittest.TestCase):
             CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID,
         )
         self.assertIn("ADD VALUE 'spotmu_test'", revision_source)
+
+    def test_themes_create_revision_is_the_current_head(self) -> None:
+        """themes_create follows campaign_type_spotmu_test and seeds templates."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEMES_CREATE_REVISION_ID}.py",
+        )
+        revision_source: str = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEMES_CREATE_REVISION_ID}.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), THEMES_CREATE_REVISION_ID)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "themes"', revision_source)
+        self.assertIn("spotmu_paper_v1", revision_source)
+        self.assertIn("spotmu_bold_v1", revision_source)
+        self.assertNotIn("DROP TYPE advertisement_type", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

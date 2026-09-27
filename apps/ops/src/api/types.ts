@@ -275,6 +275,23 @@ export interface CampaignReadResponse {
   created_by: string | null;
 }
 
+export interface ThemeCreateRequest {
+  name: string;
+  advertisement_type?: AdvertisementType;
+  template_key?: string | null;
+}
+
+export interface ThemeReadResponse {
+  id: string;
+  name: string;
+  slug: string;
+  advertisement_type: AdvertisementType;
+  template_key: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
 export interface SpotmuInterestSearchHit {
   slug: string;
   title: string;

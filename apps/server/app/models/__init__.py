@@ -56,6 +56,7 @@ from app.models.ops_user import OpsUser
 from app.models.post_job import PostJob
 from app.models.source_item import SourceItem
 from app.models.steer_action import SteerAction
+from app.models.theme import Theme
 
 
 __all__ = [
@@ -96,5 +97,6 @@ __all__ = [
     "SourceType",
     "SteerAction",
     "SteerActionType",
+    "Theme",
     "cluster_source_items",
 ]

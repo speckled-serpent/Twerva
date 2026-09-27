@@ -93,15 +93,16 @@ Local API `.env` should set `SESSION_COOKIE_SECURE=false` (HTTP) and
 
 ## Walk the Phase 1 path in ops
 
-Nav: **Campaigns · New Campaign · Queue · Schedule · Accounts · Results · Account** (+ **Users** for admins)
+Nav: **Campaigns · New Campaign · Themes · Create Theme · Queue · Schedule · Accounts · Results · Account** (+ **Users** for admins)
 
 1. **Sign in** — bootstrap admin (or any `ops_users` row). Role is in the header.
 2. **New Campaign** — saves a `ready` definition (name, auto slug/hashtag, Spotmu type, carousel, platforms, IG/TikTok accounts, live Spotmu interest search). It does **not** start, ingest, or generate. Type **Other** is coming soon. Apply Alembic head `campaign_status_lifecycle` on the box before the new API works.
 3. **Campaigns** — list every campaign (status badges Ready / Running / Paused / Finished). Open a row for details. Admins **Start** (`ready` → `running`), **Pause**, **Resume**, and **Finish**. Start still does not kick generate/publish workers.
-4. **Queue** — preview slide PNGs (lightbox), approve / reject / edit caption, or **regenerate** a new draft with another template (history kept). Human gate. Existing generate/approve loop is unchanged; it is no longer on this first nav page.
-5. **Accounts** — clusters/accounts, cadence caps, steer (pause/kill/resume).
-6. **Schedule** — attach an **approved** artifact to an account + time → `post_job`; then **mock publish**.
-7. **Results** — stub/manual metrics, cluster median views, agent-summary.
+4. **Themes** / **Create Theme** — list carousel themes and save a new one (name + Carousel advertisement type). Apply Alembic head `themes_create` first. Upgrade registers Spotmu Paper v1 and Spotmu Bold v1. This does not restyle existing artifacts or bind a campaign.
+5. **Queue** — preview slide PNGs (lightbox), approve / reject / edit caption, or **regenerate** a new draft with another template (history kept). Human gate. Existing generate/approve loop is unchanged; it is no longer on this first nav page.
+6. **Accounts** — clusters/accounts, cadence caps, steer (pause/kill/resume).
+7. **Schedule** — attach an **approved** artifact to an account + time → `post_job`; then **mock publish**.
+8. **Results** — stub/manual metrics, cluster median views, agent-summary.
 
 Seeded Brand `spotmu` and example source may already exist; live Spotmu ingest (`ai-agents`, etc.) may also be on the box from smokes.
 

@@ -23,6 +23,8 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/campaigns/{campaign_id}/pause",
         "/api/v1/campaigns/{campaign_id}/resume",
         "/api/v1/campaigns/{campaign_id}/finish",
+        "/api/v1/themes",
+        "/api/v1/themes/{theme_id}",
         "/api/v1/spotmu/interests/search",
         "/api/v1/clusters",
         "/api/v1/clusters/{cluster_id}",
@@ -83,6 +85,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/artifacts",
             "/api/v1/post-jobs",
             "/api/v1/campaigns",
+            "/api/v1/themes",
         )
 
         for collection_path in collection_paths:
@@ -246,6 +249,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/artifacts/{artifact_id}",
             "/api/v1/post-jobs/{post_job_id}",
             "/api/v1/campaigns/{campaign_id}",
+            "/api/v1/themes/{theme_id}",
         )
 
         for item_path in item_paths:
