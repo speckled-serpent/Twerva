@@ -242,3 +242,22 @@ Allowed transitions (also `CAMPAIGN_STATUS_TRANSITIONS`):
 | `POST .../finish` | `running`, `paused` | `finished` |
 
 `ready` cannot jump to `finished`. `finished` is terminal.
+
+## Theme
+
+`themes` (Alembic `themes_create`) stores visual styling for carousels.
+Short video is not implemented. The table reuses `advertisement_type`
+(`carousel` only).
+
+| Column | Notes |
+|---|---|
+| `name` | Required, operator-facing |
+| `slug` | Unique, derived from `name` |
+| `advertisement_type` | `carousel` |
+| `template_key` | Optional unique link to a carousel generator (`spotmu_paper_v1`, `spotmu_bold_v1`). Null when the theme is not tied to a generator yet |
+| `created_by` | Nullable `ops_users` id |
+
+`POST /api/v1/themes` requires a non-empty name. Readers may `GET`
+`/api/v1/themes` and `/api/v1/themes/{id}`; writes stay admin-only via
+the existing ops RBAC gate. Upgrade seeds Spotmu Paper v1 and Spotmu
+Bold v1. Creating a theme does not render slides or attach a campaign.

@@ -87,6 +87,34 @@ class CampaignReadResponse(BaseModel):
     created_by: uuid.UUID | None
 
 
+class ThemeCreateRequest(BaseModel):
+    """Body for `POST /api/v1/themes`.
+
+    Slug is generated from ``name``. ``advertisement_type`` defaults to
+    carousel (the only implemented format). ``template_key`` is optional
+    and, when set, must name an existing carousel generator.
+    """
+
+    name: str = Field(min_length=1)
+    advertisement_type: AdvertisementType = AdvertisementType.CAROUSEL
+    template_key: str | None = None
+
+
+class ThemeReadResponse(BaseModel):
+    """Serialized Theme row."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    advertisement_type: AdvertisementType
+    template_key: str | None
+    created_at: datetime
+    updated_at: datetime
+    created_by: uuid.UUID | None
+
+
 class SpotmuInterestSearchHitResponse(BaseModel):
     """One mapped hit from the Spotmu live search proxy."""
 

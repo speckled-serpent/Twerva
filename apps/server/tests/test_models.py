@@ -31,6 +31,7 @@ from app.models import (
     SourceType,
     SteerAction,
     SteerActionType,
+    Theme,
     cluster_source_items,
 )
 from app.models.account import Account as AccountModel
@@ -51,6 +52,7 @@ EXPECTED_TABLE_NAMES: frozenset[str] = frozenset(
         "campaigns",
         "campaign_accounts",
         "campaign_interests",
+        "themes",
     },
 )
 
@@ -81,6 +83,7 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(Campaign.__tablename__, "campaigns")
         self.assertEqual(CampaignAccount.__tablename__, "campaign_accounts")
         self.assertEqual(CampaignInterest.__tablename__, "campaign_interests")
+        self.assertEqual(Theme.__tablename__, "themes")
         self.assertIs(Account, AccountModel)
         self.assertIn("template_id", set(Artifact.__table__.columns.keys()))
 

@@ -10,6 +10,8 @@ import type {
   BrandReadResponse,
   CampaignCreateRequest,
   CampaignReadResponse,
+  ThemeCreateRequest,
+  ThemeReadResponse,
   CarouselGenerateRequest,
   ClusterAgentSummaryResponse,
   ClusterCreateRequest,
@@ -176,6 +178,27 @@ export async function createCampaign(
     "POST",
     "/api/v1/campaigns",
     campaignCreateRequest,
+  );
+}
+
+export async function listThemes(): Promise<ThemeReadResponse[]> {
+
+  return requestJson<ThemeReadResponse[]>("GET", "/api/v1/themes");
+}
+
+export async function fetchThemeById(themeId: string): Promise<ThemeReadResponse> {
+
+  return requestJson<ThemeReadResponse>("GET", `/api/v1/themes/${themeId}`);
+}
+
+export async function createTheme(
+  themeCreateRequest: ThemeCreateRequest,
+): Promise<ThemeReadResponse> {
+
+  return requestJson<ThemeReadResponse>(
+    "POST",
+    "/api/v1/themes",
+    themeCreateRequest,
   );
 }
 

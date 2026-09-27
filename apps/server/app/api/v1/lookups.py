@@ -5,7 +5,16 @@ import uuid
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models import Account, Artifact, Brand, Campaign, Cluster, PostJob, SourceItem
+from app.models import (
+    Account,
+    Artifact,
+    Brand,
+    Campaign,
+    Cluster,
+    PostJob,
+    SourceItem,
+    Theme,
+)
 
 
 def fetch_brand_by_id_or_raise(
@@ -149,6 +158,34 @@ def fetch_artifact_by_id_or_raise(
         )
 
     return found_artifact
+
+
+def fetch_theme_by_id_or_raise(
+    theme_id: uuid.UUID,
+    our_database_session: Session,
+) -> Theme:
+    """Return a Theme or raise HTTP 404.
+
+    Args:
+        theme_id: Primary key to load.
+        our_database_session: Open SQLAlchemy session.
+
+    Returns:
+        The matching Theme row.
+
+    Raises:
+        HTTPException: If no Theme exists for `theme_id`.
+    """
+
+    found_theme: Theme | None = our_database_session.get(Theme, theme_id)
+
+    if found_theme is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Theme not found: {theme_id}",
+        )
+
+    return found_theme
 
 
 def fetch_campaign_by_id_or_raise(
