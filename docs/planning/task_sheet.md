@@ -1,6 +1,6 @@
 # Twerva — Task Sheet
 
-*Last updated: 2026-09-15*  
+*Last updated: 2026-10-03*  
 *Status: Build plan. Strategy: `docs/prompts/project.md`. Product design: `docs/prompts/product.md`. Task grain follows Spotmu `docs/task_sheet.md` / historical `road_map.md`: lettered IDs, one concrete deliverable per leaf checkbox, paths/types/endpoints named, explicit out-of-scope notes.*
 
 Roadmap alignment: **1 MVP → 2 Spotmu → 3 Internal brands → 4 External / spin-off (optional).**
@@ -342,6 +342,86 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 ---
 
+## 1.10 — Carousel theme frame (locked model)
+
+**Exit:** An operator can save a carousel theme as **Draft** or **Live**, set its background and spacing, add text and image elements, duplicate it into a new Draft, and run **Generate samples**. Samples are previews. They are not artifacts and not post jobs. Layout follows [`docs/planning/themes_v1.md`](themes_v1.md). Overlap on a concrete frame is an error: that instance is blocked and highlighted, and other bands are not pushed aside.
+
+**Source of truth:** [`docs/planning/themes_v1.md`](themes_v1.md). There is no open cell or skeleton leaf on this sheet. Do not add one, and do not implement a cell/skeleton layout beside this model.
+
+**Already shipped (do not redo):** Alembic `themes_create` and `themes` (`name`, `slug`, `advertisement_type`, `template_key`, `created_by`). `POST/GET /api/v1/themes` and `GET /api/v1/themes/{id}` in `apps/server/app/api/v1/themes.py`. Ops **Themes** list and **Create Theme** (name + carousel type) in `apps/ops`. Seeded Spotmu Paper v1 and Spotmu Bold v1. Create stays name-only; new columns use the defaults below so that route keeps working.
+
+**Still the ship path until a later slice:** carousel pixels for posts that ship come from [`carousel_template_v1.md`](carousel_template_v1.md) and `apps/server/app/generate/carousel.py`. 1.10 does not point `POST /api/v1/generate/carousel` at a Live theme.
+
+**Out of scope for 1.10:** short video and any non-carousel advertisement type; edge layouts (side-by-side elements, free placement, partial-width rectangles); image upload, an `assets` table, object storage, and serving design; text sources other than the four Spotmu fields below; binding a Live theme into shipping generate; campaign binding; restyling existing artifacts; Phase 2.
+
+**Parallelism:** serial — frame → elements → duplicate → layout → measure → overlap → samples → ops editor. No Engineer N.
+
+**Numbering:** `1.10a` parent · `1.10a-i` leaf. Tick leaves; the section is done when every leaf is `[x]`.
+
+**Storage note:** a picture, a texture, and an image element store a **reference** only (`background_asset_ref` / `image_asset_ref`): a relative path, same idea as `slides[].asset_ref`. No new bucket. Sample render may read a file that is already under `ARTIFACT_STORAGE_DIR`. It does not grow an upload pipeline.
+
+**Canvas for this section:** **1080×1080**, the lock in `carousel_template_v1.md`. Do not add a per-theme size column.
+
+#### 1.10a — Persist the frame
+
+New Alembic revision after `themes_create`. Do not edit `themes_create`. Native Postgres enums, same approach as `docs/planning/domain_statuses.md`. Document the new values there.
+
+- [ ] **1.10a-i** `ThemeStatus` (`draft`, `live`) and `themes.status`, default `draft`. Backfill existing rows, including Spotmu Paper v1 and Spotmu Bold v1, to `draft`. Add `PATCH /api/v1/themes/{id}` (partial) and include `status` on `ThemeReadResponse`. Create ignores a status body and always stores `draft`. Same write gate as `POST /api/v1/themes` (`require_authenticated_ops_operator`); ops writes stay behind `useCanWriteOps`. **Done when:** a test patches one theme to `live` and back to `draft`, GET returns it, and existing create-by-name still returns `draft`. **Out of scope:** spacing, background, elements, the ops editor, using Live inside `POST /api/v1/generate/carousel`.
+
+- [ ] **1.10a-ii** Integer columns `page_margin`, `element_gap`, `element_margin`. One value each, applied on every edge (rules in themes_v1). Defaults: `page_margin` **96**, `element_gap` **0**, `element_margin` **0**. Reject negatives (400). Backfill existing rows with those defaults. Extend the same PATCH and read schema. **Done when:** a test round-trips a non-default triple, rejects `-1`, and a newly created name-only theme reads back 96 / 0 / 0. **Out of scope:** layout math, elements, drawing.
+
+- [ ] **1.10a-iii** One background per theme, columns on `themes` (not a second table): `background_kind` enum `picture` | `color` | `gradient` | `texture`; `background_color` text nullable; `background_gradient` JSONB nullable; `background_asset_ref` text nullable. Default kind `color`, color `#F6F1E8` (paper from `carousel_template_v1`), gradient and asset ref null. Gradient shape, locked in the schema docstring: `{"angle_deg": <0–360>, "stops": [{"offset": <0–1>, "color": "#rrggbb"}, ...]}` with at least two stops. Hex colors are `#` plus six hex digits. `background_asset_ref` is a relative path with no `..` and no scheme; suffix `.svg`, `.png`, `.jpg`, or `.jpeg`. Draft may save a kind with its payload still empty. A row that is **Live** (this patch or already live) requires the payload for its kind: color hex, a valid gradient, or a non-empty asset ref for `picture` and `texture`. **Done when:** tests cover each kind round-trip, a Live color theme with a blank color is 400, and a Draft picture with a null ref saves. **Out of scope:** rendering, upload, elements.
+
+#### 1.10b — Persist elements
+
+- [ ] **1.10b-i** Table `theme_elements` (model `apps/server/app/models/theme_element.py`): `id`, `theme_id` FK → `themes` ON DELETE CASCADE, `band` enum `top` | `middle` | `bottom`, `sort_order` int, `content_kind` enum `text` | `image`, `rectangle_color` text nullable, text columns (`text_source`, `font_family`, `font_size`, `font_color`, `bold`, `italic`, `underline`, `strikethrough`, `font_weight`, `alignment`), `image_asset_ref` text nullable, timestamps. Unique (`theme_id`, `band`, `sort_order`). No x, y, or width column — every element is the full content width. `rectangle_color` null means the rectangle is clear. `text_source` enum is only `title`, `interest_heading`, `overview_bullets`, `canonical_url` (maps to `source_items.title`, `.interest_heading`, `.overview_bullets`, `.canonical_url`). `alignment` enum: `left` | `center` | `right`. Check: `text` requires `text_source`, `font_family`, `font_size` (positive int), `font_color`, and `alignment`; booleans default false; `font_weight` is optional (1–1000 or null). `image` requires `image_asset_ref` (same path rules as `background_asset_ref`) and forbids `text_source`. **Done when:** migration applies on a clean DB and the model maps those columns. **Out of scope:** HTTP, layout, wrap, ops, upload.
+
+- [ ] **1.10b-ii** Element API under the theme write gate: `GET /api/v1/themes/{id}` includes `elements` ordered by band (`top`, `middle`, `bottom`) then `sort_order`. `POST/PATCH/DELETE /api/v1/themes/{theme_id}/elements` and `.../elements/{element_id}`. `sort_order` is 0-based within the band; the server compacts it after writes. Reject unknown sources, partial-width or x/y fields, and image refs that are not svg/png/jpeg. **Done when:** tests create a clear text element and an image element, reload them in order, move one to another band, and reject `text_source` values outside the four Spotmu keys. **Out of scope:** measuring text, reading image bytes, the ops editor.
+
+#### 1.10c — Duplicate
+
+- [ ] **1.10c-i** `POST /api/v1/themes/{id}/duplicate`. New row, new id, status `draft`, name `Copy of {name}`, slug from the existing slug helper. Copy background, the three spacing values, and every element (new element ids; same band, order, and content). Leave the source row untouched, including its status and `updated_at`. Set `template_key` null on the copy (`template_key` is unique). **Done when:** a test duplicates a Live theme that has a gradient and two elements; the source is still Live with the same ids; the copy is Draft; the copy's `template_key` is null; element ids differ. **Out of scope:** the ops button (1.10h), samples.
+
+#### 1.10d — Layout math
+
+- [ ] **1.10d-i** Pure function in `apps/server/app/themes/layout.py`. Input: the 1080×1080 frame, the three spacing ints, and elements that already have a content height, grouped by band and `sort_order`. Output: integer rectangles `{element_id, x, y, width, height}` plus the content area. Content area is the frame inset by `page_margin` on every edge; element `x` is that left edge and element width is that width. Element height = content height + `element_margin` above + `element_margin` below. `element_gap` sits between rectangles in the same band only (not before the first, not after the last, not inside page margin). **Top:** first element’s top is `page_margin` down from the frame top; later top elements stack downward. **Bottom:** the first element is the lowest, its bottom `page_margin` up from the frame bottom; later bottom elements stack upward. **Middle:** one block whose height is the sum of the middle heights plus gap between them; place it so its center is the vertical center of the content area. An odd leftover pixel goes below the block (`top = content_top + floor((content_height - block_height) / 2)`). Do not center only the first or last middle element. An empty band adds no rectangles. Zero elements returns no rectangles and is valid. **Done when:** unit tests cover a single top element, two top elements with gap only between them, two bottom elements stacking upward, three middle elements centered as a group, a one-band theme, and zero elements. **Out of scope:** font measurement, image bytes, overlap policy, PNG files, pushing another band.
+
+#### 1.10e — Measure text and images
+
+- [ ] **1.10e-i** `apps/server/app/themes/sources.py` resolves one text element from a `SourceItem`: `title`; `interest_heading` (blank when null); `overview_bullets` as the non-empty strings joined with `\n` into **one** block (do not emit a frame per bullet); `canonical_url` (blank when null). No other source keys. **Done when:** a unit test maps a fake Spotmu source item, including three bullets as one string, and a disallowed key never appears in the enum. **Out of scope:** non-Spotmu sources, wrap, HTTP.
+
+- [ ] **1.10e-ii** `apps/server/app/themes/measure.py` turns resolved content into content heights, then calls the 1.10d layout so the band reflows. Text wraps inside the content width (element width minus `element_margin` on the left and right). Use Pillow, already pinned for carousel render. Family, size, bold/italic, and weight (when the face supports it) affect measurement. Underline and strikethrough do not change height. Alignment does not change width or height. A missing face uses the same fallback as `app/generate/carousel.py` (DejaVu / Liberation / Pillow default) — do not add a font package. Empty text is one line of that face. After wrap, top reflows downward from the first top element, bottom reflows upward from the lowest, and middle recenters the whole middle block. **Done when:** a test shows a long string growing height and moving only the later sibling in the same band, and a second test shows an underline flag leaving height unchanged. **Out of scope:** overlap errors, writing PNGs, the ship-path carousel template.
+
+- [ ] **1.10e-iii** Image content height from a file already on disk. Resolve `image_asset_ref` under `ARTIFACT_STORAGE_DIR` and reject paths that escape it. Keep aspect ratio. Width is the content width; that scaled height is the content height. PNG and JPEG via Pillow. SVG via the stdlib XML parser (`width`/`height`, else `viewBox`) — do not add an SVG library. A missing or unreadable file is a structured measure error for that element, not a guessed size. **Done when:** a tmp PNG with a known aspect ratio produces the expected height, a tiny SVG viewBox does the same, and a missing file returns the error without a rectangle. **Out of scope:** upload, thumbnailing, background rendering.
+
+#### 1.10f — Overlap
+
+- [ ] **1.10f-i** `apps/server/app/themes/overlap.py`. After placement, rectangles from **different** bands overlap when their areas intersect. Sharing an edge is not an overlap. Do not change coordinates. Do not push Middle or Bottom. Return `{blocked, overlaps: [{band_a, band_b, element_ids}]}`. Zero elements is not blocked. A same-band stack with gap ≥ 0 is not an overlap. **Done when:** tests show a tall top element intersecting middle as blocked with the original `y` values unchanged, an edge-touching pair as allowed, and a two-instance call that flags only the colliding instance. **Out of scope:** the highlight UI, samples HTTP, artifacts, post jobs.
+
+#### 1.10g — Generate samples
+
+- [ ] **1.10g-i** `POST /api/v1/themes/{id}/samples` body `{source_item_id}`. One request, one frame (do not split bullets into slides, and do not read slide roles from `carousel_template_v1`). Source item must be `source_type=spotmu_interest`; otherwise 400. Resolve, measure, place, and overlap-check that frame. Render a PNG with Pillow into `{ARTIFACT_STORAGE_DIR}/theme-previews/{theme_id}/{preview_id}.png`. `GET /api/v1/themes/{theme_id}/samples/{preview_id}/image` streams it for a signed-in operator. Draw the background filling the frame: solid color; linear gradient from the locked JSON (no radial); picture or texture scaled to fill (no tiling). Then draw each element rectangle (skip the fill when `rectangle_color` is null) and its content. Overlap still renders the PNG so the operator can see it, and the response sets `blocked` true with the overlap payload. A missing picture, texture, or image file sets `blocked` true with `block_reason` `missing_asset` and does not invent a fill. Response also carries `block_reason` null | `overlap` | `missing_asset` | `measure_error`, and `detail`. Works for Draft or Live. Does not change theme status. **Done when:** a test writes a preview file and asserts no new `artifacts` row and no new `post_jobs` row; a second test with a colliding layout returns `blocked` true and `block_reason` `overlap`. **Out of scope:** approve, schedule, publish, `POST /api/v1/generate/carousel`, the ops highlight.
+
+#### 1.10h — Ops editor
+
+Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/src/api/client.ts`, `apps/ops/src/api/types.ts`). Keep **Create Theme** as the name-only create; it lands on a Draft. Readers see values and cannot save (`ReadOnlyNotice` / `useCanWriteOps`).
+
+- [ ] **1.10h-i** Frame fields on the open theme: Draft/Live, background kind, and the payload for that kind (color, gradient stops + angle, or a text `asset_ref` — no file picker), page margin, element gap, element margin. Save with PATCH. Show the API’s Live-validation error on the form. **Done when:** an admin can set each background kind and the three spacing numbers, reload, and see the same values; a reader cannot save. **Out of scope:** elements, samples, upload.
+
+- [ ] **1.10h-ii** Element editor on the same theme: add, edit, delete, reorder within a band, and move among Top / Middle / Bottom. Content is text or image. Rectangle color empty means clear. Text controls: family, size, color, bold, italic, underline, strikethrough, optional weight, alignment, and a source picker limited to title, interest heading, overview bullets, and the public URL. Image control: one `asset_ref` text field for svg/png/jpeg. **Done when:** a text element and an image element survive reload, and the source picker has no other choice. **Out of scope:** free placement, partial width, non-Spotmu sources, upload.
+
+- [ ] **1.10h-iii** **Duplicate** calls 1.10c and opens the new Draft. The source theme stays as it was. **Done when:** duplicating a Live theme navigates to a Draft copy and the source list row is still Live. **Out of scope:** bulk duplicate.
+
+- [ ] **1.10h-iv** **Generate samples:** pick one Spotmu source item, call the samples endpoint only, and show the preview. A blocked preview stays on screen with a visible error state (banner plus a highlight on that preview) naming the reason — overlap bands, or the missing-asset / measure error. It is not sent to Queue, Schedule, or publish. A non-blocked preview shows the image without that error state. Empty state: no source chosen, the button does not call the API. **Done when:** the click hits `/api/v1/themes/{id}/samples` and does not call `/api/v1/generate/carousel` or create a queue row. **Out of scope:** shipping generate, multi-frame sample batches.
+
+#### 1.10i — Close the section
+
+- [ ] **1.10i-i** `docs/reports/task_1_10_report.md`: what landed, the preview-vs-post split, and the deferred upload / non-Spotmu / ship-path notes. Tick these leaves. **Done when:** the report exists and every 1.10 leaf above is `[x]`. **Out of scope:** starting Phase 2, switching `POST /api/v1/generate/carousel` onto Live themes.
+
+**1.10 done when:** the leaves above are `[x]`; a theme can hold the locked frame and elements; duplicate yields a new Draft; Generate samples shows a preview, including a highlighted overlap, and writes no artifact and no post job.
+
+---
+
 ## Phase 2 — Spotmu (harden the pipeline)
 
 **Exit:** Multiple clusters running; medians above suppression floor; steer is routine; Spotmu traffic signal visible.
@@ -423,6 +503,10 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 ## Parking lot (do not pull forward early)
 - **DEFERRED from 1.1** — S3 / object storage for generated media (create when multi-host/volume needs it; **1.4 uses local `ARTIFACT_STORAGE_DIR`**)
 - **DEFERRED from 1.1** — AWS Secrets Manager / SSM with Twerva-prefixed secrets (Phase 1 uses on-box `/opt/twerva/*.env` mode 600)
+- **DEFERRED from themes v1 / 1.10** — image upload, storage, and serving (the frame stores a path reference only; sample render may read a file already under `ARTIFACT_STORAGE_DIR`)
+- **DEFERRED from themes v1 / 1.10** — text sources other than Spotmu `title`, `interest_heading`, `overview_bullets`, and `canonical_url`
+- **DEFERRED from themes v1 / 1.10** — short video, non-carousel theme types, and edge layouts (side-by-side, free placement, partial-width)
+- **DEFERRED from 1.10** — binding a Live theme into `POST /api/v1/generate/carousel` (posts that ship stay on `carousel_template_v1` until that later slice)
 
 - Character / mascot universes
 - Outfy-class “post only to seller’s own empty accounts” as the product
@@ -436,8 +520,9 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 ## Suggested next coding slice
 
-**§1.9 / Phase 1 sheet closed** on this branch (docs + dry-run playbook).
-Read [`docs/reports/phase_1_exit_report.md`](../reports/phase_1_exit_report.md).
-Mock publish and manual/stub metrics stay the pipe until Mu adds vendor
-keys. **STOP. Do not start Phase 2** until Mu reviews.
+**1.10 Carousel theme frame.** Source of truth:
+[`docs/planning/themes_v1.md`](themes_v1.md). Start at **1.10a-i**.
+Do not implement a cell or skeleton layout. Phase 1 stays closed.
+Do not start Phase 2. Posts that ship stay on `carousel_template_v1`
+until a later slice binds a Live theme into `POST /api/v1/generate/carousel`.
 
