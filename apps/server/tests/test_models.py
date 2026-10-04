@@ -2,7 +2,7 @@
 
 import unittest
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, UniqueConstraint
 from sqlalchemy.sql.schema import Column, Table
 
 from app.models import (
@@ -32,10 +32,16 @@ from app.models import (
     SteerAction,
     SteerActionType,
     Theme,
+    ThemeElement,
+    ThemeElementAlignment,
+    ThemeElementBand,
+    ThemeElementContentKind,
+    ThemeElementTextSource,
     ThemeStatus,
     BackgroundKind,
     cluster_source_items,
 )
+from app.models.theme_element import THEME_ELEMENT_CONTENT_CHECK_SQL
 from app.models.account import Account as AccountModel
 
 
@@ -55,6 +61,7 @@ EXPECTED_TABLE_NAMES: frozenset[str] = frozenset(
         "campaign_accounts",
         "campaign_interests",
         "themes",
+        "theme_elements",
     },
 )
 
@@ -86,6 +93,7 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(CampaignAccount.__tablename__, "campaign_accounts")
         self.assertEqual(CampaignInterest.__tablename__, "campaign_interests")
         self.assertEqual(Theme.__tablename__, "themes")
+        self.assertEqual(ThemeElement.__tablename__, "theme_elements")
         self.assertIs(Account, AccountModel)
         self.assertIn("template_id", set(Artifact.__table__.columns.keys()))
 
@@ -301,6 +309,104 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(str(color_column.server_default.arg), "#F6F1E8")
         self.assertIsNone(gradient_column.server_default)
         self.assertIsNone(asset_column.server_default)
+
+    def test_theme_element_maps_columns_and_content_check(self) -> None:
+        """theme_elements maps the locked columns and rejects placement fields."""
+
+        column_names: set[str] = set(ThemeElement.__table__.columns.keys())
+        expected_column_names: set[str] = {
+            "id",
+            "theme_id",
+            "band",
+            "sort_order",
+            "content_kind",
+            "rectangle_color",
+            "text_source",
+            "font_family",
+            "font_size",
+            "font_color",
+            "bold",
+            "italic",
+            "underline",
+            "strikethrough",
+            "font_weight",
+            "alignment",
+            "image_asset_ref",
+            "created_at",
+            "updated_at",
+        }
+
+        self.assertEqual(column_names, expected_column_names)
+        self.assertTrue({"x", "y", "width"}.isdisjoint(column_names))
+        self.assertEqual(
+            {member.value for member in ThemeElementBand},
+            {"top", "middle", "bottom"},
+        )
+        self.assertEqual(
+            {member.value for member in ThemeElementContentKind},
+            {"text", "image"},
+        )
+        self.assertEqual(
+            {member.value for member in ThemeElementTextSource},
+            {"title", "interest_heading", "overview_bullets", "canonical_url"},
+        )
+        self.assertEqual(
+            {member.value for member in ThemeElementAlignment},
+            {"left", "center", "right"},
+        )
+        self.assertIn(
+            ("theme_id", "band", "sort_order"),
+            _unique_column_tuples(ThemeElement.__table__),
+        )
+
+        theme_id_column: Column[object] = ThemeElement.__table__.columns["theme_id"]
+        theme_foreign_key: ForeignKey = next(iter(theme_id_column.foreign_keys))
+
+        self.assertEqual(theme_foreign_key.column.table.name, "themes")
+        self.assertEqual(theme_foreign_key.ondelete, "CASCADE")
+        self.assertFalse(ThemeElement.__table__.columns["sort_order"].nullable)
+        self.assertTrue(ThemeElement.__table__.columns["rectangle_color"].nullable)
+        self.assertTrue(ThemeElement.__table__.columns["text_source"].nullable)
+        self.assertTrue(ThemeElement.__table__.columns["font_weight"].nullable)
+        self.assertTrue(ThemeElement.__table__.columns["image_asset_ref"].nullable)
+        self.assertTrue(ThemeElement.__table__.columns["alignment"].nullable)
+
+        for style_column_name in ("bold", "italic", "underline", "strikethrough"):
+            style_column: Column[object] = ThemeElement.__table__.columns[
+                style_column_name
+            ]
+
+            self.assertFalse(style_column.nullable)
+            self.assertIsNotNone(style_column.server_default)
+            self.assertEqual(str(style_column.server_default.arg), "false")
+
+        content_checks: list[CheckConstraint] = [
+            table_constraint
+            for table_constraint in ThemeElement.__table__.constraints
+            if isinstance(table_constraint, CheckConstraint)
+        ]
+
+        self.assertEqual(len(content_checks), 1)
+        self.assertEqual(content_checks[0].name, "ck_theme_elements_content")
+        self.assertEqual(
+            str(content_checks[0].sqltext),
+            THEME_ELEMENT_CONTENT_CHECK_SQL,
+        )
+        self.assertIn(
+            "content_kind = 'text'::theme_element_content_kind",
+            THEME_ELEMENT_CONTENT_CHECK_SQL,
+        )
+        self.assertIn("text_source IS NULL", THEME_ELEMENT_CONTENT_CHECK_SQL)
+        self.assertIn("font_size > 0", THEME_ELEMENT_CONTENT_CHECK_SQL)
+        self.assertIn(
+            "font_weight >= 1 AND font_weight <= 1000",
+            THEME_ELEMENT_CONTENT_CHECK_SQL,
+        )
+        self.assertIn(
+            "strpos(image_asset_ref, '..') = 0",
+            THEME_ELEMENT_CONTENT_CHECK_SQL,
+        )
+        self.assertIn(".jpeg", THEME_ELEMENT_CONTENT_CHECK_SQL)
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

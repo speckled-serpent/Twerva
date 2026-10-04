@@ -93,7 +93,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`themes_background`** (parent `themes_spacing`).
+Current head: **`theme_elements`** (parent `themes_background`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -184,7 +184,9 @@ the background columns. A negative spacing value is HTTP 400. A Live
 background requires the payload for its kind. Optional `template_key`
 must name an existing carousel generator. Upgrade seeds
 `spotmu_paper_v1` and `spotmu_bold_v1` as `draft` with spacing 96 / 0 / 0
-and a paper color background.
+and a paper color background. Elements, when stored, live on
+`theme_elements` (full width, no coordinates). That table has no HTTP
+in this slice.
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
 are Phase 1.5. `POST /api/v1/publish/run/{post_job_id}` mock-publishes a

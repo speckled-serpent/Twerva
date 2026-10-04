@@ -124,6 +124,42 @@ class BackgroundKind(enum.StrEnum):
     TEXTURE = "texture"
 
 
+class ThemeElementBand(enum.StrEnum):
+    """Vertical band a theme element stacks in. Bands do not push each other."""
+
+    TOP = "top"
+    MIDDLE = "middle"
+    BOTTOM = "bottom"
+
+
+class ThemeElementContentKind(enum.StrEnum):
+    """Whether a theme element draws text or one image file."""
+
+    TEXT = "text"
+    IMAGE = "image"
+
+
+class ThemeElementTextSource(enum.StrEnum):
+    """Spotmu field a text element reads. No other source keys.
+
+    Maps to ``source_items.title``, ``source_items.interest_heading``,
+    ``source_items.overview_bullets``, and ``source_items.canonical_url``.
+    """
+
+    TITLE = "title"
+    INTEREST_HEADING = "interest_heading"
+    OVERVIEW_BULLETS = "overview_bullets"
+    CANONICAL_URL = "canonical_url"
+
+
+class ThemeElementAlignment(enum.StrEnum):
+    """Horizontal alignment of a text element's content."""
+
+    LEFT = "left"
+    CENTER = "center"
+    RIGHT = "right"
+
+
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ArtifactStatus.DRAFT: frozenset(
         {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
@@ -207,3 +243,19 @@ ADVERTISEMENT_TYPE_ENUM: Enum = as_postgres_enum(
 CAMPAIGN_STATUS_ENUM: Enum = as_postgres_enum(CampaignStatus, "campaign_status")
 THEME_STATUS_ENUM: Enum = as_postgres_enum(ThemeStatus, "theme_status")
 BACKGROUND_KIND_ENUM: Enum = as_postgres_enum(BackgroundKind, "background_kind")
+THEME_ELEMENT_BAND_ENUM: Enum = as_postgres_enum(
+    ThemeElementBand,
+    "theme_element_band",
+)
+THEME_ELEMENT_CONTENT_KIND_ENUM: Enum = as_postgres_enum(
+    ThemeElementContentKind,
+    "theme_element_content_kind",
+)
+THEME_ELEMENT_TEXT_SOURCE_ENUM: Enum = as_postgres_enum(
+    ThemeElementTextSource,
+    "theme_element_text_source",
+)
+THEME_ELEMENT_ALIGNMENT_ENUM: Enum = as_postgres_enum(
+    ThemeElementAlignment,
+    "theme_element_alignment",
+)

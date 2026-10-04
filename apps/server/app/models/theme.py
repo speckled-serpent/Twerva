@@ -22,6 +22,7 @@ from app.models.enums import (
 
 if TYPE_CHECKING:
     from app.models.ops_user import OpsUser
+    from app.models.theme_element import ThemeElement
 
 
 DEFAULT_PAGE_MARGIN: int = 96
@@ -42,7 +43,8 @@ class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
     points at a restricted carousel generator such as
     ``spotmu_paper_v1``. Creating a theme does not render artifacts or
     bind a campaign. ``live``, non-default spacing, and other background
-    kinds are stored only by a later partial patch.
+    kinds are stored only by a later partial patch. Elements, when any,
+    live on ``theme_elements``. Creating a theme does not insert elements.
     """
 
     __tablename__ = "themes"
@@ -108,3 +110,8 @@ class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
     )
 
     created_by_user: Mapped["OpsUser | None"] = relationship("OpsUser")
+    elements: Mapped[list["ThemeElement"]] = relationship(
+        "ThemeElement",
+        back_populates="theme",
+        cascade="all, delete-orphan",
+    )

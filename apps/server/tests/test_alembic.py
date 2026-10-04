@@ -13,6 +13,7 @@ ARTIFACT_TEMPLATE_ID_REVISION_ID: str = "artifact_template_id"
 CAMPAIGNS_CREATE_UI_REVISION_ID: str = "campaigns_create_ui"
 CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID: str = "campaign_status_lifecycle"
 CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID: str = "campaign_type_spotmu_test"
+THEME_ELEMENTS_REVISION_ID: str = "theme_elements"
 THEMES_BACKGROUND_REVISION_ID: str = "themes_background"
 THEMES_CREATE_REVISION_ID: str = "themes_create"
 THEMES_STATUS_REVISION_ID: str = "themes_status"
@@ -51,6 +52,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
+                f"{THEME_ELEMENTS_REVISION_ID}.py",
                 f"{THEMES_BACKGROUND_REVISION_ID}.py",
                 f"{THEMES_CREATE_REVISION_ID}.py",
                 f"{THEMES_SPACING_REVISION_ID}.py",
@@ -299,7 +301,7 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("Spotmu Bold v1", revision_source)
         self.assertIn('op.drop_column("themes", "page_margin")', revision_source)
 
-    def test_themes_background_revision_is_the_current_head(self) -> None:
+    def test_themes_background_revision_follows_themes_spacing(self) -> None:
         """themes_background follows themes_spacing and backfills paper."""
 
         assigned_values: dict[str, object] = _revision_module_constants(
@@ -333,6 +335,45 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("Spotmu Paper v1", revision_source)
         self.assertIn("Spotmu Bold v1", revision_source)
         self.assertIn("DROP TYPE background_kind", revision_source)
+
+    def test_theme_elements_revision_is_the_current_head(self) -> None:
+        """theme_elements follows themes_background and locks the content check."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEME_ELEMENTS_REVISION_ID}.py",
+        )
+        revision_source: str = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEME_ELEMENTS_REVISION_ID}.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), THEME_ELEMENTS_REVISION_ID)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            THEMES_BACKGROUND_REVISION_ID,
+        )
+        self.assertIn("CREATE TYPE theme_element_band AS ENUM", revision_source)
+        self.assertIn("('top', 'middle', 'bottom')", revision_source)
+        self.assertIn("('text', 'image')", revision_source)
+        self.assertIn(
+            "('title', 'interest_heading', 'overview_bullets', 'canonical_url')",
+            revision_source,
+        )
+        self.assertIn("('left', 'center', 'right')", revision_source)
+        self.assertIn("THEME_ELEMENT_CONTENT_CHECK_SQL", revision_source)
+        self.assertIn("ondelete=\"CASCADE\"", revision_source)
+        self.assertIn("uq_theme_elements_theme_id_band_sort_order", revision_source)
+        self.assertIn('name="content"', revision_source)
+        self.assertIn("ck_theme_elements_content", revision_source)
+        self.assertNotIn('"x"', revision_source)
+        self.assertNotIn('"y"', revision_source)
+        self.assertNotIn('"width"', revision_source)
+        self.assertIn("DROP TYPE theme_element_band", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

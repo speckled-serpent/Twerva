@@ -296,3 +296,33 @@ paper background `#F6F1E8`.
 Creating a theme does not render slides or attach a campaign.
 Both `draft` → `live` and `live` → `draft` are allowed. Layout math is
 not applied here.
+
+## Theme elements (`theme_elements`)
+
+Alembic `theme_elements` (parent `themes_background`). One row is one
+full-width element. There is no `x`, `y`, or `width` column.
+`theme_id` references `themes` **ON DELETE CASCADE**. Unique
+(`theme_id`, `band`, `sort_order`). `rectangle_color` null means the
+rectangle is clear. There is no HTTP for elements yet.
+
+| Enum | Values |
+|---|---|
+| `theme_element_band` | `top`, `middle`, `bottom` |
+| `theme_element_content_kind` | `text`, `image` |
+| `theme_element_text_source` | `title`, `interest_heading`, `overview_bullets`, `canonical_url` |
+| `theme_element_alignment` | `left`, `center`, `right` |
+
+`text_source` maps to `source_items.title`, `.interest_heading`,
+`.overview_bullets`, and `.canonical_url`. No other source keys.
+
+Check `ck_theme_elements_content`:
+
+- `text` requires `text_source`, a non-blank `font_family`, `font_size`
+  greater than 0, a non-blank `font_color`, and `alignment`.
+- `bold`, `italic`, `underline`, and `strikethrough` are not null and
+  default false.
+- `font_weight` is null or an integer from 1 through 1000.
+- `image` requires `image_asset_ref` and forbids `text_source`.
+- `image_asset_ref`, when set, is a relative path with no `..` and no
+  scheme, suffix `.svg`, `.png`, `.jpg`, or `.jpeg` (same rule as
+  `background_asset_ref`).
