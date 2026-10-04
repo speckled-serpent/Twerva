@@ -380,7 +380,7 @@ New Alembic revision after `themes_create`. Do not edit `themes_create`. Native 
 
 #### 1.10c — Duplicate
 
-- [ ] **1.10c-i** `POST /api/v1/themes/{id}/duplicate`. New row, new id, status `draft`, name `Copy of {name}`, slug from the existing slug helper. Copy background, the three spacing values, and every element (new element ids; same band, order, and content). Leave the source row untouched, including its status and `updated_at`. Set `template_key` null on the copy (`template_key` is unique). **Done when:** a test duplicates a Live theme that has a gradient and two elements; the source is still Live with the same ids; the copy is Draft; the copy's `template_key` is null; element ids differ. **Out of scope:** the ops button (1.10h), samples.
+- [x] **1.10c-i** `POST /api/v1/themes/{id}/duplicate`. New row, new id, status `draft`, name `Copy of {name}`, slug from the existing slug helper. Copy background, the three spacing values, and every element (new element ids; same band, order, and content). Leave the source row untouched, including its status and `updated_at`. Set `template_key` null on the copy (`template_key` is unique). **Done when:** a test duplicates a Live theme that has a gradient and two elements; the source is still Live with the same ids; the copy is Draft; the copy's `template_key` is null; element ids differ. **Out of scope:** the ops button (1.10h), samples.
 
 #### 1.10d — Layout math
 

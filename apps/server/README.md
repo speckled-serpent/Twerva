@@ -189,6 +189,10 @@ and a paper color background. Elements live on `theme_elements`
 ordered by band then `sort_order`. `POST`, `PATCH`, and `DELETE` under
 `/api/v1/themes/{theme_id}/elements` use the same write gate as theme
 create. The server compacts `sort_order` from 0 within the band.
+`POST /api/v1/themes/{id}/duplicate` stores a new Draft named
+`Copy of {name}` with a new slug, null `template_key`, the same
+spacing and background, and new element rows. The source theme,
+including its status and `updated_at`, stays as it was.
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
 are Phase 1.5. `POST /api/v1/publish/run/{post_job_id}` mock-publishes a
