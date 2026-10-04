@@ -95,6 +95,8 @@ class ThemeCreateRequest(BaseModel):
     carousel (the only implemented format). ``template_key`` is optional
     and, when set, must name an existing carousel generator. A ``status``
     field in the body is ignored; the row is always stored as ``draft``.
+    Spacing fields are ignored here too. A name-only create stores
+    ``page_margin`` 96, ``element_gap`` 0, and ``element_margin`` 0.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -107,12 +109,16 @@ class ThemeCreateRequest(BaseModel):
 class ThemePatchRequest(BaseModel):
     """Body for `PATCH /api/v1/themes/{id}`.
 
-    Partial. Only fields present in the body are written. ``status`` is
-    the only field in this slice. Omitted ``status`` leaves the row
-    unchanged. Null ``status`` is rejected by the handler.
+    Partial. Only fields present in the body are written. Omitted fields
+    leave the row unchanged. Null ``status`` or spacing is rejected by
+    the handler. Spacing integers must be zero or greater; a negative
+    is HTTP 400.
     """
 
     status: ThemeStatus | None = None
+    page_margin: int | None = None
+    element_gap: int | None = None
+    element_margin: int | None = None
 
 
 class ThemeReadResponse(BaseModel):
@@ -126,6 +132,9 @@ class ThemeReadResponse(BaseModel):
     advertisement_type: AdvertisementType
     template_key: str | None
     status: ThemeStatus
+    page_margin: int
+    element_gap: int
+    element_margin: int
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None

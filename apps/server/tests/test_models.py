@@ -266,6 +266,20 @@ class DomainEnumTests(unittest.TestCase):
         self.assertIsNotNone(status_column.server_default)
         self.assertEqual(str(status_column.server_default.arg), ThemeStatus.DRAFT.value)
 
+    def test_theme_spacing_defaults(self) -> None:
+        """Spacing columns are non-null integers defaulting to 96 / 0 / 0."""
+
+        page_margin_column: Column[object] = Theme.__table__.columns["page_margin"]
+        element_gap_column: Column[object] = Theme.__table__.columns["element_gap"]
+        element_margin_column: Column[object] = Theme.__table__.columns["element_margin"]
+
+        self.assertFalse(page_margin_column.nullable)
+        self.assertFalse(element_gap_column.nullable)
+        self.assertFalse(element_margin_column.nullable)
+        self.assertEqual(str(page_margin_column.server_default.arg), "96")
+        self.assertEqual(str(element_gap_column.server_default.arg), "0")
+        self.assertEqual(str(element_margin_column.server_default.arg), "0")
+
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:
     """Return column-name tuples for unique constraints and unique indexes."""

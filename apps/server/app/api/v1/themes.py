@@ -15,6 +15,11 @@ from app.auth.dependencies import require_authenticated_ops_operator
 from app.db import get_our_database_session
 from app.generate.templates import CAROUSEL_TEMPLATES_BY_ID
 from app.models import AdvertisementType, OpsUser, Theme, ThemeStatus
+from app.models.theme import (
+    DEFAULT_ELEMENT_GAP,
+    DEFAULT_ELEMENT_MARGIN,
+    DEFAULT_PAGE_MARGIN,
+)
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
 
@@ -66,6 +71,9 @@ def create_theme(
         advertisement_type=theme_create_request.advertisement_type,
         template_key=template_key,
         status=ThemeStatus.DRAFT,
+        page_margin=DEFAULT_PAGE_MARGIN,
+        element_gap=DEFAULT_ELEMENT_GAP,
+        element_margin=DEFAULT_ELEMENT_MARGIN,
         created_by=created_by,
     )
     our_database_session.add(created_theme)
@@ -118,7 +126,7 @@ def patch_theme_by_id(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
 ) -> ThemeReadResponse:
-    """Patch theme fields that are present. Status may move draft ↔ live."""
+    """Patch fields that are present. Status may move draft ↔ live."""
 
     _ = current_ops_operator
     found_theme: Theme = fetch_theme_by_id_or_raise(theme_id, our_database_session)
@@ -140,7 +148,7 @@ def serialize_theme(theme: Theme) -> ThemeReadResponse:
         theme: Loaded theme.
 
     Returns:
-        API response including slug, status, and optional template key.
+        API response including slug, status, spacing, and template key.
     """
 
     theme_read_response: ThemeReadResponse = ThemeReadResponse(
@@ -150,12 +158,31 @@ def serialize_theme(theme: Theme) -> ThemeReadResponse:
         advertisement_type=theme.advertisement_type,
         template_key=theme.template_key,
         status=theme.status,
+        page_margin=theme.page_margin,
+        element_gap=theme.element_gap,
+        element_margin=theme.element_margin,
         created_at=theme.created_at,
         updated_at=theme.updated_at,
         created_by=theme.created_by,
     )
 
     return theme_read_response
+
+
+def theme_spacing_required_detail(field_name: str) -> str:
+    """Return the 400 detail for an explicit null spacing field."""
+
+    required_detail: str = f"{field_name} is required."
+
+    return required_detail
+
+
+def theme_spacing_negative_detail(field_name: str) -> str:
+    """Return the 400 detail for a negative spacing value."""
+
+    negative_detail: str = f"{field_name} must be zero or greater."
+
+    return negative_detail
 
 
 def _apply_theme_patch(theme: Theme, theme_patch_request: ThemePatchRequest) -> None:
@@ -166,16 +193,64 @@ def _apply_theme_patch(theme: Theme, theme_patch_request: ThemePatchRequest) -> 
         theme_patch_request: Partial body. Absent fields are left alone.
 
     Raises:
-        HTTPException: 400 when ``status`` is present and null.
+        HTTPException: 400 when a present status or spacing value is null,
+            or when a spacing value is negative.
     """
 
     assigned_fields: set[str] = theme_patch_request.model_fields_set
+    status_to_store: ThemeStatus | None = _status_to_store(
+        theme_patch_request.status,
+        "status" in assigned_fields,
+    )
+    page_margin_to_store: int | None = _spacing_to_store(
+        "page_margin",
+        theme_patch_request.page_margin,
+        "page_margin" in assigned_fields,
+    )
+    element_gap_to_store: int | None = _spacing_to_store(
+        "element_gap",
+        theme_patch_request.element_gap,
+        "element_gap" in assigned_fields,
+    )
+    element_margin_to_store: int | None = _spacing_to_store(
+        "element_margin",
+        theme_patch_request.element_margin,
+        "element_margin" in assigned_fields,
+    )
 
-    if "status" not in assigned_fields:
+    if status_to_store is not None:
+        theme.status = status_to_store
 
-        return
+    if page_margin_to_store is not None:
+        theme.page_margin = page_margin_to_store
 
-    patched_status: ThemeStatus | None = theme_patch_request.status
+    if element_gap_to_store is not None:
+        theme.element_gap = element_gap_to_store
+
+    if element_margin_to_store is not None:
+        theme.element_margin = element_margin_to_store
+
+
+def _status_to_store(
+    patched_status: ThemeStatus | None,
+    status_is_set: bool,
+) -> ThemeStatus | None:
+    """Return a status to write, or None when the client omitted it.
+
+    Args:
+        patched_status: Status from the body, or None when omitted or null.
+        status_is_set: True when the client included ``status``.
+
+    Returns:
+        The status to store, or None when the field was omitted.
+
+    Raises:
+        HTTPException: 400 when ``status`` is present and null.
+    """
+
+    if not status_is_set:
+
+        return None
 
     if patched_status is None:
         raise HTTPException(
@@ -183,7 +258,45 @@ def _apply_theme_patch(theme: Theme, theme_patch_request: ThemePatchRequest) -> 
             detail=THEME_STATUS_REQUIRED_DETAIL,
         )
 
-    theme.status = patched_status
+    return patched_status
+
+
+def _spacing_to_store(
+    field_name: str,
+    spacing_value: int | None,
+    spacing_is_set: bool,
+) -> int | None:
+    """Return a spacing integer to write, or None when the client omitted it.
+
+    Args:
+        field_name: API field name used in the 400 detail.
+        spacing_value: Integer from the body, or None when omitted or null.
+        spacing_is_set: True when the client included this field.
+
+    Returns:
+        The integer to store, including zero, or None when omitted.
+
+    Raises:
+        HTTPException: 400 when the field is null or negative.
+    """
+
+    if not spacing_is_set:
+
+        return None
+
+    if spacing_value is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=theme_spacing_required_detail(field_name),
+        )
+
+    if spacing_value < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=theme_spacing_negative_detail(field_name),
+        )
+
+    return spacing_value
 
 
 def _normalize_template_key(template_key: str | None) -> str | None:

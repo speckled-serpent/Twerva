@@ -15,10 +15,17 @@ from app.api.v1.themes import (
     get_theme_by_id,
     list_themes,
     patch_theme_by_id,
+    theme_spacing_negative_detail,
+    theme_spacing_required_detail,
 )
 from app.api.v1.schemas import ThemeCreateRequest, ThemePatchRequest, ThemeReadResponse
 from app.models.enums import AdvertisementType, ThemeStatus
-from app.models.theme import Theme
+from app.models.theme import (
+    DEFAULT_ELEMENT_GAP,
+    DEFAULT_ELEMENT_MARGIN,
+    DEFAULT_PAGE_MARGIN,
+    Theme,
+)
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
 
@@ -87,9 +94,15 @@ class ThemeCreateValidationTests(unittest.TestCase):
         )
         self.assertIsNone(theme_read_response.template_key)
         self.assertEqual(theme_read_response.status, ThemeStatus.DRAFT)
+        self.assertEqual(theme_read_response.page_margin, DEFAULT_PAGE_MARGIN)
+        self.assertEqual(theme_read_response.element_gap, DEFAULT_ELEMENT_GAP)
+        self.assertEqual(theme_read_response.element_margin, DEFAULT_ELEMENT_MARGIN)
         self.assertEqual(theme_read_response.created_by, operator_id)
         added_theme: Theme = fake_session.add.call_args.args[0]
         self.assertEqual(added_theme.status, ThemeStatus.DRAFT)
+        self.assertEqual(added_theme.page_margin, DEFAULT_PAGE_MARGIN)
+        self.assertEqual(added_theme.element_gap, DEFAULT_ELEMENT_GAP)
+        self.assertEqual(added_theme.element_margin, DEFAULT_ELEMENT_MARGIN)
         fake_session.add.assert_called_once()
 
     def test_blank_template_key_is_stored_as_null(self) -> None:
@@ -184,6 +197,10 @@ class ThemeListTests(unittest.TestCase):
         self.assertEqual(listed_themes[1].template_key, "spotmu_paper_v1")
         self.assertEqual(listed_themes[0].status, ThemeStatus.DRAFT)
         self.assertEqual(listed_themes[1].status, ThemeStatus.DRAFT)
+        self.assertEqual(listed_themes[0].page_margin, DEFAULT_PAGE_MARGIN)
+        self.assertEqual(listed_themes[0].element_gap, DEFAULT_ELEMENT_GAP)
+        self.assertEqual(listed_themes[0].element_margin, DEFAULT_ELEMENT_MARGIN)
+        self.assertEqual(listed_themes[1].page_margin, DEFAULT_PAGE_MARGIN)
         self.assertEqual(len(listed_themes), 2)
 
 
@@ -331,6 +348,196 @@ class ThemeStatusPatchTests(unittest.TestCase):
         self.assertEqual(raised_http.exception.status_code, 404)
 
 
+class ThemeSpacingPatchTests(unittest.TestCase):
+    """PATCH spacing round-trips; create stores 96 / 0 / 0; negatives are 400."""
+
+    def test_round_trip_rejects_negative_and_create_reads_defaults(self) -> None:
+        """A non-default triple survives GET; -1 is 400; name-only create is 96 / 0 / 0."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        current_ops_operator: MagicMock = MagicMock()
+        spacing_patch: ThemePatchRequest = ThemePatchRequest(
+            page_margin=120,
+            element_gap=16,
+            element_margin=8,
+        )
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            patched_theme: ThemeReadResponse = patch_theme_by_id(
+                paper_theme.id,
+                spacing_patch,
+                fake_session,
+                current_ops_operator,
+            )
+
+        self.assertEqual(patched_theme.page_margin, 120)
+        self.assertEqual(patched_theme.element_gap, 16)
+        self.assertEqual(patched_theme.element_margin, 8)
+        loaded_theme: ThemeReadResponse = get_theme_by_id(paper_theme.id, fake_session)
+        self.assertEqual(loaded_theme.page_margin, 120)
+        self.assertEqual(loaded_theme.element_gap, 16)
+        self.assertEqual(loaded_theme.element_margin, 8)
+        self.assertEqual(loaded_theme.status, ThemeStatus.DRAFT)
+
+        self._assert_negative_spacing_is_rejected(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(page_margin=-1),
+            "page_margin",
+        )
+        self._assert_negative_spacing_is_rejected(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(element_gap=-1),
+            "element_gap",
+        )
+        self._assert_negative_spacing_is_rejected(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(element_margin=-1),
+            "element_margin",
+        )
+        self.assertEqual(paper_theme.page_margin, 120)
+        self.assertEqual(paper_theme.element_gap, 16)
+        self.assertEqual(paper_theme.element_margin, 8)
+
+        create_session: MagicMock = MagicMock()
+        create_session.scalars.return_value.all.return_value = []
+        create_session.refresh.side_effect = _assign_persisted_timestamps
+        theme_create_request: ThemeCreateRequest = ThemeCreateRequest(name="Harbor")
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            created_theme: ThemeReadResponse = create_theme(
+                theme_create_request,
+                create_session,
+                None,
+            )
+
+        self.assertEqual(created_theme.name, "Harbor")
+        self.assertEqual(created_theme.page_margin, 96)
+        self.assertEqual(created_theme.element_gap, 0)
+        self.assertEqual(created_theme.element_margin, 0)
+        self.assertEqual(created_theme.page_margin, DEFAULT_PAGE_MARGIN)
+        self.assertEqual(created_theme.element_gap, DEFAULT_ELEMENT_GAP)
+        self.assertEqual(created_theme.element_margin, DEFAULT_ELEMENT_MARGIN)
+
+        ignored_spacing_request: ThemeCreateRequest = ThemeCreateRequest.model_validate(
+            {
+                "name": "Night Shift",
+                "page_margin": -1,
+                "element_gap": 4,
+                "element_margin": 4,
+            },
+        )
+        ignored_session: MagicMock = MagicMock()
+        ignored_session.scalars.return_value.all.return_value = ["harbor"]
+        ignored_session.refresh.side_effect = _assign_persisted_timestamps
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            ignored_spacing_theme: ThemeReadResponse = create_theme(
+                ignored_spacing_request,
+                ignored_session,
+                None,
+            )
+
+        self.assertEqual(ignored_spacing_theme.page_margin, 96)
+        self.assertEqual(ignored_spacing_theme.element_gap, 0)
+        self.assertEqual(ignored_spacing_theme.element_margin, 0)
+        self.assertNotIn("page_margin", ThemeCreateRequest.model_fields)
+
+    def test_partial_spacing_patch_leaves_the_other_edges_alone(self) -> None:
+        """Sending only element_gap does not reset page margin or element margin."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        bold_theme: Theme = _theme_row(
+            name="Spotmu Bold v1",
+            slug="spotmu-bold-v1",
+            template_key="spotmu_bold_v1",
+            created_at=created_at,
+        )
+        bold_theme.page_margin = 120
+        bold_theme.element_gap = 16
+        bold_theme.element_margin = 8
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = bold_theme
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            patched_theme: ThemeReadResponse = patch_theme_by_id(
+                bold_theme.id,
+                ThemePatchRequest(element_gap=4),
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(patched_theme.page_margin, 120)
+        self.assertEqual(patched_theme.element_gap, 4)
+        self.assertEqual(patched_theme.element_margin, 8)
+
+    def test_null_spacing_is_rejected(self) -> None:
+        """An explicit null page margin is HTTP 400 and does not write."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        theme_patch_request: ThemePatchRequest = ThemePatchRequest.model_validate(
+            {"page_margin": None},
+        )
+
+        with self.assertRaises(HTTPException) as raised_http:
+            patch_theme_by_id(
+                paper_theme.id,
+                theme_patch_request,
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 400)
+        self.assertEqual(
+            raised_http.exception.detail,
+            theme_spacing_required_detail("page_margin"),
+        )
+        self.assertEqual(paper_theme.page_margin, DEFAULT_PAGE_MARGIN)
+        fake_session.commit.assert_not_called()
+
+    def _assert_negative_spacing_is_rejected(
+        self,
+        theme: Theme,
+        fake_session: MagicMock,
+        theme_patch_request: ThemePatchRequest,
+        field_name: str,
+    ) -> None:
+        """PATCH of -1 on one spacing field is HTTP 400 and does not commit."""
+
+        with self.assertRaises(HTTPException) as raised_http:
+            patch_theme_by_id(
+                theme.id,
+                theme_patch_request,
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 400)
+        self.assertEqual(
+            raised_http.exception.detail,
+            theme_spacing_negative_detail(field_name),
+        )
+        fake_session.commit.assert_not_called()
+
+
 class ThemeSlugTests(unittest.TestCase):
     """Slug derivation matches the campaign hyphen rules with a theme fallback."""
 
@@ -383,6 +590,9 @@ def _theme_row(
         advertisement_type=AdvertisementType.CAROUSEL,
         template_key=template_key,
         status=ThemeStatus.DRAFT,
+        page_margin=DEFAULT_PAGE_MARGIN,
+        element_gap=DEFAULT_ELEMENT_GAP,
+        element_margin=DEFAULT_ELEMENT_MARGIN,
         created_by=None,
         created_at=created_at,
         updated_at=created_at,

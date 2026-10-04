@@ -290,6 +290,9 @@ export interface ThemeReadResponse {
   advertisement_type: AdvertisementType;
   template_key: string | null;
   status: ThemeStatus;
+  page_margin: number;
+  element_gap: number;
+  element_margin: number;
   created_at: string;
   updated_at: string;
   created_by: string | null;

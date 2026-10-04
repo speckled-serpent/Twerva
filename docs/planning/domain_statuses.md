@@ -245,9 +245,10 @@ Allowed transitions (also `CAMPAIGN_STATUS_TRANSITIONS`):
 
 ## Theme
 
-`themes` (Alembic `themes_create`, status in `themes_status`) stores
-visual styling for carousels. Short video is not implemented. The table
-reuses `advertisement_type` (`carousel` only).
+`themes` (Alembic `themes_create`, status in `themes_status`, spacing
+in `themes_spacing`) stores visual styling for carousels. Short video
+is not implemented. The table reuses `advertisement_type` (`carousel`
+only).
 
 | Enum | Values |
 |---|---|
@@ -260,6 +261,9 @@ reuses `advertisement_type` (`carousel` only).
 | `advertisement_type` | `carousel` |
 | `template_key` | Optional unique link to a carousel generator (`spotmu_paper_v1`, `spotmu_bold_v1`). Null when the theme is not tied to a generator yet |
 | `status` | `ThemeStatus`. Default `draft`. Create always stores `draft`. `PATCH /api/v1/themes/{id}` may set `draft` or `live` |
+| `page_margin` | One integer, applied on every edge of the frame. Default **96**. `PATCH` may change it. Negative is HTTP 400 |
+| `element_gap` | One integer, applied between elements. Default **0**. Negative is HTTP 400 |
+| `element_margin` | One integer, applied on every edge of an element rectangle. Default **0**. Negative is HTTP 400 |
 | `created_by` | Nullable `ops_users` id |
 
 `draft` is the style the operator is editing. `live` is the style
@@ -267,10 +271,16 @@ generation will use for posts that ship. Shipping
 `POST /api/v1/generate/carousel` does not read `status` yet.
 
 `POST /api/v1/themes` requires a non-empty name. A `status` field on
-that body is ignored. Readers may `GET /api/v1/themes` and
-`/api/v1/themes/{id}`; writes, including `PATCH`, stay admin-only via
-the existing ops RBAC gate (`require_authenticated_ops_operator` plus
-the reader mutation check). Upgrade seeds Spotmu Paper v1 and Spotmu
-Bold v1, then backfills every existing row — those two included — to
-`draft`. Creating a theme does not render slides or attach a campaign.
-Both `draft` → `live` and `live` → `draft` are allowed.
+that body is ignored. Spacing fields on create are ignored too. A
+name-only create stores `page_margin` 96, `element_gap` 0, and
+`element_margin` 0. `PATCH /api/v1/themes/{id}` may set any of those
+integers; omitted spacing fields stay as they are. Zero is allowed.
+A negative spacing value is HTTP 400 and does not write. Readers may
+`GET /api/v1/themes` and `/api/v1/themes/{id}`; writes, including
+`PATCH`, stay admin-only via the existing ops RBAC gate
+(`require_authenticated_ops_operator` plus the reader mutation check).
+Upgrade seeds Spotmu Paper v1 and Spotmu Bold v1, then backfills every
+existing row — those two included — to `draft` and to spacing 96 / 0 / 0.
+Creating a theme does not render slides or attach a campaign.
+Both `draft` → `live` and `live` → `draft` are allowed. Layout math is
+not applied here.
