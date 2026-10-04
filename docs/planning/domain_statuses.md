@@ -316,6 +316,12 @@ server compacts it after a create, a move, or a delete. Unknown
 svg, png, or jpeg are rejected. This does not measure text or read
 image bytes.
 
+`POST /api/v1/themes/{id}/duplicate` inserts a new Draft. The name is
+`Copy of {name}`. The slug comes from the existing slug helper.
+`template_key` is null. Spacing, background, and every element are
+copied; element ids are new and band, order, and content stay the
+same. The source row is not updated.
+
 | Enum | Values |
 |---|---|
 | `theme_element_band` | `top`, `middle`, `bottom` |

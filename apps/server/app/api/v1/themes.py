@@ -1,7 +1,8 @@
-"""Theme create/list/get/patch. Carousel only; no render or campaign binding."""
+"""Theme create/list/get/patch/duplicate. Carousel only; no render."""
 
 from __future__ import annotations
 
+import copy
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,7 +20,14 @@ from app.api.v1.schemas import (
 from app.auth.dependencies import require_authenticated_ops_operator
 from app.db import get_our_database_session
 from app.generate.templates import CAROUSEL_TEMPLATES_BY_ID
-from app.models import AdvertisementType, BackgroundKind, OpsUser, Theme, ThemeStatus
+from app.models import (
+    AdvertisementType,
+    BackgroundKind,
+    OpsUser,
+    Theme,
+    ThemeElement,
+    ThemeStatus,
+)
 from app.models.theme import (
     DEFAULT_BACKGROUND_COLOR,
     DEFAULT_ELEMENT_GAP,
@@ -38,6 +46,7 @@ from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 THEME_NAME_REQUIRED_DETAIL: str = "Theme name is required."
 THEME_STATUS_REQUIRED_DETAIL: str = "Theme status is required."
 UNKNOWN_TEMPLATE_KEY_DETAIL: str = "Unknown carousel template."
+DUPLICATE_THEME_NAME_PREFIX: str = "Copy of "
 
 themes_router: APIRouter = APIRouter(prefix="/themes", tags=["themes"])
 
@@ -153,6 +162,69 @@ def patch_theme_by_id(
     )
     our_database_session.refresh(found_theme)
     theme_read_response: ThemeReadResponse = serialize_theme(found_theme)
+
+    return theme_read_response
+
+
+@themes_router.post(
+    "/{theme_id}/duplicate",
+    response_model=ThemeReadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def duplicate_theme_by_id(
+    theme_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
+) -> ThemeReadResponse:
+    """Copy one theme into a new Draft. The source row stays as it was."""
+
+    source_theme: Theme = fetch_theme_by_id_or_raise(theme_id, our_database_session)
+    copied_name: str = f"{DUPLICATE_THEME_NAME_PREFIX}{source_theme.name}"
+    requested_slug: str = slugify_theme_name(copied_name)
+    taken_slugs: set[str] = _load_taken_theme_slugs(our_database_session)
+    copied_slug: str = allocate_unique_theme_slug(requested_slug, taken_slugs)
+    created_by: uuid.UUID | None = (
+        None if current_ops_operator is None else current_ops_operator.id
+    )
+    copied_gradient: dict[str, object] | None = copy.deepcopy(
+        source_theme.background_gradient,
+    )
+    copied_theme: Theme = Theme(
+        name=copied_name,
+        slug=copied_slug,
+        advertisement_type=source_theme.advertisement_type,
+        template_key=None,
+        status=ThemeStatus.DRAFT,
+        page_margin=source_theme.page_margin,
+        element_gap=source_theme.element_gap,
+        element_margin=source_theme.element_margin,
+        background_kind=source_theme.background_kind,
+        background_color=source_theme.background_color,
+        background_gradient=copied_gradient,
+        background_asset_ref=source_theme.background_asset_ref,
+        created_by=created_by,
+    )
+    our_database_session.add(copied_theme)
+    our_database_session.flush()
+
+    for source_element in ordered_theme_elements(source_theme.elements):
+        copied_element: ThemeElement = _copy_theme_element(
+            copied_theme.id,
+            source_element,
+        )
+        copied_theme.elements.append(copied_element)
+        our_database_session.add(copied_element)
+
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Theme slug or template already exists.",
+    )
+    our_database_session.refresh(copied_theme)
+
+    for copied_element in copied_theme.elements:
+        our_database_session.refresh(copied_element)
+
+    theme_read_response: ThemeReadResponse = serialize_theme(copied_theme)
 
     return theme_read_response
 
@@ -433,6 +505,42 @@ def _normalize_template_key(template_key: str | None) -> str | None:
         )
 
     return stripped_template_key
+
+
+def _copy_theme_element(
+    theme_id: uuid.UUID,
+    source_element: ThemeElement,
+) -> ThemeElement:
+    """Return a new element with the same band, order, and content.
+
+    Args:
+        theme_id: Primary key of the new Draft theme.
+        source_element: Element on the theme being copied.
+
+    Returns:
+        An element with a new id. The source row is not modified.
+    """
+
+    copied_element: ThemeElement = ThemeElement(
+        theme_id=theme_id,
+        band=source_element.band,
+        sort_order=source_element.sort_order,
+        content_kind=source_element.content_kind,
+        rectangle_color=source_element.rectangle_color,
+        text_source=source_element.text_source,
+        font_family=source_element.font_family,
+        font_size=source_element.font_size,
+        font_color=source_element.font_color,
+        bold=source_element.bold,
+        italic=source_element.italic,
+        underline=source_element.underline,
+        strikethrough=source_element.strikethrough,
+        font_weight=source_element.font_weight,
+        alignment=source_element.alignment,
+        image_asset_ref=source_element.image_asset_ref,
+    )
+
+    return copied_element
 
 
 def _load_taken_theme_slugs(our_database_session: Session) -> set[str]:

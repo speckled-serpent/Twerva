@@ -18,6 +18,7 @@ from app.api.v1.themes import (
     THEME_NAME_REQUIRED_DETAIL,
     THEME_STATUS_REQUIRED_DETAIL,
     create_theme,
+    duplicate_theme_by_id,
     get_theme_by_id,
     list_themes,
     patch_theme_by_id,
@@ -35,6 +36,7 @@ from app.api.v1.schemas import (
 from app.models.enums import (
     AdvertisementType,
     BackgroundKind,
+    ThemeElementAlignment,
     ThemeElementBand,
     ThemeElementContentKind,
     ThemeElementTextSource,
@@ -1154,6 +1156,168 @@ class ThemeElementApiTests(unittest.TestCase):
         self.assertIn(THEME_ELEMENT_NOT_FOUND_DETAIL, str(raised_http.exception.detail))
 
 
+class ThemeDuplicateTests(unittest.TestCase):
+    """Duplicate copies a Live theme into a new Draft and leaves the source."""
+
+    def test_duplicate_live_theme_with_gradient_and_two_elements(self) -> None:
+        """The copy is Draft, template_key is null, and element ids differ."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        source_updated_at: datetime = datetime(2026, 10, 4, 18, 30, tzinfo=timezone.utc)
+        source_gradient: dict[str, object] = {
+            "angle_deg": 180,
+            "stops": [
+                {"offset": 0, "color": "#112233"},
+                {"offset": 1, "color": "#F6F1E8"},
+            ],
+        }
+        source_theme: Theme = _theme_row(
+            name="Harbor Night",
+            slug="harbor-night",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        source_theme.status = ThemeStatus.LIVE
+        source_theme.page_margin = 120
+        source_theme.element_gap = 16
+        source_theme.element_margin = 8
+        source_theme.background_kind = BackgroundKind.GRADIENT
+        source_theme.background_color = None
+        source_theme.background_gradient = source_gradient
+        source_theme.background_asset_ref = None
+        source_theme.updated_at = source_updated_at
+        text_element: ThemeElement = ThemeElement(
+            id=uuid.uuid4(),
+            theme_id=source_theme.id,
+            band=ThemeElementBand.TOP,
+            sort_order=0,
+            content_kind=ThemeElementContentKind.TEXT,
+            rectangle_color=None,
+            text_source=ThemeElementTextSource.TITLE,
+            font_family="DejaVu Sans",
+            font_size=32,
+            font_color="#112233",
+            bold=True,
+            italic=False,
+            underline=False,
+            strikethrough=False,
+            font_weight=700,
+            alignment=ThemeElementAlignment.LEFT,
+            image_asset_ref=None,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        image_element: ThemeElement = ThemeElement(
+            id=uuid.uuid4(),
+            theme_id=source_theme.id,
+            band=ThemeElementBand.BOTTOM,
+            sort_order=0,
+            content_kind=ThemeElementContentKind.IMAGE,
+            rectangle_color="#AABBCC",
+            text_source=None,
+            font_family=None,
+            font_size=None,
+            font_color=None,
+            bold=False,
+            italic=False,
+            underline=False,
+            strikethrough=False,
+            font_weight=None,
+            alignment=None,
+            image_asset_ref="logos/mark.png",
+            created_at=created_at,
+            updated_at=created_at,
+        )
+        source_theme.elements.append(text_element)
+        source_theme.elements.append(image_element)
+        source_element_ids: list[uuid.UUID] = [text_element.id, image_element.id]
+        duplicate_session: _DuplicateMemorySession = _DuplicateMemorySession(
+            source_theme,
+            ["harbor-night"],
+        )
+        operator_id: uuid.UUID = uuid.uuid4()
+        current_ops_operator: MagicMock = MagicMock()
+        current_ops_operator.id = operator_id
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            copied_theme: ThemeReadResponse = duplicate_theme_by_id(
+                source_theme.id,
+                duplicate_session,
+                current_ops_operator,
+            )
+
+        self.assertEqual(source_theme.status, ThemeStatus.LIVE)
+        self.assertEqual(source_theme.updated_at, source_updated_at)
+        self.assertEqual(source_theme.template_key, "spotmu_paper_v1")
+        self.assertEqual(
+            [element.id for element in source_theme.elements],
+            source_element_ids,
+        )
+        self.assertNotEqual(copied_theme.id, source_theme.id)
+        self.assertEqual(copied_theme.status, ThemeStatus.DRAFT)
+        self.assertIsNone(copied_theme.template_key)
+        self.assertEqual(copied_theme.name, "Copy of Harbor Night")
+        self.assertEqual(copied_theme.slug, "copy-of-harbor-night")
+        self.assertEqual(copied_theme.page_margin, 120)
+        self.assertEqual(copied_theme.element_gap, 16)
+        self.assertEqual(copied_theme.element_margin, 8)
+        self.assertEqual(copied_theme.background_kind, BackgroundKind.GRADIENT)
+        self.assertIsNotNone(copied_theme.background_gradient)
+        self.assertEqual(copied_theme.background_gradient.angle_deg, 180)
+        self.assertEqual(copied_theme.background_gradient.stops[0].color, "#112233")
+        self.assertEqual(copied_theme.background_gradient.stops[1].color, "#F6F1E8")
+        stored_copies: list[Theme] = [
+            added_row
+            for added_row in duplicate_session.added
+            if isinstance(added_row, Theme)
+        ]
+        self.assertEqual(len(stored_copies), 1)
+        self.assertEqual(stored_copies[0].background_gradient, source_gradient)
+        self.assertIsNot(stored_copies[0].background_gradient, source_gradient)
+        self.assertEqual(copied_theme.created_by, operator_id)
+        self.assertEqual(len(copied_theme.elements), 2)
+        copied_element_ids: list[uuid.UUID] = [
+            element.id for element in copied_theme.elements
+        ]
+        self.assertEqual(len(set(copied_element_ids)), 2)
+        self.assertTrue(set(copied_element_ids).isdisjoint(source_element_ids))
+        self.assertEqual(copied_theme.elements[0].band, ThemeElementBand.TOP)
+        self.assertEqual(copied_theme.elements[0].sort_order, 0)
+        self.assertEqual(
+            copied_theme.elements[0].text_source,
+            ThemeElementTextSource.TITLE,
+        )
+        self.assertEqual(copied_theme.elements[0].font_weight, 700)
+        self.assertIsNone(copied_theme.elements[0].rectangle_color)
+        self.assertEqual(copied_theme.elements[1].band, ThemeElementBand.BOTTOM)
+        self.assertEqual(copied_theme.elements[1].sort_order, 0)
+        self.assertEqual(copied_theme.elements[1].image_asset_ref, "logos/mark.png")
+        self.assertEqual(copied_theme.elements[1].rectangle_color, "#AABBCC")
+        self.assertIsNone(copied_theme.elements[1].text_source)
+        reloaded_copy: ThemeReadResponse = get_theme_by_id(
+            copied_theme.id,
+            duplicate_session,
+        )
+        self.assertEqual(reloaded_copy.status, ThemeStatus.DRAFT)
+        self.assertEqual(
+            [element.id for element in reloaded_copy.elements],
+            copied_element_ids,
+        )
+
+    def test_missing_theme_duplicate_returns_404(self) -> None:
+        """POST duplicate raises HTTP 404 when the source row is absent."""
+
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = None
+        missing_theme_id: uuid.UUID = uuid.uuid4()
+
+        with self.assertRaises(HTTPException) as raised_http:
+            duplicate_theme_by_id(missing_theme_id, fake_session, None)
+
+        self.assertEqual(raised_http.exception.status_code, 404)
+        fake_session.add.assert_not_called()
+
+
 class ThemeSlugTests(unittest.TestCase):
     """Slug derivation matches the campaign hyphen rules with a theme fallback."""
 
@@ -1180,6 +1344,78 @@ class ThemeSlugTests(unittest.TestCase):
         )
 
         self.assertEqual(allocated_slug, "harbor-2")
+
+
+class _DuplicateMemorySession:
+    """In-memory source theme plus the Draft created by duplicate."""
+
+    def __init__(self, theme: Theme, taken_slugs: list[str]) -> None:
+
+        self.theme: Theme = theme
+        self.taken_slugs: list[str] = taken_slugs
+        self.added: list[Theme | ThemeElement] = []
+
+    def get(self, model: type[object], key: uuid.UUID) -> Theme | None:
+        """Return the source theme or a theme this session has added."""
+
+        if model is not Theme:
+
+            return None
+
+        if key == self.theme.id:
+
+            return self.theme
+
+        for added_row in self.added:
+
+            if isinstance(added_row, Theme) and added_row.id == key:
+
+                return added_row
+
+        return None
+
+    def scalars(self, statement: object = None) -> MagicMock:
+        """Return the slugs already stored, for the unique-slug helper."""
+
+        _ = statement
+        slug_result: MagicMock = MagicMock()
+        slug_result.all.return_value = list(self.taken_slugs)
+
+        return slug_result
+
+    def add(self, row: Theme | ThemeElement) -> None:
+        """Remember a pending theme or element."""
+
+        self.added.append(row)
+
+    def flush(self) -> None:
+        """Assign ids the database would assign before elements are copied."""
+
+        for added_row in self.added:
+            _assign_new_row_identity(added_row)
+
+    def refresh(self, row: Theme | ThemeElement) -> None:
+        """Fill ids and timestamps, including elements on a refreshed theme."""
+
+        _assign_new_row_identity(row)
+
+        if isinstance(row, Theme):
+
+            for element in row.elements:
+                _assign_new_row_identity(element)
+
+
+def _assign_new_row_identity(row: Theme | ThemeElement) -> None:
+    """Fill a new row's id and timestamps once. Leave existing values."""
+
+    persisted_at: datetime = datetime(2026, 10, 4, 19, 0, tzinfo=timezone.utc)
+
+    if row.id is None:
+        row.id = uuid.uuid4()
+
+    if row.created_at is None:
+        row.created_at = persisted_at
+        row.updated_at = persisted_at
 
 
 class _ElementMemorySession:
