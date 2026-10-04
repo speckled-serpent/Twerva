@@ -184,9 +184,11 @@ the background columns. A negative spacing value is HTTP 400. A Live
 background requires the payload for its kind. Optional `template_key`
 must name an existing carousel generator. Upgrade seeds
 `spotmu_paper_v1` and `spotmu_bold_v1` as `draft` with spacing 96 / 0 / 0
-and a paper color background. Elements, when stored, live on
-`theme_elements` (full width, no coordinates). That table has no HTTP
-in this slice.
+and a paper color background. Elements live on `theme_elements`
+(full width, no coordinates). `GET /api/v1/themes/{id}` includes them
+ordered by band then `sort_order`. `POST`, `PATCH`, and `DELETE` under
+`/api/v1/themes/{theme_id}/elements` use the same write gate as theme
+create. The server compacts `sort_order` from 0 within the band.
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
 are Phase 1.5. `POST /api/v1/publish/run/{post_job_id}` mock-publishes a

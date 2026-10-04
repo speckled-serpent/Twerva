@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import fetch_theme_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
-from app.api.v1.schemas import ThemeCreateRequest, ThemePatchRequest, ThemeReadResponse
+from app.api.v1.schemas import (
+    ThemeCreateRequest,
+    ThemeElementReadResponse,
+    ThemePatchRequest,
+    ThemeReadResponse,
+)
 from app.auth.dependencies import require_authenticated_ops_operator
 from app.db import get_our_database_session
 from app.generate.templates import CAROUSEL_TEMPLATES_BY_ID
@@ -26,6 +31,7 @@ from app.themes.background import (
     ThemeBackgroundError,
     resolve_patched_background,
 )
+from app.themes.elements import ordered_theme_elements
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
 
@@ -175,12 +181,26 @@ def serialize_theme(theme: Theme) -> ThemeReadResponse:
         background_color=theme.background_color,
         background_gradient=theme.background_gradient,
         background_asset_ref=theme.background_asset_ref,
+        elements=_serialized_theme_elements(theme),
         created_at=theme.created_at,
         updated_at=theme.updated_at,
         created_by=theme.created_by,
     )
 
     return theme_read_response
+
+
+def _serialized_theme_elements(theme: Theme) -> list[ThemeElementReadResponse]:
+    """Return elements ordered by band, then sort_order."""
+
+    from app.api.v1.theme_elements import serialize_theme_element
+
+    element_read_responses: list[ThemeElementReadResponse] = [
+        serialize_theme_element(element)
+        for element in ordered_theme_elements(theme.elements)
+    ]
+
+    return element_read_responses
 
 
 def theme_spacing_required_detail(field_name: str) -> str:
@@ -423,3 +443,9 @@ def _load_taken_theme_slugs(our_database_session: Session) -> set[str]:
     taken_slugs: set[str] = set(slug_scalars.all())
 
     return taken_slugs
+
+
+from app.api.v1.theme_elements import register_theme_element_routes
+
+
+register_theme_element_routes(themes_router)

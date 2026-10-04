@@ -303,7 +303,18 @@ Alembic `theme_elements` (parent `themes_background`). One row is one
 full-width element. There is no `x`, `y`, or `width` column.
 `theme_id` references `themes` **ON DELETE CASCADE**. Unique
 (`theme_id`, `band`, `sort_order`). `rectangle_color` null means the
-rectangle is clear. There is no HTTP for elements yet.
+rectangle is clear.
+
+`GET /api/v1/themes/{id}` includes `elements` ordered by band
+(`top`, `middle`, `bottom`) then `sort_order`. Writes are
+`POST /api/v1/themes/{theme_id}/elements`,
+`PATCH /api/v1/themes/{theme_id}/elements/{element_id}`, and
+`DELETE` on that element path. They use the same admin write gate as
+`POST /api/v1/themes`. `sort_order` is 0-based within the band; the
+server compacts it after a create, a move, or a delete. Unknown
+`text_source` values, `x` / `y` / `width`, and image refs that are not
+svg, png, or jpeg are rejected. This does not measure text or read
+image bytes.
 
 | Enum | Values |
 |---|---|
