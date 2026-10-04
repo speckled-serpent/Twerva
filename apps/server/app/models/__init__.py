@@ -11,6 +11,7 @@ it in core (PostgreSQL 13+ also provides ``gen_random_uuid()`` in core).
 Closed vocabularies are native Postgres ENUM types. Allowed values and
 ``PostJobStatus`` / ``CampaignStatus`` transitions live in
 ``app.models.enums`` and ``docs/planning/domain_statuses.md``.
+``ThemeStatus`` (``draft``, ``live``) is stored the same way.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -31,6 +32,7 @@ from app.models.enums import (
     ADVERTISEMENT_TYPE_ENUM,
     ARTIFACT_STATUS_ENUM,
     ARTIFACT_STATUS_TRANSITIONS,
+    BACKGROUND_KIND_ENUM,
     CAMPAIGN_STATUS_ENUM,
     CAMPAIGN_STATUS_TRANSITIONS,
     CAMPAIGN_TYPE_ENUM,
@@ -40,9 +42,11 @@ from app.models.enums import (
     POST_JOB_STATUS_TRANSITIONS,
     SOURCE_TYPE_ENUM,
     STEER_ACTION_TYPE_ENUM,
+    THEME_STATUS_ENUM,
     AccountStatus,
     AdvertisementType,
     ArtifactStatus,
+    BackgroundKind,
     CampaignStatus,
     CampaignType,
     OpsUserRole,
@@ -50,6 +54,7 @@ from app.models.enums import (
     PostJobStatus,
     SourceType,
     SteerActionType,
+    ThemeStatus,
 )
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.ops_user import OpsUser
@@ -64,12 +69,14 @@ __all__ = [
     "ADVERTISEMENT_TYPE_ENUM",
     "ARTIFACT_STATUS_ENUM",
     "ARTIFACT_STATUS_TRANSITIONS",
+    "BACKGROUND_KIND_ENUM",
     "Account",
     "AccountStatus",
     "AdvertisementType",
     "Artifact",
     "ArtifactSlide",
     "ArtifactStatus",
+    "BackgroundKind",
     "Base",
     "Brand",
     "CAMPAIGN_STATUS_ENUM",
@@ -93,10 +100,12 @@ __all__ = [
     "PostJobStatus",
     "SOURCE_TYPE_ENUM",
     "STEER_ACTION_TYPE_ENUM",
+    "THEME_STATUS_ENUM",
     "SourceItem",
     "SourceType",
     "SteerAction",
     "SteerActionType",
     "Theme",
+    "ThemeStatus",
     "cluster_source_items",
 ]

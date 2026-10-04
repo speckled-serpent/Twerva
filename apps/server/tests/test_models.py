@@ -3,7 +3,7 @@
 import unittest
 
 from sqlalchemy import UniqueConstraint
-from sqlalchemy.sql.schema import Table
+from sqlalchemy.sql.schema import Column, Table
 
 from app.models import (
     ARTIFACT_STATUS_TRANSITIONS,
@@ -32,6 +32,8 @@ from app.models import (
     SteerAction,
     SteerActionType,
     Theme,
+    ThemeStatus,
+    BackgroundKind,
     cluster_source_items,
 )
 from app.models.account import Account as AccountModel
@@ -251,6 +253,54 @@ class DomainEnumTests(unittest.TestCase):
             CAMPAIGN_STATUS_TRANSITIONS[CampaignStatus.FINISHED],
             frozenset(),
         )
+
+    def test_theme_status_values(self) -> None:
+        """Theme status is draft or live, and the column defaults to draft."""
+
+        self.assertEqual(
+            {member.value for member in ThemeStatus},
+            {"draft", "live"},
+        )
+        self.assertIn("status", set(Theme.__table__.columns.keys()))
+        status_column: Column[object] = Theme.__table__.columns["status"]
+        self.assertFalse(status_column.nullable)
+        self.assertIsNotNone(status_column.server_default)
+        self.assertEqual(str(status_column.server_default.arg), ThemeStatus.DRAFT.value)
+
+    def test_theme_spacing_defaults(self) -> None:
+        """Spacing columns are non-null integers defaulting to 96 / 0 / 0."""
+
+        page_margin_column: Column[object] = Theme.__table__.columns["page_margin"]
+        element_gap_column: Column[object] = Theme.__table__.columns["element_gap"]
+        element_margin_column: Column[object] = Theme.__table__.columns["element_margin"]
+
+        self.assertFalse(page_margin_column.nullable)
+        self.assertFalse(element_gap_column.nullable)
+        self.assertFalse(element_margin_column.nullable)
+        self.assertEqual(str(page_margin_column.server_default.arg), "96")
+        self.assertEqual(str(element_gap_column.server_default.arg), "0")
+        self.assertEqual(str(element_margin_column.server_default.arg), "0")
+
+    def test_theme_background_defaults(self) -> None:
+        """Background kind defaults to color and paper; payloads may be null."""
+
+        self.assertEqual(
+            {member.value for member in BackgroundKind},
+            {"picture", "color", "gradient", "texture"},
+        )
+        kind_column: Column[object] = Theme.__table__.columns["background_kind"]
+        color_column: Column[object] = Theme.__table__.columns["background_color"]
+        gradient_column: Column[object] = Theme.__table__.columns["background_gradient"]
+        asset_column: Column[object] = Theme.__table__.columns["background_asset_ref"]
+
+        self.assertFalse(kind_column.nullable)
+        self.assertTrue(color_column.nullable)
+        self.assertTrue(gradient_column.nullable)
+        self.assertTrue(asset_column.nullable)
+        self.assertEqual(str(kind_column.server_default.arg), "color")
+        self.assertEqual(str(color_column.server_default.arg), "#F6F1E8")
+        self.assertIsNone(gradient_column.server_default)
+        self.assertIsNone(asset_column.server_default)
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

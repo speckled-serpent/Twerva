@@ -275,6 +275,20 @@ export interface CampaignReadResponse {
   created_by: string | null;
 }
 
+export type ThemeStatus = "draft" | "live";
+
+export type BackgroundKind = "picture" | "color" | "gradient" | "texture";
+
+export interface ThemeGradientStop {
+  offset: number;
+  color: string;
+}
+
+export interface ThemeGradient {
+  angle_deg: number;
+  stops: ThemeGradientStop[];
+}
+
 export interface ThemeCreateRequest {
   name: string;
   advertisement_type?: AdvertisementType;
@@ -287,6 +301,14 @@ export interface ThemeReadResponse {
   slug: string;
   advertisement_type: AdvertisementType;
   template_key: string | null;
+  status: ThemeStatus;
+  page_margin: number;
+  element_gap: number;
+  element_margin: number;
+  background_kind: BackgroundKind;
+  background_color: string | null;
+  background_gradient: ThemeGradient | null;
+  background_asset_ref: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;

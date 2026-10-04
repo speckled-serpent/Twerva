@@ -93,7 +93,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`themes_create`** (parent `campaign_type_spotmu_test`).
+Current head: **`themes_background`** (parent `themes_spacing`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -173,10 +173,18 @@ Account, Artifact (includes `status`), PostJob (includes `status`), and
 Campaign (includes `status`). Campaign create stores `ready`. Lifecycle
 actions are `POST /api/v1/campaigns/{id}/start|pause|resume|finish`
 (status flip only; HTTP 400 on illegal or already-in-target).
-`POST` + `GET` list + `GET` by id for Theme (`/api/v1/themes`). Create
-requires a name and stores `advertisement_type=carousel`. Optional
-`template_key` must name an existing carousel generator. Upgrade seeds
-`spotmu_paper_v1` and `spotmu_bold_v1`.
+`POST` + `GET` list + `GET` by id + `PATCH` by id for Theme
+(`/api/v1/themes`). Create requires a name and stores
+`advertisement_type=carousel`, `status=draft`, `page_margin=96`,
+`element_gap=0`, `element_margin=0`, `background_kind=color`, and
+`background_color=#F6F1E8` (a status, spacing, or background field on
+the create body is ignored). `PATCH /api/v1/themes/{id}` is partial and
+may set `status` to `draft` or `live`, the three spacing integers, and
+the background columns. A negative spacing value is HTTP 400. A Live
+background requires the payload for its kind. Optional `template_key`
+must name an existing carousel generator. Upgrade seeds
+`spotmu_paper_v1` and `spotmu_bold_v1` as `draft` with spacing 96 / 0 / 0
+and a paper color background.
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
 are Phase 1.5. `POST /api/v1/publish/run/{post_job_id}` mock-publishes a

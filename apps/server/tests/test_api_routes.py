@@ -170,6 +170,15 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         self.assertIn("post", resume_methods)
         self.assertIn("post", finish_methods)
 
+    def test_theme_item_route_accepts_patch(self) -> None:
+        """1.10a-i: PATCH /api/v1/themes/{theme_id} is registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        theme_item_methods: set[str] = methods_by_path["/api/v1/themes/{theme_id}"]
+
+        self.assertIn("patch", theme_item_methods)
+        self.assertIn("get", theme_item_methods)
+
     def test_publish_run_route_accepts_post(self) -> None:
         """1.6c-i: POST /api/v1/publish/run/{post_job_id} is registered."""
 
