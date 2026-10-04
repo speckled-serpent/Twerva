@@ -9,6 +9,7 @@ from app.models.enums import (
     AccountStatus,
     AdvertisementType,
     ArtifactStatus,
+    BackgroundKind,
     CampaignStatus,
     CampaignType,
     OpsUserRole,
@@ -97,6 +98,8 @@ class ThemeCreateRequest(BaseModel):
     field in the body is ignored; the row is always stored as ``draft``.
     Spacing fields are ignored here too. A name-only create stores
     ``page_margin`` 96, ``element_gap`` 0, and ``element_margin`` 0.
+    Background fields are ignored. Create stores kind ``color``, color
+    ``#F6F1E8``, and null gradient and asset ref.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -106,19 +109,48 @@ class ThemeCreateRequest(BaseModel):
     template_key: str | None = None
 
 
+class ThemeGradientStop(BaseModel):
+    """One stop in ``themes.background_gradient``.
+
+    ``offset`` is 0 through 1. ``color`` is ``#`` plus six hex digits.
+    """
+
+    offset: float
+    color: str
+
+
+class ThemeGradient(BaseModel):
+    """Locked shape for ``themes.background_gradient``.
+
+    ``{"angle_deg": <0–360>, "stops": [{"offset": <0–1>, "color": "#rrggbb"}, ...]}``
+    with at least two stops. Hex colors are ``#`` plus six hex digits.
+    """
+
+    angle_deg: float
+    stops: list[ThemeGradientStop]
+
+
 class ThemePatchRequest(BaseModel):
     """Body for `PATCH /api/v1/themes/{id}`.
 
     Partial. Only fields present in the body are written. Omitted fields
-    leave the row unchanged. Null ``status`` or spacing is rejected by
-    the handler. Spacing integers must be zero or greater; a negative
-    is HTTP 400.
+    leave the row unchanged. Null ``status``, kind, or spacing is rejected
+    by the handler. Spacing integers must be zero or greater. Background
+    color is ``#`` plus six hex digits, or blank to clear it. Gradient
+    uses the locked ``ThemeGradient`` shape. ``background_asset_ref`` is
+    a relative path with no ``..`` and no scheme, ending in ``.svg``,
+    ``.png``, ``.jpg``, or ``.jpeg``. Draft may leave the payload for the
+    chosen kind empty. Live requires that payload.
     """
 
     status: ThemeStatus | None = None
     page_margin: int | None = None
     element_gap: int | None = None
     element_margin: int | None = None
+    background_kind: BackgroundKind | None = None
+    background_color: str | None = None
+    background_gradient: dict[str, object] | None = None
+    background_asset_ref: str | None = None
 
 
 class ThemeReadResponse(BaseModel):
@@ -135,6 +167,10 @@ class ThemeReadResponse(BaseModel):
     page_margin: int
     element_gap: int
     element_margin: int
+    background_kind: BackgroundKind
+    background_color: str | None
+    background_gradient: ThemeGradient | None
+    background_asset_ref: str | None
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None

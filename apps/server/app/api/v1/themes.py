@@ -14,11 +14,17 @@ from app.api.v1.schemas import ThemeCreateRequest, ThemePatchRequest, ThemeReadR
 from app.auth.dependencies import require_authenticated_ops_operator
 from app.db import get_our_database_session
 from app.generate.templates import CAROUSEL_TEMPLATES_BY_ID
-from app.models import AdvertisementType, OpsUser, Theme, ThemeStatus
+from app.models import AdvertisementType, BackgroundKind, OpsUser, Theme, ThemeStatus
 from app.models.theme import (
+    DEFAULT_BACKGROUND_COLOR,
     DEFAULT_ELEMENT_GAP,
     DEFAULT_ELEMENT_MARGIN,
     DEFAULT_PAGE_MARGIN,
+)
+from app.themes.background import (
+    ResolvedThemeBackground,
+    ThemeBackgroundError,
+    resolve_patched_background,
 )
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
@@ -74,6 +80,10 @@ def create_theme(
         page_margin=DEFAULT_PAGE_MARGIN,
         element_gap=DEFAULT_ELEMENT_GAP,
         element_margin=DEFAULT_ELEMENT_MARGIN,
+        background_kind=BackgroundKind.COLOR,
+        background_color=DEFAULT_BACKGROUND_COLOR,
+        background_gradient=None,
+        background_asset_ref=None,
         created_by=created_by,
     )
     our_database_session.add(created_theme)
@@ -161,6 +171,10 @@ def serialize_theme(theme: Theme) -> ThemeReadResponse:
         page_margin=theme.page_margin,
         element_gap=theme.element_gap,
         element_margin=theme.element_margin,
+        background_kind=theme.background_kind,
+        background_color=theme.background_color,
+        background_gradient=theme.background_gradient,
+        background_asset_ref=theme.background_asset_ref,
         created_at=theme.created_at,
         updated_at=theme.updated_at,
         created_by=theme.created_by,
@@ -217,6 +231,17 @@ def _apply_theme_patch(theme: Theme, theme_patch_request: ThemePatchRequest) -> 
         theme_patch_request.element_margin,
         "element_margin" in assigned_fields,
     )
+    resulting_status: ThemeStatus = theme.status
+
+    if status_to_store is not None:
+        resulting_status = status_to_store
+
+    resolved_background: ResolvedThemeBackground = _resolved_background(
+        theme,
+        theme_patch_request,
+        assigned_fields,
+        resulting_status,
+    )
 
     if status_to_store is not None:
         theme.status = status_to_store
@@ -229,6 +254,65 @@ def _apply_theme_patch(theme: Theme, theme_patch_request: ThemePatchRequest) -> 
 
     if element_margin_to_store is not None:
         theme.element_margin = element_margin_to_store
+
+    if "background_kind" in assigned_fields:
+        theme.background_kind = resolved_background.background_kind
+
+    if "background_color" in assigned_fields:
+        theme.background_color = resolved_background.background_color
+
+    if "background_gradient" in assigned_fields:
+        theme.background_gradient = resolved_background.background_gradient
+
+    if "background_asset_ref" in assigned_fields:
+        theme.background_asset_ref = resolved_background.background_asset_ref
+
+
+def _resolved_background(
+    theme: Theme,
+    theme_patch_request: ThemePatchRequest,
+    assigned_fields: set[str],
+    resulting_status: ThemeStatus,
+) -> ResolvedThemeBackground:
+    """Resolve background fields and reject a Live row with an empty payload.
+
+    Args:
+        theme: Loaded theme row.
+        theme_patch_request: Partial body.
+        assigned_fields: Fields the client included.
+        resulting_status: Status after this same patch.
+
+    Returns:
+        Kind and payloads, including fields the client left alone.
+
+    Raises:
+        HTTPException: 400 when a background value is invalid or Live is
+            missing the payload for its kind.
+    """
+
+    try:
+        resolved_background: ResolvedThemeBackground = resolve_patched_background(
+            theme.background_kind,
+            theme.background_color,
+            theme.background_gradient,
+            theme.background_asset_ref,
+            "background_kind" in assigned_fields,
+            theme_patch_request.background_kind,
+            "background_color" in assigned_fields,
+            theme_patch_request.background_color,
+            "background_gradient" in assigned_fields,
+            theme_patch_request.background_gradient,
+            "background_asset_ref" in assigned_fields,
+            theme_patch_request.background_asset_ref,
+            resulting_status,
+        )
+    except ThemeBackgroundError as background_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=background_error.detail,
+        ) from background_error
+
+    return resolved_background
 
 
 def _status_to_store(

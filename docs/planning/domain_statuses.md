@@ -246,13 +246,14 @@ Allowed transitions (also `CAMPAIGN_STATUS_TRANSITIONS`):
 ## Theme
 
 `themes` (Alembic `themes_create`, status in `themes_status`, spacing
-in `themes_spacing`) stores visual styling for carousels. Short video
-is not implemented. The table reuses `advertisement_type` (`carousel`
-only).
+in `themes_spacing`, background in `themes_background`) stores visual
+styling for carousels. Short video is not implemented. The table reuses
+`advertisement_type` (`carousel` only).
 
 | Enum | Values |
 |---|---|
 | `theme_status` | `draft`, `live` |
+| `background_kind` | `picture`, `color`, `gradient`, `texture` |
 
 | Column | Notes |
 |---|---|
@@ -264,6 +265,10 @@ only).
 | `page_margin` | One integer, applied on every edge of the frame. Default **96**. `PATCH` may change it. Negative is HTTP 400 |
 | `element_gap` | One integer, applied between elements. Default **0**. Negative is HTTP 400 |
 | `element_margin` | One integer, applied on every edge of an element rectangle. Default **0**. Negative is HTTP 400 |
+| `background_kind` | One background. Default `color`. Not null |
+| `background_color` | Nullable text. Default `#F6F1E8` (paper). Hex is `#` plus six hex digits. Blank stores null |
+| `background_gradient` | Nullable JSONB. Locked shape: `{"angle_deg": <0–360>, "stops": [{"offset": <0–1>, "color": "#rrggbb"}, ...]}` with at least two stops |
+| `background_asset_ref` | Nullable text. Relative path, no `..`, no scheme, suffix `.svg`, `.png`, `.jpg`, or `.jpeg` |
 | `created_by` | Nullable `ops_users` id |
 
 `draft` is the style the operator is editing. `live` is the style
@@ -273,14 +278,21 @@ generation will use for posts that ship. Shipping
 `POST /api/v1/themes` requires a non-empty name. A `status` field on
 that body is ignored. Spacing fields on create are ignored too. A
 name-only create stores `page_margin` 96, `element_gap` 0, and
-`element_margin` 0. `PATCH /api/v1/themes/{id}` may set any of those
-integers; omitted spacing fields stay as they are. Zero is allowed.
-A negative spacing value is HTTP 400 and does not write. Readers may
+`element_margin` 0, kind `color`, color `#F6F1E8`, and null gradient
+and asset ref. Background fields on create are ignored.
+`PATCH /api/v1/themes/{id}` may set any of those integers and the
+background columns; omitted fields stay as they are. Zero is allowed.
+A negative spacing value is HTTP 400 and does not write. A Draft may
+save a background kind with that kind's payload still empty. A row
+that is Live after the patch requires the payload for its kind: a
+color hex, a valid gradient, or a non-empty asset ref for `picture`
+and `texture`. Readers may
 `GET /api/v1/themes` and `/api/v1/themes/{id}`; writes, including
 `PATCH`, stay admin-only via the existing ops RBAC gate
 (`require_authenticated_ops_operator` plus the reader mutation check).
 Upgrade seeds Spotmu Paper v1 and Spotmu Bold v1, then backfills every
-existing row — those two included — to `draft` and to spacing 96 / 0 / 0.
+existing row — those two included — to `draft`, spacing 96 / 0 / 0, and
+paper background `#F6F1E8`.
 Creating a theme does not render slides or attach a campaign.
 Both `draft` → `live` and `live` → `draft` are allowed. Layout math is
 not applied here.

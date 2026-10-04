@@ -6,14 +6,16 @@ import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ForeignKey, Index, Integer, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UuidPrimaryKeyMixin
 from app.models.enums import (
     ADVERTISEMENT_TYPE_ENUM,
+    BACKGROUND_KIND_ENUM,
     THEME_STATUS_ENUM,
     AdvertisementType,
+    BackgroundKind,
     ThemeStatus,
 )
 
@@ -25,6 +27,7 @@ if TYPE_CHECKING:
 DEFAULT_PAGE_MARGIN: int = 96
 DEFAULT_ELEMENT_GAP: int = 0
 DEFAULT_ELEMENT_MARGIN: int = 0
+DEFAULT_BACKGROUND_COLOR: str = "#F6F1E8"
 
 
 class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -32,13 +35,14 @@ class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
 
     Create stores a name, a unique slug derived from that name,
     ``advertisement_type`` (carousel only), ``status`` ``draft``, and
-    the three spacing integers. Each spacing column is one value applied
-    on every edge: page margin around the frame, element gap between
-    elements, element margin inside an element. Optional ``template_key``
+    the three spacing integers, and one background. Each spacing column
+    is one value applied on every edge. The background is a kind plus
+    optional color, gradient, and asset ref on this row. Create stores
+    kind ``color`` and paper ``#F6F1E8``. Optional ``template_key``
     points at a restricted carousel generator such as
     ``spotmu_paper_v1``. Creating a theme does not render artifacts or
-    bind a campaign. ``live`` and non-default spacing are stored only by
-    a later partial patch.
+    bind a campaign. ``live``, non-default spacing, and other background
+    kinds are stored only by a later partial patch.
     """
 
     __tablename__ = "themes"
@@ -80,6 +84,23 @@ class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
         default=DEFAULT_ELEMENT_MARGIN,
         server_default=str(DEFAULT_ELEMENT_MARGIN),
     )
+    background_kind: Mapped[BackgroundKind] = mapped_column(
+        BACKGROUND_KIND_ENUM,
+        nullable=False,
+        default=BackgroundKind.COLOR,
+        server_default=BackgroundKind.COLOR.value,
+    )
+    background_color: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        default=DEFAULT_BACKGROUND_COLOR,
+        server_default=DEFAULT_BACKGROUND_COLOR,
+    )
+    background_gradient: Mapped[dict[str, object] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+    )
+    background_asset_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("ops_users.id"),

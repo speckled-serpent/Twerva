@@ -13,6 +13,7 @@ ARTIFACT_TEMPLATE_ID_REVISION_ID: str = "artifact_template_id"
 CAMPAIGNS_CREATE_UI_REVISION_ID: str = "campaigns_create_ui"
 CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID: str = "campaign_status_lifecycle"
 CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID: str = "campaign_type_spotmu_test"
+THEMES_BACKGROUND_REVISION_ID: str = "themes_background"
 THEMES_CREATE_REVISION_ID: str = "themes_create"
 THEMES_STATUS_REVISION_ID: str = "themes_status"
 THEMES_SPACING_REVISION_ID: str = "themes_spacing"
@@ -50,6 +51,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
+                f"{THEMES_BACKGROUND_REVISION_ID}.py",
                 f"{THEMES_CREATE_REVISION_ID}.py",
                 f"{THEMES_SPACING_REVISION_ID}.py",
                 f"{THEMES_STATUS_REVISION_ID}.py",
@@ -263,7 +265,7 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("'draft'::theme_status", revision_source)
         self.assertIn("DROP TYPE theme_status", revision_source)
 
-    def test_themes_spacing_revision_is_the_current_head(self) -> None:
+    def test_themes_spacing_revision_follows_themes_status(self) -> None:
         """themes_spacing follows themes_status and backfills 96 / 0 / 0."""
 
         assigned_values: dict[str, object] = _revision_module_constants(
@@ -296,6 +298,41 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("Spotmu Paper v1", revision_source)
         self.assertIn("Spotmu Bold v1", revision_source)
         self.assertIn('op.drop_column("themes", "page_margin")', revision_source)
+
+    def test_themes_background_revision_is_the_current_head(self) -> None:
+        """themes_background follows themes_spacing and backfills paper."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEMES_BACKGROUND_REVISION_ID}.py",
+        )
+        revision_source: str = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEMES_BACKGROUND_REVISION_ID}.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            THEMES_BACKGROUND_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            THEMES_SPACING_REVISION_ID,
+        )
+        self.assertIn(
+            "('picture', 'color', 'gradient', 'texture')",
+            revision_source,
+        )
+        self.assertIn("#F6F1E8", revision_source)
+        self.assertIn("background_gradient", revision_source)
+        self.assertIn("background_asset_ref", revision_source)
+        self.assertIn("Spotmu Paper v1", revision_source)
+        self.assertIn("Spotmu Bold v1", revision_source)
+        self.assertIn("DROP TYPE background_kind", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

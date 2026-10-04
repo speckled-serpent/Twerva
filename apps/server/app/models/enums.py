@@ -115,6 +115,15 @@ class ThemeStatus(enum.StrEnum):
     LIVE = "live"
 
 
+class BackgroundKind(enum.StrEnum):
+    """The one background on a Theme. Picture, color, gradient, or texture."""
+
+    PICTURE = "picture"
+    COLOR = "color"
+    GRADIENT = "gradient"
+    TEXTURE = "texture"
+
+
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ArtifactStatus.DRAFT: frozenset(
         {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
@@ -197,3 +206,4 @@ ADVERTISEMENT_TYPE_ENUM: Enum = as_postgres_enum(
 )
 CAMPAIGN_STATUS_ENUM: Enum = as_postgres_enum(CampaignStatus, "campaign_status")
 THEME_STATUS_ENUM: Enum = as_postgres_enum(ThemeStatus, "theme_status")
+BACKGROUND_KIND_ENUM: Enum = as_postgres_enum(BackgroundKind, "background_kind")

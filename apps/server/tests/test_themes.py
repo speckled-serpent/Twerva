@@ -19,12 +19,20 @@ from app.api.v1.themes import (
     theme_spacing_required_detail,
 )
 from app.api.v1.schemas import ThemeCreateRequest, ThemePatchRequest, ThemeReadResponse
-from app.models.enums import AdvertisementType, ThemeStatus
+from app.models.enums import AdvertisementType, BackgroundKind, ThemeStatus
 from app.models.theme import (
+    DEFAULT_BACKGROUND_COLOR,
     DEFAULT_ELEMENT_GAP,
     DEFAULT_ELEMENT_MARGIN,
     DEFAULT_PAGE_MARGIN,
     Theme,
+)
+from app.themes.background import (
+    BACKGROUND_ASSET_REF_DETAIL,
+    BACKGROUND_COLOR_DETAIL,
+    BACKGROUND_GRADIENT_DETAIL,
+    LIVE_ASSET_PAYLOAD_DETAIL,
+    LIVE_COLOR_PAYLOAD_DETAIL,
 )
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
@@ -201,6 +209,10 @@ class ThemeListTests(unittest.TestCase):
         self.assertEqual(listed_themes[0].element_gap, DEFAULT_ELEMENT_GAP)
         self.assertEqual(listed_themes[0].element_margin, DEFAULT_ELEMENT_MARGIN)
         self.assertEqual(listed_themes[1].page_margin, DEFAULT_PAGE_MARGIN)
+        self.assertEqual(listed_themes[0].background_kind, BackgroundKind.COLOR)
+        self.assertEqual(listed_themes[0].background_color, DEFAULT_BACKGROUND_COLOR)
+        self.assertIsNone(listed_themes[0].background_gradient)
+        self.assertIsNone(listed_themes[0].background_asset_ref)
         self.assertEqual(len(listed_themes), 2)
 
 
@@ -538,6 +550,308 @@ class ThemeSpacingPatchTests(unittest.TestCase):
         fake_session.commit.assert_not_called()
 
 
+class ThemeBackgroundPatchTests(unittest.TestCase):
+    """Each background kind round-trips. Live color needs a hex. Draft picture may be empty."""
+
+    def test_each_kind_round_trips(self) -> None:
+        """Color, gradient, picture, and texture survive PATCH and GET."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        gradient_payload: dict[str, object] = {
+            "angle_deg": 180,
+            "stops": [
+                {"offset": 0, "color": "#112233"},
+                {"offset": 1, "color": "#F6F1E8"},
+            ],
+        }
+
+        self._patch(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(background_color="#AABBCC"),
+        )
+        color_theme: ThemeReadResponse = get_theme_by_id(paper_theme.id, fake_session)
+        self.assertEqual(color_theme.background_kind, BackgroundKind.COLOR)
+        self.assertEqual(color_theme.background_color, "#AABBCC")
+
+        self._patch(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(
+                background_kind=BackgroundKind.GRADIENT,
+                background_gradient=gradient_payload,
+            ),
+        )
+        gradient_theme: ThemeReadResponse = get_theme_by_id(
+            paper_theme.id,
+            fake_session,
+        )
+        self.assertEqual(gradient_theme.background_kind, BackgroundKind.GRADIENT)
+        self.assertIsNotNone(gradient_theme.background_gradient)
+
+        if gradient_theme.background_gradient is None:
+            self.fail("gradient payload is missing")
+
+        self.assertEqual(gradient_theme.background_gradient.angle_deg, 180)
+        self.assertEqual(len(gradient_theme.background_gradient.stops), 2)
+        self.assertEqual(gradient_theme.background_gradient.stops[0].color, "#112233")
+        self.assertEqual(gradient_theme.background_gradient.stops[1].color, "#F6F1E8")
+
+        self._patch(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(
+                background_kind=BackgroundKind.PICTURE,
+                background_asset_ref="backgrounds/harbor.png",
+            ),
+        )
+        picture_theme: ThemeReadResponse = get_theme_by_id(
+            paper_theme.id,
+            fake_session,
+        )
+        self.assertEqual(picture_theme.background_kind, BackgroundKind.PICTURE)
+        self.assertEqual(picture_theme.background_asset_ref, "backgrounds/harbor.png")
+
+        self._patch(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(
+                background_kind=BackgroundKind.TEXTURE,
+                background_asset_ref="textures/grain.jpeg",
+            ),
+        )
+        texture_theme: ThemeReadResponse = get_theme_by_id(
+            paper_theme.id,
+            fake_session,
+        )
+        self.assertEqual(texture_theme.background_kind, BackgroundKind.TEXTURE)
+        self.assertEqual(texture_theme.background_asset_ref, "textures/grain.jpeg")
+
+    def test_live_color_with_blank_color_is_rejected(self) -> None:
+        """A Live color theme cannot clear its color, including by becoming Live."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        live_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        live_theme.status = ThemeStatus.LIVE
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = live_theme
+
+        self._assert_background_rejected(
+            live_theme,
+            fake_session,
+            ThemePatchRequest(background_color="   "),
+            LIVE_COLOR_PAYLOAD_DETAIL,
+        )
+        self.assertEqual(live_theme.background_color, DEFAULT_BACKGROUND_COLOR)
+        self._assert_background_rejected(
+            live_theme,
+            fake_session,
+            ThemePatchRequest.model_validate({"background_color": None}),
+            LIVE_COLOR_PAYLOAD_DETAIL,
+        )
+        self.assertEqual(live_theme.status, ThemeStatus.LIVE)
+
+        draft_theme: Theme = _theme_row(
+            name="Harbor",
+            slug="harbor",
+            template_key=None,
+            created_at=created_at,
+        )
+        draft_theme.background_color = None
+        fake_session.get.return_value = draft_theme
+        self._assert_background_rejected(
+            draft_theme,
+            fake_session,
+            ThemePatchRequest(status=ThemeStatus.LIVE),
+            LIVE_COLOR_PAYLOAD_DETAIL,
+        )
+        self.assertEqual(draft_theme.status, ThemeStatus.DRAFT)
+        self.assertIsNone(draft_theme.background_color)
+
+    def test_draft_picture_with_null_ref_saves(self) -> None:
+        """A Draft picture may keep a null asset ref."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        theme_patch_request: ThemePatchRequest = ThemePatchRequest.model_validate(
+            {"background_kind": "picture", "background_asset_ref": None},
+        )
+
+        patched_theme: ThemeReadResponse = self._patch(
+            paper_theme,
+            fake_session,
+            theme_patch_request,
+        )
+        loaded_theme: ThemeReadResponse = get_theme_by_id(paper_theme.id, fake_session)
+
+        self.assertEqual(patched_theme.background_kind, BackgroundKind.PICTURE)
+        self.assertIsNone(patched_theme.background_asset_ref)
+        self.assertEqual(patched_theme.status, ThemeStatus.DRAFT)
+        self.assertEqual(loaded_theme.background_kind, BackgroundKind.PICTURE)
+        self.assertIsNone(loaded_theme.background_asset_ref)
+
+    def test_name_only_create_stores_paper_background(self) -> None:
+        """Create stores color, paper #F6F1E8, and null gradient and asset ref."""
+
+        fake_session: MagicMock = MagicMock()
+        fake_session.scalars.return_value.all.return_value = []
+        fake_session.refresh.side_effect = _assign_persisted_timestamps
+        theme_create_request: ThemeCreateRequest = ThemeCreateRequest.model_validate(
+            {
+                "name": "Harbor",
+                "background_kind": "picture",
+                "background_color": "",
+            },
+        )
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            created_theme: ThemeReadResponse = create_theme(
+                theme_create_request,
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(created_theme.background_kind, BackgroundKind.COLOR)
+        self.assertEqual(created_theme.background_color, "#F6F1E8")
+        self.assertEqual(created_theme.background_color, DEFAULT_BACKGROUND_COLOR)
+        self.assertIsNone(created_theme.background_gradient)
+        self.assertIsNone(created_theme.background_asset_ref)
+
+    def test_invalid_background_payloads_are_rejected(self) -> None:
+        """Bad hex, gradient, and asset paths are 400. Draft may omit a gradient."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        short_hex: ThemePatchRequest = ThemePatchRequest(background_color="#FFF")
+        parent_path: ThemePatchRequest = ThemePatchRequest(
+            background_asset_ref="../secret.png",
+        )
+        remote_path: ThemePatchRequest = ThemePatchRequest(
+            background_asset_ref="https://example.com/a.png",
+        )
+        one_stop: ThemePatchRequest = ThemePatchRequest(
+            background_kind=BackgroundKind.GRADIENT,
+            background_gradient={
+                "angle_deg": 90,
+                "stops": [{"offset": 0, "color": "#112233"}],
+            },
+        )
+
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            short_hex,
+            BACKGROUND_COLOR_DETAIL,
+        )
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            parent_path,
+            BACKGROUND_ASSET_REF_DETAIL,
+        )
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            remote_path,
+            BACKGROUND_ASSET_REF_DETAIL,
+        )
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            one_stop,
+            BACKGROUND_GRADIENT_DETAIL,
+        )
+        self.assertEqual(paper_theme.background_kind, BackgroundKind.COLOR)
+        self.assertEqual(paper_theme.background_color, DEFAULT_BACKGROUND_COLOR)
+
+        paper_theme.status = ThemeStatus.LIVE
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(background_kind=BackgroundKind.PICTURE),
+            LIVE_ASSET_PAYLOAD_DETAIL,
+        )
+        self.assertEqual(paper_theme.background_kind, BackgroundKind.COLOR)
+
+        paper_theme.status = ThemeStatus.DRAFT
+        empty_gradient: ThemeReadResponse = self._patch(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest.model_validate(
+                {"background_kind": "gradient", "background_gradient": None},
+            ),
+        )
+        self.assertEqual(empty_gradient.background_kind, BackgroundKind.GRADIENT)
+        self.assertIsNone(empty_gradient.background_gradient)
+        self.assertEqual(empty_gradient.status, ThemeStatus.DRAFT)
+
+    def _patch(
+        self,
+        theme: Theme,
+        fake_session: MagicMock,
+        theme_patch_request: ThemePatchRequest,
+    ) -> ThemeReadResponse:
+        """Apply a patch with the commit helper stubbed."""
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            patched_theme: ThemeReadResponse = patch_theme_by_id(
+                theme.id,
+                theme_patch_request,
+                fake_session,
+                None,
+            )
+
+        return patched_theme
+
+    def _assert_background_rejected(
+        self,
+        theme: Theme,
+        fake_session: MagicMock,
+        theme_patch_request: ThemePatchRequest,
+        expected_detail: str,
+    ) -> None:
+        """PATCH is HTTP 400 and does not commit."""
+
+        with self.assertRaises(HTTPException) as raised_http:
+            patch_theme_by_id(
+                theme.id,
+                theme_patch_request,
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 400)
+        self.assertEqual(raised_http.exception.detail, expected_detail)
+        fake_session.commit.assert_not_called()
+
+
 class ThemeSlugTests(unittest.TestCase):
     """Slug derivation matches the campaign hyphen rules with a theme fallback."""
 
@@ -593,6 +907,10 @@ def _theme_row(
         page_margin=DEFAULT_PAGE_MARGIN,
         element_gap=DEFAULT_ELEMENT_GAP,
         element_margin=DEFAULT_ELEMENT_MARGIN,
+        background_kind=BackgroundKind.COLOR,
+        background_color=DEFAULT_BACKGROUND_COLOR,
+        background_gradient=None,
+        background_asset_ref=None,
         created_by=None,
         created_at=created_at,
         updated_at=created_at,
