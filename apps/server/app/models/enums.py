@@ -104,6 +104,17 @@ class CampaignStatus(enum.StrEnum):
     FINISHED = "finished"
 
 
+class ThemeStatus(enum.StrEnum):
+    """Whether a Theme is still being edited or used for posts that ship.
+
+    Create always stores `draft`. `PATCH /api/v1/themes/{id}` may set
+    `draft` or `live`. Shipping generate does not read this value yet.
+    """
+
+    DRAFT = "draft"
+    LIVE = "live"
+
+
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ArtifactStatus.DRAFT: frozenset(
         {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
@@ -185,3 +196,4 @@ ADVERTISEMENT_TYPE_ENUM: Enum = as_postgres_enum(
     "advertisement_type",
 )
 CAMPAIGN_STATUS_ENUM: Enum = as_postgres_enum(CampaignStatus, "campaign_status")
+THEME_STATUS_ENUM: Enum = as_postgres_enum(ThemeStatus, "theme_status")

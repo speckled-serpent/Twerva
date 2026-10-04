@@ -10,7 +10,12 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UuidPrimaryKeyMixin
-from app.models.enums import ADVERTISEMENT_TYPE_ENUM, AdvertisementType
+from app.models.enums import (
+    ADVERTISEMENT_TYPE_ENUM,
+    THEME_STATUS_ENUM,
+    AdvertisementType,
+    ThemeStatus,
+)
 
 
 if TYPE_CHECKING:
@@ -20,11 +25,12 @@ if TYPE_CHECKING:
 class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """Row in `themes`.
 
-    Create stores a name, a unique slug derived from that name, and
-    ``advertisement_type`` (carousel only). Optional ``template_key``
-    points at a restricted carousel generator such as
-    ``spotmu_paper_v1``. Creating a theme does not render artifacts or
-    bind a campaign.
+    Create stores a name, a unique slug derived from that name,
+    ``advertisement_type`` (carousel only), and ``status`` ``draft``.
+    Optional ``template_key`` points at a restricted carousel generator
+    such as ``spotmu_paper_v1``. Creating a theme does not render
+    artifacts or bind a campaign. ``live`` is stored only by a later
+    partial patch.
     """
 
     __tablename__ = "themes"
@@ -42,6 +48,12 @@ class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
         nullable=False,
     )
     template_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[ThemeStatus] = mapped_column(
+        THEME_STATUS_ENUM,
+        nullable=False,
+        default=ThemeStatus.DRAFT,
+        server_default=ThemeStatus.DRAFT.value,
+    )
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("ops_users.id"),

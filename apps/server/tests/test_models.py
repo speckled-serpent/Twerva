@@ -3,7 +3,7 @@
 import unittest
 
 from sqlalchemy import UniqueConstraint
-from sqlalchemy.sql.schema import Table
+from sqlalchemy.sql.schema import Column, Table
 
 from app.models import (
     ARTIFACT_STATUS_TRANSITIONS,
@@ -32,6 +32,7 @@ from app.models import (
     SteerAction,
     SteerActionType,
     Theme,
+    ThemeStatus,
     cluster_source_items,
 )
 from app.models.account import Account as AccountModel
@@ -251,6 +252,19 @@ class DomainEnumTests(unittest.TestCase):
             CAMPAIGN_STATUS_TRANSITIONS[CampaignStatus.FINISHED],
             frozenset(),
         )
+
+    def test_theme_status_values(self) -> None:
+        """Theme status is draft or live, and the column defaults to draft."""
+
+        self.assertEqual(
+            {member.value for member in ThemeStatus},
+            {"draft", "live"},
+        )
+        self.assertIn("status", set(Theme.__table__.columns.keys()))
+        status_column: Column[object] = Theme.__table__.columns["status"]
+        self.assertFalse(status_column.nullable)
+        self.assertIsNotNone(status_column.server_default)
+        self.assertEqual(str(status_column.server_default.arg), ThemeStatus.DRAFT.value)
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

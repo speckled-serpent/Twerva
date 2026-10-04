@@ -275,6 +275,8 @@ export interface CampaignReadResponse {
   created_by: string | null;
 }
 
+export type ThemeStatus = "draft" | "live";
+
 export interface ThemeCreateRequest {
   name: string;
   advertisement_type?: AdvertisementType;
@@ -287,6 +289,7 @@ export interface ThemeReadResponse {
   slug: string;
   advertisement_type: AdvertisementType;
   template_key: string | null;
+  status: ThemeStatus;
   created_at: string;
   updated_at: string;
   created_by: string | null;

@@ -1,4 +1,4 @@
-"""Theme create/list/get. Carousel only; no render or campaign binding."""
+"""Theme create/list/get/patch. Carousel only; no render or campaign binding."""
 
 from __future__ import annotations
 
@@ -10,15 +10,16 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import fetch_theme_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
-from app.api.v1.schemas import ThemeCreateRequest, ThemeReadResponse
+from app.api.v1.schemas import ThemeCreateRequest, ThemePatchRequest, ThemeReadResponse
 from app.auth.dependencies import require_authenticated_ops_operator
 from app.db import get_our_database_session
 from app.generate.templates import CAROUSEL_TEMPLATES_BY_ID
-from app.models import AdvertisementType, OpsUser, Theme
+from app.models import AdvertisementType, OpsUser, Theme, ThemeStatus
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
 
 THEME_NAME_REQUIRED_DETAIL: str = "Theme name is required."
+THEME_STATUS_REQUIRED_DETAIL: str = "Theme status is required."
 UNKNOWN_TEMPLATE_KEY_DETAIL: str = "Unknown carousel template."
 
 themes_router: APIRouter = APIRouter(prefix="/themes", tags=["themes"])
@@ -64,6 +65,7 @@ def create_theme(
         slug=theme_slug,
         advertisement_type=theme_create_request.advertisement_type,
         template_key=template_key,
+        status=ThemeStatus.DRAFT,
         created_by=created_by,
     )
     our_database_session.add(created_theme)
@@ -109,6 +111,28 @@ def get_theme_by_id(
     return theme_read_response
 
 
+@themes_router.patch("/{theme_id}", response_model=ThemeReadResponse)
+def patch_theme_by_id(
+    theme_id: uuid.UUID,
+    theme_patch_request: ThemePatchRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
+) -> ThemeReadResponse:
+    """Patch theme fields that are present. Status may move draft ↔ live."""
+
+    _ = current_ops_operator
+    found_theme: Theme = fetch_theme_by_id_or_raise(theme_id, our_database_session)
+    _apply_theme_patch(found_theme, theme_patch_request)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Theme could not be updated (conflict).",
+    )
+    our_database_session.refresh(found_theme)
+    theme_read_response: ThemeReadResponse = serialize_theme(found_theme)
+
+    return theme_read_response
+
+
 def serialize_theme(theme: Theme) -> ThemeReadResponse:
     """Map a Theme row to the read schema.
 
@@ -116,7 +140,7 @@ def serialize_theme(theme: Theme) -> ThemeReadResponse:
         theme: Loaded theme.
 
     Returns:
-        API response including slug and optional template key.
+        API response including slug, status, and optional template key.
     """
 
     theme_read_response: ThemeReadResponse = ThemeReadResponse(
@@ -125,12 +149,41 @@ def serialize_theme(theme: Theme) -> ThemeReadResponse:
         slug=theme.slug,
         advertisement_type=theme.advertisement_type,
         template_key=theme.template_key,
+        status=theme.status,
         created_at=theme.created_at,
         updated_at=theme.updated_at,
         created_by=theme.created_by,
     )
 
     return theme_read_response
+
+
+def _apply_theme_patch(theme: Theme, theme_patch_request: ThemePatchRequest) -> None:
+    """Write only the patch fields the client sent.
+
+    Args:
+        theme: Loaded theme row.
+        theme_patch_request: Partial body. Absent fields are left alone.
+
+    Raises:
+        HTTPException: 400 when ``status`` is present and null.
+    """
+
+    assigned_fields: set[str] = theme_patch_request.model_fields_set
+
+    if "status" not in assigned_fields:
+
+        return
+
+    patched_status: ThemeStatus | None = theme_patch_request.status
+
+    if patched_status is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=THEME_STATUS_REQUIRED_DETAIL,
+        )
+
+    theme.status = patched_status
 
 
 def _normalize_template_key(template_key: str | None) -> str | None:

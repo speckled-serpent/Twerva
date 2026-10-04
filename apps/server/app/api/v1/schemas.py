@@ -16,6 +16,7 @@ from app.models.enums import (
     PostJobStatus,
     SourceType,
     SteerActionType,
+    ThemeStatus,
 )
 
 
@@ -92,12 +93,26 @@ class ThemeCreateRequest(BaseModel):
 
     Slug is generated from ``name``. ``advertisement_type`` defaults to
     carousel (the only implemented format). ``template_key`` is optional
-    and, when set, must name an existing carousel generator.
+    and, when set, must name an existing carousel generator. A ``status``
+    field in the body is ignored; the row is always stored as ``draft``.
     """
+
+    model_config = ConfigDict(extra="ignore")
 
     name: str = Field(min_length=1)
     advertisement_type: AdvertisementType = AdvertisementType.CAROUSEL
     template_key: str | None = None
+
+
+class ThemePatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/themes/{id}`.
+
+    Partial. Only fields present in the body are written. ``status`` is
+    the only field in this slice. Omitted ``status`` leaves the row
+    unchanged. Null ``status`` is rejected by the handler.
+    """
+
+    status: ThemeStatus | None = None
 
 
 class ThemeReadResponse(BaseModel):
@@ -110,6 +125,7 @@ class ThemeReadResponse(BaseModel):
     slug: str
     advertisement_type: AdvertisementType
     template_key: str | None
+    status: ThemeStatus
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None

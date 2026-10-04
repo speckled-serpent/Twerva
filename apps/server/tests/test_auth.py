@@ -748,6 +748,14 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(create_brand_response.status_code, 403)
         self.assertIn("read-only", create_brand_response.json()["detail"].lower())
 
+        patch_theme_response = self.test_client.patch(
+            f"/api/v1/themes/{uuid.uuid4()}",
+            json={"status": "live"},
+        )
+
+        self.assertEqual(patch_theme_response.status_code, 403)
+        self.assertIn("read-only", patch_theme_response.json()["detail"].lower())
+
     def test_reader_can_change_own_password(self) -> None:
         """Readers may POST /auth/change-password."""
 

@@ -245,9 +245,13 @@ Allowed transitions (also `CAMPAIGN_STATUS_TRANSITIONS`):
 
 ## Theme
 
-`themes` (Alembic `themes_create`) stores visual styling for carousels.
-Short video is not implemented. The table reuses `advertisement_type`
-(`carousel` only).
+`themes` (Alembic `themes_create`, status in `themes_status`) stores
+visual styling for carousels. Short video is not implemented. The table
+reuses `advertisement_type` (`carousel` only).
+
+| Enum | Values |
+|---|---|
+| `theme_status` | `draft`, `live` |
 
 | Column | Notes |
 |---|---|
@@ -255,9 +259,18 @@ Short video is not implemented. The table reuses `advertisement_type`
 | `slug` | Unique, derived from `name` |
 | `advertisement_type` | `carousel` |
 | `template_key` | Optional unique link to a carousel generator (`spotmu_paper_v1`, `spotmu_bold_v1`). Null when the theme is not tied to a generator yet |
+| `status` | `ThemeStatus`. Default `draft`. Create always stores `draft`. `PATCH /api/v1/themes/{id}` may set `draft` or `live` |
 | `created_by` | Nullable `ops_users` id |
 
-`POST /api/v1/themes` requires a non-empty name. Readers may `GET`
-`/api/v1/themes` and `/api/v1/themes/{id}`; writes stay admin-only via
-the existing ops RBAC gate. Upgrade seeds Spotmu Paper v1 and Spotmu
-Bold v1. Creating a theme does not render slides or attach a campaign.
+`draft` is the style the operator is editing. `live` is the style
+generation will use for posts that ship. Shipping
+`POST /api/v1/generate/carousel` does not read `status` yet.
+
+`POST /api/v1/themes` requires a non-empty name. A `status` field on
+that body is ignored. Readers may `GET /api/v1/themes` and
+`/api/v1/themes/{id}`; writes, including `PATCH`, stay admin-only via
+the existing ops RBAC gate (`require_authenticated_ops_operator` plus
+the reader mutation check). Upgrade seeds Spotmu Paper v1 and Spotmu
+Bold v1, then backfills every existing row — those two included — to
+`draft`. Creating a theme does not render slides or attach a campaign.
+Both `draft` → `live` and `live` → `draft` are allowed.

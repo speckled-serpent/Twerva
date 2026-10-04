@@ -10,12 +10,14 @@ from pydantic import ValidationError
 
 from app.api.v1.themes import (
     THEME_NAME_REQUIRED_DETAIL,
+    THEME_STATUS_REQUIRED_DETAIL,
     create_theme,
     get_theme_by_id,
     list_themes,
+    patch_theme_by_id,
 )
-from app.api.v1.schemas import ThemeCreateRequest, ThemeReadResponse
-from app.models.enums import AdvertisementType
+from app.api.v1.schemas import ThemeCreateRequest, ThemePatchRequest, ThemeReadResponse
+from app.models.enums import AdvertisementType, ThemeStatus
 from app.models.theme import Theme
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
@@ -84,7 +86,10 @@ class ThemeCreateValidationTests(unittest.TestCase):
             AdvertisementType.CAROUSEL,
         )
         self.assertIsNone(theme_read_response.template_key)
+        self.assertEqual(theme_read_response.status, ThemeStatus.DRAFT)
         self.assertEqual(theme_read_response.created_by, operator_id)
+        added_theme: Theme = fake_session.add.call_args.args[0]
+        self.assertEqual(added_theme.status, ThemeStatus.DRAFT)
         fake_session.add.assert_called_once()
 
     def test_blank_template_key_is_stored_as_null(self) -> None:
@@ -177,7 +182,153 @@ class ThemeListTests(unittest.TestCase):
         )
         self.assertEqual(listed_themes[0].template_key, "spotmu_bold_v1")
         self.assertEqual(listed_themes[1].template_key, "spotmu_paper_v1")
+        self.assertEqual(listed_themes[0].status, ThemeStatus.DRAFT)
+        self.assertEqual(listed_themes[1].status, ThemeStatus.DRAFT)
         self.assertEqual(len(listed_themes), 2)
+
+
+class ThemeStatusPatchTests(unittest.TestCase):
+    """PATCH status round-trips; create ignores a status body."""
+
+    def test_patch_live_then_draft_and_create_by_name_stays_draft(self) -> None:
+        """One theme goes live and back to draft; GET returns each value.
+
+        A name-only create, including a body that asks for live, still
+        stores draft.
+        """
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        current_ops_operator: MagicMock = MagicMock()
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            live_response: ThemeReadResponse = patch_theme_by_id(
+                paper_theme.id,
+                ThemePatchRequest(status=ThemeStatus.LIVE),
+                fake_session,
+                current_ops_operator,
+            )
+
+        self.assertEqual(live_response.status, ThemeStatus.LIVE)
+        self.assertEqual(paper_theme.status, ThemeStatus.LIVE)
+        loaded_live: ThemeReadResponse = get_theme_by_id(paper_theme.id, fake_session)
+        self.assertEqual(loaded_live.status, ThemeStatus.LIVE)
+        self.assertEqual(loaded_live.name, "Spotmu Paper v1")
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            draft_response: ThemeReadResponse = patch_theme_by_id(
+                paper_theme.id,
+                ThemePatchRequest(status=ThemeStatus.DRAFT),
+                fake_session,
+                current_ops_operator,
+            )
+
+        self.assertEqual(draft_response.status, ThemeStatus.DRAFT)
+        loaded_draft: ThemeReadResponse = get_theme_by_id(paper_theme.id, fake_session)
+        self.assertEqual(loaded_draft.status, ThemeStatus.DRAFT)
+
+        create_session: MagicMock = MagicMock()
+        create_session.scalars.return_value.all.return_value = []
+        create_session.refresh.side_effect = _assign_persisted_timestamps
+        theme_create_request: ThemeCreateRequest = ThemeCreateRequest.model_validate(
+            {"name": "Harbor", "status": "live"},
+        )
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            created_theme: ThemeReadResponse = create_theme(
+                theme_create_request,
+                create_session,
+                None,
+            )
+
+        self.assertEqual(created_theme.status, ThemeStatus.DRAFT)
+        self.assertEqual(created_theme.name, "Harbor")
+        stored_theme: Theme = create_session.add.call_args.args[0]
+        self.assertEqual(stored_theme.status, ThemeStatus.DRAFT)
+        self.assertNotIn("status", ThemeCreateRequest.model_fields)
+
+    def test_patch_without_status_leaves_the_row_unchanged(self) -> None:
+        """An empty partial body does not clear draft."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        bold_theme: Theme = _theme_row(
+            name="Spotmu Bold v1",
+            slug="spotmu-bold-v1",
+            template_key="spotmu_bold_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = bold_theme
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            patched_theme: ThemeReadResponse = patch_theme_by_id(
+                bold_theme.id,
+                ThemePatchRequest(),
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(patched_theme.status, ThemeStatus.DRAFT)
+        self.assertEqual(bold_theme.status, ThemeStatus.DRAFT)
+
+    def test_null_status_is_rejected(self) -> None:
+        """An explicit null status is HTTP 400 and does not write."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        theme_patch_request: ThemePatchRequest = ThemePatchRequest.model_validate(
+            {"status": None},
+        )
+
+        with self.assertRaises(HTTPException) as raised_http:
+            patch_theme_by_id(
+                paper_theme.id,
+                theme_patch_request,
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 400)
+        self.assertEqual(raised_http.exception.detail, THEME_STATUS_REQUIRED_DETAIL)
+        self.assertEqual(paper_theme.status, ThemeStatus.DRAFT)
+        fake_session.commit.assert_not_called()
+
+    def test_unknown_status_fails_schema_validation(self) -> None:
+        """A status outside draft/live never reaches the handler."""
+
+        with self.assertRaises(ValidationError):
+            ThemePatchRequest.model_validate({"status": "published"})
+
+    def test_missing_theme_patch_returns_404(self) -> None:
+        """PATCH by id raises HTTP 404 when the row is absent."""
+
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = None
+        missing_theme_id: uuid.UUID = uuid.uuid4()
+
+        with self.assertRaises(HTTPException) as raised_http:
+            patch_theme_by_id(
+                missing_theme_id,
+                ThemePatchRequest(status=ThemeStatus.LIVE),
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 404)
 
 
 class ThemeSlugTests(unittest.TestCase):
@@ -231,6 +382,7 @@ def _theme_row(
         slug=slug,
         advertisement_type=AdvertisementType.CAROUSEL,
         template_key=template_key,
+        status=ThemeStatus.DRAFT,
         created_by=None,
         created_at=created_at,
         updated_at=created_at,
