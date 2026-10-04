@@ -295,6 +295,40 @@ export interface ThemeCreateRequest {
   template_key?: string | null;
 }
 
+export type ThemeElementBand = "top" | "middle" | "bottom";
+
+export type ThemeElementContentKind = "text" | "image";
+
+export type ThemeElementTextSource =
+  | "title"
+  | "interest_heading"
+  | "overview_bullets"
+  | "canonical_url";
+
+export type ThemeElementAlignment = "left" | "center" | "right";
+
+export interface ThemeElementReadResponse {
+  id: string;
+  theme_id: string;
+  band: ThemeElementBand;
+  sort_order: number;
+  content_kind: ThemeElementContentKind;
+  rectangle_color: string | null;
+  text_source: ThemeElementTextSource | null;
+  font_family: string | null;
+  font_size: number | null;
+  font_color: string | null;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strikethrough: boolean;
+  font_weight: number | null;
+  alignment: ThemeElementAlignment | null;
+  image_asset_ref: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ThemeReadResponse {
   id: string;
   name: string;
@@ -309,6 +343,7 @@ export interface ThemeReadResponse {
   background_color: string | null;
   background_gradient: ThemeGradient | null;
   background_asset_ref: string | null;
+  elements: ThemeElementReadResponse[];
   created_at: string;
   updated_at: string;
   created_by: string | null;

@@ -25,6 +25,8 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/campaigns/{campaign_id}/finish",
         "/api/v1/themes",
         "/api/v1/themes/{theme_id}",
+        "/api/v1/themes/{theme_id}/elements",
+        "/api/v1/themes/{theme_id}/elements/{element_id}",
         "/api/v1/spotmu/interests/search",
         "/api/v1/clusters",
         "/api/v1/clusters/{cluster_id}",
@@ -178,6 +180,21 @@ class ApiRouteSurfaceTests(unittest.TestCase):
 
         self.assertIn("patch", theme_item_methods)
         self.assertIn("get", theme_item_methods)
+
+    def test_theme_element_routes_accept_post_patch_and_delete(self) -> None:
+        """1.10b-ii: element create, patch, and delete are registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        element_collection_methods: set[str] = methods_by_path[
+            "/api/v1/themes/{theme_id}/elements"
+        ]
+        element_item_methods: set[str] = methods_by_path[
+            "/api/v1/themes/{theme_id}/elements/{element_id}"
+        ]
+
+        self.assertIn("post", element_collection_methods)
+        self.assertIn("patch", element_item_methods)
+        self.assertIn("delete", element_item_methods)
 
     def test_publish_run_route_accepts_post(self) -> None:
         """1.6c-i: POST /api/v1/publish/run/{post_job_id} is registered."""

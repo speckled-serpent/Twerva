@@ -12,6 +12,8 @@ Closed vocabularies are native Postgres ENUM types. Allowed values and
 ``PostJobStatus`` / ``CampaignStatus`` transitions live in
 ``app.models.enums`` and ``docs/planning/domain_statuses.md``.
 ``ThemeStatus`` (``draft``, ``live``) is stored the same way.
+``theme_elements`` stores band, content kind, Spotmu text source, and
+alignment the same way.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -42,6 +44,10 @@ from app.models.enums import (
     POST_JOB_STATUS_TRANSITIONS,
     SOURCE_TYPE_ENUM,
     STEER_ACTION_TYPE_ENUM,
+    THEME_ELEMENT_ALIGNMENT_ENUM,
+    THEME_ELEMENT_BAND_ENUM,
+    THEME_ELEMENT_CONTENT_KIND_ENUM,
+    THEME_ELEMENT_TEXT_SOURCE_ENUM,
     THEME_STATUS_ENUM,
     AccountStatus,
     AdvertisementType,
@@ -54,6 +60,10 @@ from app.models.enums import (
     PostJobStatus,
     SourceType,
     SteerActionType,
+    ThemeElementAlignment,
+    ThemeElementBand,
+    ThemeElementContentKind,
+    ThemeElementTextSource,
     ThemeStatus,
 )
 from app.models.metric_snapshot import MetricSnapshot
@@ -62,6 +72,7 @@ from app.models.post_job import PostJob
 from app.models.source_item import SourceItem
 from app.models.steer_action import SteerAction
 from app.models.theme import Theme
+from app.models.theme_element import ThemeElement
 
 
 __all__ = [
@@ -100,12 +111,21 @@ __all__ = [
     "PostJobStatus",
     "SOURCE_TYPE_ENUM",
     "STEER_ACTION_TYPE_ENUM",
+    "THEME_ELEMENT_ALIGNMENT_ENUM",
+    "THEME_ELEMENT_BAND_ENUM",
+    "THEME_ELEMENT_CONTENT_KIND_ENUM",
+    "THEME_ELEMENT_TEXT_SOURCE_ENUM",
     "THEME_STATUS_ENUM",
     "SourceItem",
     "SourceType",
     "SteerAction",
     "SteerActionType",
     "Theme",
+    "ThemeElement",
+    "ThemeElementAlignment",
+    "ThemeElementBand",
+    "ThemeElementContentKind",
+    "ThemeElementTextSource",
     "ThemeStatus",
     "cluster_source_items",
 ]

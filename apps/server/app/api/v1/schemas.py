@@ -17,6 +17,10 @@ from app.models.enums import (
     PostJobStatus,
     SourceType,
     SteerActionType,
+    ThemeElementAlignment,
+    ThemeElementBand,
+    ThemeElementContentKind,
+    ThemeElementTextSource,
     ThemeStatus,
 )
 
@@ -153,8 +157,96 @@ class ThemePatchRequest(BaseModel):
     background_asset_ref: str | None = None
 
 
+class ThemeElementCreateRequest(BaseModel):
+    """Body for `POST /api/v1/themes/{theme_id}/elements`.
+
+    ``band`` and ``content_kind`` are required. ``sort_order`` is optional
+    and 0-based within the band; omitted means append. ``rectangle_color``
+    null means the rectangle is clear. Text requires a Spotmu
+    ``text_source``, family, positive size, color, and alignment. Image
+    requires ``image_asset_ref`` and forbids ``text_source``. ``x``,
+    ``y``, and ``width`` are rejected.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    band: ThemeElementBand
+    content_kind: ThemeElementContentKind
+    sort_order: int | None = None
+    rectangle_color: str | None = None
+    text_source: ThemeElementTextSource | None = None
+    font_family: str | None = None
+    font_size: int | None = None
+    font_color: str | None = None
+    bold: bool | None = None
+    italic: bool | None = None
+    underline: bool | None = None
+    strikethrough: bool | None = None
+    font_weight: int | None = None
+    alignment: ThemeElementAlignment | None = None
+    image_asset_ref: str | None = None
+
+
+class ThemeElementPatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/themes/{theme_id}/elements/{element_id}`.
+
+    Partial. Only fields present in the body are written. Omitted
+    ``sort_order`` leaves the index unless ``band`` changes, in which
+    case the element is appended on the new band. The server compacts
+    the band afterward. ``x``, ``y``, and ``width`` are rejected.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    band: ThemeElementBand | None = None
+    content_kind: ThemeElementContentKind | None = None
+    sort_order: int | None = None
+    rectangle_color: str | None = None
+    text_source: ThemeElementTextSource | None = None
+    font_family: str | None = None
+    font_size: int | None = None
+    font_color: str | None = None
+    bold: bool | None = None
+    italic: bool | None = None
+    underline: bool | None = None
+    strikethrough: bool | None = None
+    font_weight: int | None = None
+    alignment: ThemeElementAlignment | None = None
+    image_asset_ref: str | None = None
+
+
+class ThemeElementReadResponse(BaseModel):
+    """Serialized theme element. No coordinates."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    theme_id: uuid.UUID
+    band: ThemeElementBand
+    sort_order: int
+    content_kind: ThemeElementContentKind
+    rectangle_color: str | None
+    text_source: ThemeElementTextSource | None
+    font_family: str | None
+    font_size: int | None
+    font_color: str | None
+    bold: bool
+    italic: bool
+    underline: bool
+    strikethrough: bool
+    font_weight: int | None
+    alignment: ThemeElementAlignment | None
+    image_asset_ref: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class ThemeReadResponse(BaseModel):
-    """Serialized Theme row."""
+    """Serialized Theme row.
+
+    ``elements`` are ordered by band (``top``, ``middle``, ``bottom``)
+    and then by ``sort_order`` within the band.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -171,6 +263,7 @@ class ThemeReadResponse(BaseModel):
     background_color: str | None
     background_gradient: ThemeGradient | None
     background_asset_ref: str | None
+    elements: list[ThemeElementReadResponse]
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None

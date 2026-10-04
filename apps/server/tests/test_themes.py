@@ -8,6 +8,12 @@ from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from app.api.v1.theme_elements import (
+    THEME_ELEMENT_NOT_FOUND_DETAIL,
+    create_theme_element,
+    delete_theme_element,
+    patch_theme_element,
+)
 from app.api.v1.themes import (
     THEME_NAME_REQUIRED_DETAIL,
     THEME_STATUS_REQUIRED_DETAIL,
@@ -18,8 +24,27 @@ from app.api.v1.themes import (
     theme_spacing_negative_detail,
     theme_spacing_required_detail,
 )
-from app.api.v1.schemas import ThemeCreateRequest, ThemePatchRequest, ThemeReadResponse
-from app.models.enums import AdvertisementType, BackgroundKind, ThemeStatus
+from app.api.v1.schemas import (
+    ThemeCreateRequest,
+    ThemeElementCreateRequest,
+    ThemeElementPatchRequest,
+    ThemeElementReadResponse,
+    ThemePatchRequest,
+    ThemeReadResponse,
+)
+from app.models.enums import (
+    AdvertisementType,
+    BackgroundKind,
+    ThemeElementBand,
+    ThemeElementContentKind,
+    ThemeElementTextSource,
+    ThemeStatus,
+)
+from app.models.theme_element import ThemeElement
+from app.themes.elements import (
+    THEME_ELEMENT_IMAGE_REF_DETAIL,
+    THEME_ELEMENT_TEXT_SOURCE_FORBIDDEN_DETAIL,
+)
 from app.models.theme import (
     DEFAULT_BACKGROUND_COLOR,
     DEFAULT_ELEMENT_GAP,
@@ -852,6 +877,283 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
         fake_session.commit.assert_not_called()
 
 
+class ThemeElementApiTests(unittest.TestCase):
+    """Element create, order, band move, and source rejection."""
+
+    def test_create_clear_text_and_image_then_move_band(self) -> None:
+        """A clear text element and an image reload in order, then one moves."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
+        text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            band=ThemeElementBand.TOP,
+            content_kind=ThemeElementContentKind.TEXT,
+            text_source=ThemeElementTextSource.TITLE,
+            font_family="DejaVu Sans",
+            font_size=32,
+            font_color="#112233",
+            alignment="left",
+        )
+        image_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            band=ThemeElementBand.TOP,
+            content_kind=ThemeElementContentKind.IMAGE,
+            image_asset_ref="logos/mark.png",
+        )
+
+        with patch(
+            "app.api.v1.theme_elements.commit_database_session_or_raise_conflict",
+        ):
+            text_element: ThemeElementReadResponse = create_theme_element(
+                paper_theme.id,
+                text_request,
+                element_session,
+                None,
+            )
+            image_element: ThemeElementReadResponse = create_theme_element(
+                paper_theme.id,
+                image_request,
+                element_session,
+                None,
+            )
+
+        self.assertIsNone(text_element.rectangle_color)
+        self.assertEqual(text_element.text_source, ThemeElementTextSource.TITLE)
+        self.assertFalse(text_element.bold)
+        self.assertEqual(text_element.sort_order, 0)
+        self.assertEqual(image_element.image_asset_ref, "logos/mark.png")
+        self.assertIsNone(image_element.text_source)
+        self.assertEqual(image_element.sort_order, 1)
+        loaded_theme: ThemeReadResponse = get_theme_by_id(
+            paper_theme.id,
+            element_session,
+        )
+        loaded_pairs: list[tuple[str, str, int]] = [
+            (element.band.value, element.content_kind.value, element.sort_order)
+            for element in loaded_theme.elements
+        ]
+
+        self.assertEqual(
+            loaded_pairs,
+            [("top", "text", 0), ("top", "image", 1)],
+        )
+
+        with patch(
+            "app.api.v1.theme_elements.commit_database_session_or_raise_conflict",
+        ):
+            moved_element: ThemeElementReadResponse = patch_theme_element(
+                paper_theme.id,
+                image_element.id,
+                ThemeElementPatchRequest(band=ThemeElementBand.MIDDLE),
+                element_session,
+                None,
+            )
+
+        self.assertEqual(moved_element.band, ThemeElementBand.MIDDLE)
+        self.assertEqual(moved_element.sort_order, 0)
+        reloaded_theme: ThemeReadResponse = get_theme_by_id(
+            paper_theme.id,
+            element_session,
+        )
+        reloaded_pairs: list[tuple[str, str, int]] = [
+            (element.band.value, element.content_kind.value, element.sort_order)
+            for element in reloaded_theme.elements
+        ]
+
+        self.assertEqual(
+            reloaded_pairs,
+            [("top", "text", 0), ("middle", "image", 0)],
+        )
+
+    def test_unknown_text_source_and_coordinates_are_rejected(self) -> None:
+        """Sources outside the four Spotmu keys, and x/y/width, never persist."""
+
+        with self.assertRaises(ValidationError):
+            ThemeElementCreateRequest.model_validate(
+                {
+                    "band": "top",
+                    "content_kind": "text",
+                    "text_source": "caption",
+                    "font_family": "DejaVu Sans",
+                    "font_size": 32,
+                    "font_color": "#112233",
+                    "alignment": "left",
+                },
+            )
+
+        with self.assertRaises(ValidationError):
+            ThemeElementCreateRequest.model_validate(
+                {
+                    "band": "top",
+                    "content_kind": "text",
+                    "text_source": "title",
+                    "font_family": "DejaVu Sans",
+                    "font_size": 32,
+                    "font_color": "#112233",
+                    "alignment": "left",
+                    "x": 10,
+                    "y": 20,
+                    "width": 400,
+                },
+            )
+
+    def test_image_ref_must_be_svg_png_or_jpeg(self) -> None:
+        """A non-image suffix and a parent path are HTTP 400."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
+        gif_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            band=ThemeElementBand.BOTTOM,
+            content_kind=ThemeElementContentKind.IMAGE,
+            image_asset_ref="logos/mark.gif",
+        )
+
+        with self.assertRaises(HTTPException) as raised_gif:
+            create_theme_element(paper_theme.id, gif_request, element_session, None)
+
+        self.assertEqual(raised_gif.exception.status_code, 400)
+        self.assertEqual(raised_gif.exception.detail, THEME_ELEMENT_IMAGE_REF_DETAIL)
+        self.assertEqual(paper_theme.elements, [])
+        parent_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            band=ThemeElementBand.BOTTOM,
+            content_kind=ThemeElementContentKind.IMAGE,
+            image_asset_ref="../secret.png",
+        )
+
+        with self.assertRaises(HTTPException) as raised_parent:
+            create_theme_element(
+                paper_theme.id,
+                parent_request,
+                element_session,
+                None,
+            )
+
+        self.assertEqual(raised_parent.exception.status_code, 400)
+        self.assertEqual(paper_theme.elements, [])
+
+    def test_image_element_rejects_a_text_source(self) -> None:
+        """An image row cannot keep one of the Spotmu text sources."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
+        image_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            band=ThemeElementBand.TOP,
+            content_kind=ThemeElementContentKind.IMAGE,
+            text_source=ThemeElementTextSource.TITLE,
+            image_asset_ref="logos/mark.jpg",
+        )
+
+        with self.assertRaises(HTTPException) as raised_http:
+            create_theme_element(
+                paper_theme.id,
+                image_request,
+                element_session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 400)
+        self.assertEqual(
+            raised_http.exception.detail,
+            THEME_ELEMENT_TEXT_SOURCE_FORBIDDEN_DETAIL,
+        )
+        self.assertEqual(paper_theme.elements, [])
+
+    def test_delete_compacts_the_band(self) -> None:
+        """Deleting the first element renumbers the remaining one to 0."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
+        first_request: ThemeElementCreateRequest = _text_element_request(
+            ThemeElementTextSource.TITLE,
+        )
+        second_request: ThemeElementCreateRequest = _text_element_request(
+            ThemeElementTextSource.CANONICAL_URL,
+        )
+
+        with patch(
+            "app.api.v1.theme_elements.commit_database_session_or_raise_conflict",
+        ):
+            first_element: ThemeElementReadResponse = create_theme_element(
+                paper_theme.id,
+                first_request,
+                element_session,
+                None,
+            )
+            second_element: ThemeElementReadResponse = create_theme_element(
+                paper_theme.id,
+                second_request,
+                element_session,
+                None,
+            )
+            delete_theme_element(
+                paper_theme.id,
+                first_element.id,
+                element_session,
+                None,
+            )
+
+        loaded_theme: ThemeReadResponse = get_theme_by_id(
+            paper_theme.id,
+            element_session,
+        )
+
+        self.assertEqual(len(loaded_theme.elements), 1)
+        self.assertEqual(loaded_theme.elements[0].id, second_element.id)
+        self.assertEqual(loaded_theme.elements[0].sort_order, 0)
+        self.assertEqual(
+            loaded_theme.elements[0].text_source,
+            ThemeElementTextSource.CANONICAL_URL,
+        )
+
+    def test_missing_element_returns_404(self) -> None:
+        """PATCH for an id that is not on the theme is HTTP 404."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
+        missing_element_id: uuid.UUID = uuid.uuid4()
+
+        with self.assertRaises(HTTPException) as raised_http:
+            patch_theme_element(
+                paper_theme.id,
+                missing_element_id,
+                ThemeElementPatchRequest(band=ThemeElementBand.BOTTOM),
+                element_session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 404)
+        self.assertIn(THEME_ELEMENT_NOT_FOUND_DETAIL, str(raised_http.exception.detail))
+
+
 class ThemeSlugTests(unittest.TestCase):
     """Slug derivation matches the campaign hyphen rules with a theme fallback."""
 
@@ -878,6 +1180,82 @@ class ThemeSlugTests(unittest.TestCase):
         )
 
         self.assertEqual(allocated_slug, "harbor-2")
+
+
+class _ElementMemorySession:
+    """In-memory theme lookup for element handlers. Not a database."""
+
+    def __init__(self, theme: Theme) -> None:
+
+        self.theme: Theme = theme
+
+    def get(self, model: type[object], key: uuid.UUID) -> Theme | ThemeElement | None:
+        """Return the theme or one of its elements."""
+
+        if model is Theme:
+
+            if key == self.theme.id:
+
+                return self.theme
+
+            return None
+
+        if model is ThemeElement:
+
+            for element in self.theme.elements:
+
+                if element.id == key:
+
+                    return element
+
+            return None
+
+        return None
+
+    def add(self, row: object) -> None:
+        """Accept the pending insert. The handler also appends the relationship."""
+
+        return None
+
+    def delete(self, row: object) -> None:
+        """Accept the pending delete. The handler already detached the row."""
+
+        return None
+
+    def flush(self) -> None:
+        """The unique-key dance does not need a database in this test."""
+
+        return None
+
+    def refresh(self, row: Theme | ThemeElement) -> None:
+        """Fill id and timestamps the way a Postgres refresh would."""
+
+        persisted_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+
+        if row.id is None:
+            row.id = uuid.uuid4()
+
+        if row.created_at is None:
+            row.created_at = persisted_at
+            row.updated_at = persisted_at
+
+
+def _text_element_request(
+    text_source: ThemeElementTextSource,
+) -> ThemeElementCreateRequest:
+    """Build a clear text element on the top band."""
+
+    text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+        band=ThemeElementBand.TOP,
+        content_kind=ThemeElementContentKind.TEXT,
+        text_source=text_source,
+        font_family="DejaVu Sans",
+        font_size=28,
+        font_color="#112233",
+        alignment="center",
+    )
+
+    return text_request
 
 
 def _assign_persisted_timestamps(theme: Theme) -> None:
