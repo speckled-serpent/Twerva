@@ -218,6 +218,20 @@ export async function patchTheme(
   );
 }
 
+/**
+ * Copy one theme into a new Draft. The source row is not modified.
+ *
+ * @param themeId - Source theme UUID
+ * @returns The new Draft theme
+ */
+export async function duplicateTheme(themeId: string): Promise<ThemeReadResponse> {
+
+  return requestJson<ThemeReadResponse>(
+    "POST",
+    `/api/v1/themes/${themeId}/duplicate`,
+  );
+}
+
 export async function createThemeElement(
   themeId: string,
   themeElementCreateRequest: ThemeElementCreateRequest,

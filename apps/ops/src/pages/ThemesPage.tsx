@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
-import { fetchThemeById, listThemes, patchTheme } from "../api/client";
+import { duplicateTheme, fetchThemeById, listThemes, patchTheme } from "../api/client";
 import type {
   BackgroundKind,
   ThemeGradient,
@@ -16,6 +16,7 @@ import {
   advertisementTypeLabel,
   formatThemeTemplateKey,
   formatThemeTimestamp,
+  themeStatusLabel,
 } from "./themeDisplay";
 
 export interface ThemesPageProps {
@@ -24,6 +25,7 @@ export interface ThemesPageProps {
 
 /**
  * Themes tab: list saved themes. Selecting a row opens the frame and elements.
+ * Duplicate opens the new Draft and leaves the source row as it was.
  *
  * @param props - Banner shown after create
  * @returns The Themes list or detail
@@ -116,19 +118,19 @@ export function ThemesPage({ statusMessage }: ThemesPageProps): ReactElement {
         onThemeSaved={(updatedTheme: ThemeReadResponse): void => {
           setSelectedTheme(updatedTheme);
           setThemes((currentThemes: ThemeReadResponse[]): ThemeReadResponse[] => {
-            const nextThemes: ThemeReadResponse[] = currentThemes.map(
-              (theme: ThemeReadResponse): ThemeReadResponse => {
-
-                if (theme.id !== updatedTheme.id) {
-                  return theme;
-                }
-
-                return updatedTheme;
-              },
+            return replaceThemeInList(currentThemes, updatedTheme);
+          });
+        }}
+        onThemeDuplicated={(copiedTheme: ThemeReadResponse): void => {
+          setThemes((currentThemes: ThemeReadResponse[]): ThemeReadResponse[] => {
+            const withoutCopy: ThemeReadResponse[] = currentThemes.filter(
+              (theme: ThemeReadResponse): boolean => theme.id !== copiedTheme.id,
             );
 
-            return nextThemes;
+            return [copiedTheme, ...withoutCopy];
           });
+          setSelectedTheme(copiedTheme);
+          setOpenedThemeId(copiedTheme.id);
         }}
       />
     );
@@ -182,6 +184,7 @@ function ThemeListView({
           <thead>
             <tr>
               <th>Name</th>
+              <th>Status</th>
               <th>Advertisement type</th>
               <th>Created</th>
               <th>View</th>
@@ -197,6 +200,7 @@ function ThemeListView({
                 }}
               >
                 <td>{theme.name}</td>
+                <td>{themeStatusLabel(theme.status)}</td>
                 <td>{advertisementTypeLabel(theme.advertisement_type)}</td>
                 <td className="mono">{formatThemeTimestamp(theme.created_at)}</td>
                 <td>
@@ -225,6 +229,7 @@ interface ThemeDetailViewProps {
   statusMessage: string;
   onBack: () => void;
   onThemeSaved: (updatedTheme: ThemeReadResponse) => void;
+  onThemeDuplicated: (copiedTheme: ThemeReadResponse) => void;
 }
 
 interface ThemeGradientStopDraft {
@@ -257,6 +262,7 @@ function ThemeDetailView({
   statusMessage,
   onBack,
   onThemeSaved,
+  onThemeDuplicated,
 }: ThemeDetailViewProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
@@ -264,6 +270,7 @@ function ThemeDetailView({
   const [editedForKey, setEditedForKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
+  const [isDuplicating, setIsDuplicating] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<string>("");
   const [saveMessageKey, setSaveMessageKey] = useState<string | null>(null);
   const themeKey: string | null = themeFrameKey(selectedTheme);
@@ -274,7 +281,8 @@ function ThemeDetailView({
     editedForKey,
   );
   const visibleSaveMessage: string = saveMessageKey === themeKey ? saveMessage : "";
-  const fieldsDisabled: boolean = !canWrite || isBusy;
+  const fieldsDisabled: boolean = !canWrite || isBusy || isDuplicating;
+  const duplicateDisabled: boolean = !canWrite || isBusy || isDuplicating || selectedTheme === null;
 
   const rememberDraft = (nextDraft: ThemeFrameDraft): void => {
 
@@ -317,6 +325,26 @@ function ThemeDetailView({
     }
   };
 
+  const handleDuplicate = async (): Promise<void> => {
+
+    if (!canWrite || selectedTheme === null) {
+      return;
+    }
+
+    setIsDuplicating(true);
+    setActionError(null);
+
+    try {
+      const copiedTheme: ThemeReadResponse = await duplicateTheme(selectedTheme.id);
+
+      onThemeDuplicated(copiedTheme);
+    } catch (caughtError: unknown) {
+      setActionError(caughtError);
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
   return (
     <section>
       <div className="page-header-row">
@@ -326,9 +354,20 @@ function ThemeDetailView({
             Draft or Live, background, spacing, and full-width elements.
           </p>
         </div>
-        <button type="button" onClick={onBack}>
-          Back to list
-        </button>
+        <div className="button-row">
+          <button
+            type="button"
+            disabled={duplicateDisabled}
+            onClick={(): void => {
+              void handleDuplicate();
+            }}
+          >
+            {isDuplicating ? "Duplicating…" : "Duplicate"}
+          </button>
+          <button type="button" onClick={onBack} disabled={isDuplicating}>
+            Back to list
+          </button>
+        </div>
       </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
@@ -627,6 +666,25 @@ function ThemeGradientFields({
       </div>
     </>
   );
+}
+
+function replaceThemeInList(
+  themes: ThemeReadResponse[],
+  updatedTheme: ThemeReadResponse,
+): ThemeReadResponse[] {
+
+  const nextThemes: ThemeReadResponse[] = themes.map(
+    (theme: ThemeReadResponse): ThemeReadResponse => {
+
+      if (theme.id !== updatedTheme.id) {
+        return theme;
+      }
+
+      return updatedTheme;
+    },
+  );
+
+  return nextThemes;
 }
 
 function themeFrameKey(theme: ThemeReadResponse | null): string | null {
