@@ -412,7 +412,7 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 - [x] **1.10h-iii** **Duplicate** calls 1.10c and opens the new Draft. The source theme stays as it was. **Done when:** duplicating a Live theme navigates to a Draft copy and the source list row is still Live. **Out of scope:** bulk duplicate.
 
-- [ ] **1.10h-iv** **Generate samples:** pick one Spotmu source item, call the samples endpoint only, and show the preview. A blocked preview stays on screen with a visible error state (banner plus a highlight on that preview) naming the reason — overlap bands, or the missing-asset / measure error. It is not sent to Queue, Schedule, or publish. A non-blocked preview shows the image without that error state. Empty state: no source chosen, the button does not call the API. **Done when:** the click hits `/api/v1/themes/{id}/samples` and does not call `/api/v1/generate/carousel` or create a queue row. **Out of scope:** shipping generate, multi-frame sample batches.
+- [x] **1.10h-iv** **Generate samples:** pick one Spotmu source item, call the samples endpoint only, and show the preview. A blocked preview stays on screen with a visible error state (banner plus a highlight on that preview) naming the reason — overlap bands, or the missing-asset / measure error. It is not sent to Queue, Schedule, or publish. A non-blocked preview shows the image without that error state. Empty state: no source chosen, the button does not call the API. **Done when:** the click hits `/api/v1/themes/{id}/samples` and does not call `/api/v1/generate/carousel` or create a queue row. **Out of scope:** shipping generate, multi-frame sample batches.
 
 #### 1.10i — Close the section
 
