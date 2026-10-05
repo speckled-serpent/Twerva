@@ -1,4 +1,4 @@
-"""Theme create/list/get/patch/duplicate. Carousel only; no render."""
+"""Theme create/list/get/patch/duplicate. Samples render one preview frame."""
 
 from __future__ import annotations
 
@@ -554,6 +554,8 @@ def _load_taken_theme_slugs(our_database_session: Session) -> set[str]:
 
 
 from app.api.v1.theme_elements import register_theme_element_routes
+from app.api.v1.theme_samples import register_theme_sample_routes
 
 
 register_theme_element_routes(themes_router)
+register_theme_sample_routes(themes_router)

@@ -28,6 +28,8 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/themes/{theme_id}/duplicate",
         "/api/v1/themes/{theme_id}/elements",
         "/api/v1/themes/{theme_id}/elements/{element_id}",
+        "/api/v1/themes/{theme_id}/samples",
+        "/api/v1/themes/{theme_id}/samples/{preview_id}/image",
         "/api/v1/spotmu/interests/search",
         "/api/v1/clusters",
         "/api/v1/clusters/{cluster_id}",
@@ -206,6 +208,18 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         ]
 
         self.assertIn("post", duplicate_methods)
+
+    def test_theme_sample_routes_accept_post_and_get(self) -> None:
+        """1.10g-i: sample create and preview image are registered."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        sample_methods: set[str] = methods_by_path["/api/v1/themes/{theme_id}/samples"]
+        sample_image_methods: set[str] = methods_by_path[
+            "/api/v1/themes/{theme_id}/samples/{preview_id}/image"
+        ]
+
+        self.assertIn("post", sample_methods)
+        self.assertIn("get", sample_image_methods)
 
     def test_publish_run_route_accepts_post(self) -> None:
         """1.6c-i: POST /api/v1/publish/run/{post_job_id} is registered."""

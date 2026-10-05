@@ -176,6 +176,90 @@ def measure_theme_elements(
     return ThemeMeasurement(layout=layout, problems=tuple(problems))
 
 
+def load_theme_face(
+    font_family: str,
+    font_size: int,
+    bold: bool,
+    italic: bool,
+    font_weight: int | None,
+) -> ImageFont.ImageFont:
+    """Load the face measurement used, including the carousel fallback.
+
+    Args:
+        font_family: Requested family. A missing family uses DejaVu, then Liberation.
+        font_size: Pixel size. Non-positive sizes load at 1.
+        bold: Select a bold cut when no numeric weight does.
+        italic: Prefer an italic or oblique file.
+        font_weight: Optional CSS weight. 600 and above selects bold.
+
+    Returns:
+        The face ``measure_theme_elements`` used for this text.
+    """
+
+    loaded_face: ImageFont.ImageFont = _load_face(
+        font_family,
+        font_size,
+        bold,
+        italic,
+        font_weight,
+    )
+
+    return loaded_face
+
+
+def wrap_theme_text(
+    text: str,
+    face: ImageFont.ImageFont,
+    content_width: int,
+) -> list[str]:
+    """Wrap text the same way measurement counts lines.
+
+    Args:
+        text: Resolved copy, including newline-separated bullets.
+        face: Face from ``load_theme_face``.
+        content_width: Width the lines must fit.
+
+    Returns:
+        One string per wrapped line. Empty text is not a special case
+        here; the caller skips drawing when the string is empty.
+    """
+
+    wrapped_lines: list[str] = _wrap_text(text, face, content_width)
+
+    return wrapped_lines
+
+
+def theme_line_height(face: ImageFont.ImageFont) -> int:
+    """Return one line of ``face``. Underline and strikethrough add nothing.
+
+    Args:
+        face: Face from ``load_theme_face``.
+
+    Returns:
+        Ascent plus descent, at least 1.
+    """
+
+    line_height: int = _line_height(face)
+
+    return line_height
+
+
+def theme_text_width(face: ImageFont.ImageFont, text: str) -> int:
+    """Return the advance width in whole pixels, rounded up.
+
+    Args:
+        face: Face from ``load_theme_face``.
+        text: One wrapped line.
+
+    Returns:
+        Pixel width used to place that line.
+    """
+
+    measured_width: int = _text_width(face, text)
+
+    return measured_width
+
+
 def _content_height_for_element(
     element: ThemeMeasureElement,
     content_width: int,
