@@ -11,6 +11,7 @@ import type {
   CampaignCreateRequest,
   CampaignReadResponse,
   ThemeCreateRequest,
+  ThemePatchRequest,
   ThemeReadResponse,
   CarouselGenerateRequest,
   ClusterAgentSummaryResponse,
@@ -199,6 +200,18 @@ export async function createTheme(
     "POST",
     "/api/v1/themes",
     themeCreateRequest,
+  );
+}
+
+export async function patchTheme(
+  themeId: string,
+  themePatchRequest: ThemePatchRequest,
+): Promise<ThemeReadResponse> {
+
+  return requestJson<ThemeReadResponse>(
+    "PATCH",
+    `/api/v1/themes/${themeId}`,
+    themePatchRequest,
   );
 }
 

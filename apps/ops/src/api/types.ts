@@ -295,6 +295,17 @@ export interface ThemeCreateRequest {
   template_key?: string | null;
 }
 
+export interface ThemePatchRequest {
+  status?: ThemeStatus | null;
+  page_margin?: number | null;
+  element_gap?: number | null;
+  element_margin?: number | null;
+  background_kind?: BackgroundKind | null;
+  background_color?: string | null;
+  background_gradient?: ThemeGradient | null;
+  background_asset_ref?: string | null;
+}
+
 export type ThemeElementBand = "top" | "middle" | "bottom";
 
 export type ThemeElementContentKind = "text" | "image";
