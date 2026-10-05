@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -267,6 +268,39 @@ class ThemeReadResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None
+
+
+class ThemeSampleRequest(BaseModel):
+    """Body for `POST /api/v1/themes/{id}/samples`.
+
+    One source item, one frame. The handler does not create an artifact
+    or a post job.
+    """
+
+    source_item_id: uuid.UUID
+
+
+class ThemeSampleOverlapResponse(BaseModel):
+    """One pair of elements from different bands whose areas intersect."""
+
+    band_a: ThemeElementBand
+    band_b: ThemeElementBand
+    element_ids: list[uuid.UUID]
+
+
+class ThemeSampleResponse(BaseModel):
+    """One rendered preview. ``blocked`` is true when it must not ship.
+
+    ``block_reason`` is null, ``overlap``, ``missing_asset``, or
+    ``measure_error``. The PNG is still written when the frame is blocked.
+    ``overlaps`` is present even when another reason wins.
+    """
+
+    preview_id: uuid.UUID
+    blocked: bool
+    block_reason: Literal["overlap", "missing_asset", "measure_error"] | None
+    detail: str | None
+    overlaps: list[ThemeSampleOverlapResponse]
 
 
 class SpotmuInterestSearchHitResponse(BaseModel):
