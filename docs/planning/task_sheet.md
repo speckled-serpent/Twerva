@@ -396,7 +396,7 @@ New Alembic revision after `themes_create`. Do not edit `themes_create`. Native 
 
 #### 1.10f — Overlap
 
-- [ ] **1.10f-i** `apps/server/app/themes/overlap.py`. After placement, rectangles from **different** bands overlap when their areas intersect. Sharing an edge is not an overlap. Do not change coordinates. Do not push Middle or Bottom. Return `{blocked, overlaps: [{band_a, band_b, element_ids}]}`. Zero elements is not blocked. A same-band stack with gap ≥ 0 is not an overlap. **Done when:** tests show a tall top element intersecting middle as blocked with the original `y` values unchanged, an edge-touching pair as allowed, and a two-instance call that flags only the colliding instance. **Out of scope:** the highlight UI, samples HTTP, artifacts, post jobs.
+- [x] **1.10f-i** `apps/server/app/themes/overlap.py`. After placement, rectangles from **different** bands overlap when their areas intersect. Sharing an edge is not an overlap. Do not change coordinates. Do not push Middle or Bottom. Return `{blocked, overlaps: [{band_a, band_b, element_ids}]}`. Zero elements is not blocked. A same-band stack with gap ≥ 0 is not an overlap. **Done when:** tests show a tall top element intersecting middle as blocked with the original `y` values unchanged, an edge-touching pair as allowed, and a two-instance call that flags only the colliding instance. **Out of scope:** the highlight UI, samples HTTP, artifacts, post jobs.
 
 #### 1.10g — Generate samples
 
