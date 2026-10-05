@@ -318,6 +318,42 @@ export type ThemeElementTextSource =
 
 export type ThemeElementAlignment = "left" | "center" | "right";
 
+export interface ThemeElementCreateRequest {
+  band: ThemeElementBand;
+  content_kind: ThemeElementContentKind;
+  sort_order?: number | null;
+  rectangle_color?: string | null;
+  text_source?: ThemeElementTextSource | null;
+  font_family?: string | null;
+  font_size?: number | null;
+  font_color?: string | null;
+  bold?: boolean | null;
+  italic?: boolean | null;
+  underline?: boolean | null;
+  strikethrough?: boolean | null;
+  font_weight?: number | null;
+  alignment?: ThemeElementAlignment | null;
+  image_asset_ref?: string | null;
+}
+
+export interface ThemeElementPatchRequest {
+  band?: ThemeElementBand | null;
+  content_kind?: ThemeElementContentKind | null;
+  sort_order?: number | null;
+  rectangle_color?: string | null;
+  text_source?: ThemeElementTextSource | null;
+  font_family?: string | null;
+  font_size?: number | null;
+  font_color?: string | null;
+  bold?: boolean | null;
+  italic?: boolean | null;
+  underline?: boolean | null;
+  strikethrough?: boolean | null;
+  font_weight?: number | null;
+  alignment?: ThemeElementAlignment | null;
+  image_asset_ref?: string | null;
+}
+
 export interface ThemeElementReadResponse {
   id: string;
   theme_id: string;

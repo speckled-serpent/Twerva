@@ -11,6 +11,7 @@ import type {
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { ThemeElementEditor } from "./ThemeElementEditor";
 import {
   advertisementTypeLabel,
   formatThemeTemplateKey,
@@ -22,7 +23,7 @@ export interface ThemesPageProps {
 }
 
 /**
- * Themes tab: list saved themes. Selecting a row opens the frame editor.
+ * Themes tab: list saved themes. Selecting a row opens the frame and elements.
  *
  * @param props - Banner shown after create
  * @returns The Themes list or detail
@@ -322,8 +323,7 @@ function ThemeDetailView({
         <div>
           <h1>{selectedTheme === null ? "Theme" : selectedTheme.name}</h1>
           <p className="lede">
-            Draft or Live, background, and spacing. Save writes this frame.
-            Elements are not edited here.
+            Draft or Live, background, spacing, and full-width elements.
           </p>
         </div>
         <button type="button" onClick={onBack}>
@@ -498,6 +498,10 @@ function ThemeDetailView({
               </button>
             </div>
           </form>
+          <ThemeElementEditor
+            theme={selectedTheme}
+            onThemeUpdated={onThemeSaved}
+          />
         </>
       )}
     </section>

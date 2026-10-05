@@ -11,6 +11,9 @@ import type {
   CampaignCreateRequest,
   CampaignReadResponse,
   ThemeCreateRequest,
+  ThemeElementCreateRequest,
+  ThemeElementPatchRequest,
+  ThemeElementReadResponse,
   ThemePatchRequest,
   ThemeReadResponse,
   CarouselGenerateRequest,
@@ -212,6 +215,42 @@ export async function patchTheme(
     "PATCH",
     `/api/v1/themes/${themeId}`,
     themePatchRequest,
+  );
+}
+
+export async function createThemeElement(
+  themeId: string,
+  themeElementCreateRequest: ThemeElementCreateRequest,
+): Promise<ThemeElementReadResponse> {
+
+  return requestJson<ThemeElementReadResponse>(
+    "POST",
+    `/api/v1/themes/${themeId}/elements`,
+    themeElementCreateRequest,
+  );
+}
+
+export async function patchThemeElement(
+  themeId: string,
+  elementId: string,
+  themeElementPatchRequest: ThemeElementPatchRequest,
+): Promise<ThemeElementReadResponse> {
+
+  return requestJson<ThemeElementReadResponse>(
+    "PATCH",
+    `/api/v1/themes/${themeId}/elements/${elementId}`,
+    themeElementPatchRequest,
+  );
+}
+
+export async function deleteThemeElement(
+  themeId: string,
+  elementId: string,
+): Promise<void> {
+
+  await requestJson<undefined>(
+    "DELETE",
+    `/api/v1/themes/${themeId}/elements/${elementId}`,
   );
 }
 
