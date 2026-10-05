@@ -250,6 +250,32 @@ td {
   object-fit: cover;
 }
 
+.sample-preview {
+  margin: 0.75rem 0 0;
+  max-width: 22rem;
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 0.4rem;
+}
+
+.sample-preview.is-blocked {
+  border: 3px solid #7a1010;
+  background: #fff4f4;
+  box-shadow: 0 0 0 3px #f3c1c1;
+}
+
+.sample-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.sample-preview figcaption {
+  margin-top: 0.4rem;
+  color: #7a1010;
+  font-size: 0.85rem;
+}
+
 .slide-lightbox {
   position: fixed;
   inset: 0;

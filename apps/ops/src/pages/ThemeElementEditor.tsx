@@ -1,0 +1,744 @@
+import { useState, type FormEvent, type ReactElement } from "react";
+
+import {
+  createThemeElement,
+  deleteThemeElement,
+  fetchThemeById,
+  patchThemeElement,
+} from "../api/client";
+import type {
+  ThemeElementAlignment,
+  ThemeElementBand,
+  ThemeElementContentKind,
+  ThemeElementCreateRequest,
+  ThemeElementPatchRequest,
+  ThemeElementReadResponse,
+  ThemeElementTextSource,
+  ThemeReadResponse,
+} from "../api/types";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { useCanWriteOps } from "../session/OpsSessionContext";
+
+export interface ThemeElementEditorProps {
+  theme: ThemeReadResponse;
+  onThemeUpdated: (updatedTheme: ThemeReadResponse) => void;
+}
+
+interface TextSourceOption {
+  value: ThemeElementTextSource;
+  label: string;
+}
+
+interface BandOption {
+  value: ThemeElementBand;
+  label: string;
+}
+
+interface ElementDraft {
+  band: ThemeElementBand;
+  contentKind: ThemeElementContentKind;
+  rectangleColor: string;
+  textSource: ThemeElementTextSource;
+  fontFamily: string;
+  fontSize: string;
+  fontColor: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strikethrough: boolean;
+  fontWeight: string;
+  alignment: ThemeElementAlignment;
+  imageAssetRef: string;
+}
+
+const TEXT_SOURCE_OPTIONS: TextSourceOption[] = [
+  { value: "title", label: "Title" },
+  { value: "interest_heading", label: "Interest heading" },
+  { value: "overview_bullets", label: "Overview bullets" },
+  { value: "canonical_url", label: "Public URL" },
+];
+
+const BAND_OPTIONS: BandOption[] = [
+  { value: "top", label: "Top" },
+  { value: "middle", label: "Middle" },
+  { value: "bottom", label: "Bottom" },
+];
+
+/**
+ * Add, edit, delete, reorder, and move theme elements. No placement fields.
+ *
+ * @param props - The open theme and a callback after each saved change
+ * @returns The element editor under the frame form
+ */
+export function ThemeElementEditor({
+  theme,
+  onThemeUpdated,
+}: ThemeElementEditorProps): ReactElement {
+
+  const canWrite: boolean = useCanWriteOps();
+  const [addDraft, setAddDraft] = useState<ElementDraft>(emptyElementDraft());
+  const [actionError, setActionError] = useState<unknown>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const fieldsDisabled: boolean = !canWrite || busyKey !== null;
+
+  const reloadTheme = async (): Promise<ThemeReadResponse> => {
+
+    const reloadedTheme: ThemeReadResponse = await fetchThemeById(theme.id);
+
+    onThemeUpdated(reloadedTheme);
+
+    return reloadedTheme;
+  };
+
+  const handleAddElement = async (formEvent: FormEvent): Promise<void> => {
+
+    formEvent.preventDefault();
+
+    if (!canWrite) {
+      return;
+    }
+
+    setBusyKey("add");
+    setActionError(null);
+    setStatusMessage("");
+
+    try {
+      const createRequest: ThemeElementCreateRequest = elementRequestFromDraft(addDraft);
+      await createThemeElement(theme.id, createRequest);
+      await reloadTheme();
+      setAddDraft(emptyElementDraft());
+      setStatusMessage("Element added.");
+    } catch (caughtError: unknown) {
+      setActionError(caughtError);
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  return (
+    <section className="summary-block">
+      <h2>Elements</h2>
+      <p className="field-hint">
+        Full-width rows in Top, Middle, or Bottom. A blank rectangle color is clear.
+        Image paths are typed, not uploaded.
+      </p>
+      <ErrorBanner error={actionError} />
+      {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
+
+      <form
+        className="stack-form"
+        onSubmit={(formEvent: FormEvent): void => {
+          void handleAddElement(formEvent);
+        }}
+      >
+        <fieldset className="form-fieldset" disabled={fieldsDisabled}>
+          <legend>Add element</legend>
+          <ElementFields
+            draft={addDraft}
+            onDraftChange={setAddDraft}
+            idPrefix="add-element"
+          />
+        </fieldset>
+        <div className="button-row">
+          <button type="submit" disabled={fieldsDisabled}>
+            {busyKey === "add" ? "Adding…" : "Add element"}
+          </button>
+        </div>
+      </form>
+
+      {BAND_OPTIONS.map((bandOption: BandOption): ReactElement => {
+        const bandElements: ThemeElementReadResponse[] = elementsInBand(
+          theme.elements,
+          bandOption.value,
+        );
+
+        return (
+          <div key={bandOption.value}>
+            <h3>{bandOption.label}</h3>
+            {bandElements.length === 0 ? (
+              <p className="empty-hint">No elements in this band.</p>
+            ) : (
+              bandElements.map(
+                (element: ThemeElementReadResponse, elementIndex: number): ReactElement => (
+                  <ThemeElementCard
+                    key={`${element.id}:${element.updated_at}:${element.band}:${element.sort_order}`}
+                    themeId={theme.id}
+                    element={element}
+                    elementIndex={elementIndex}
+                    bandLength={bandElements.length}
+                    fieldsDisabled={fieldsDisabled}
+                    isBusy={busyKey === element.id}
+                    onError={setActionError}
+                    onReload={async (message: string): Promise<void> => {
+                      setStatusMessage(message);
+                      await reloadTheme();
+                    }}
+                    onBusy={(isBusy: boolean): void => {
+                      setBusyKey(isBusy ? element.id : null);
+                    }}
+                  />
+                ),
+              )
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+interface ThemeElementCardProps {
+  themeId: string;
+  element: ThemeElementReadResponse;
+  elementIndex: number;
+  bandLength: number;
+  fieldsDisabled: boolean;
+  isBusy: boolean;
+  onError: (error: unknown) => void;
+  onReload: (message: string) => Promise<void>;
+  onBusy: (isBusy: boolean) => void;
+}
+
+function ThemeElementCard({
+  themeId,
+  element,
+  elementIndex,
+  bandLength,
+  fieldsDisabled,
+  isBusy,
+  onError,
+  onReload,
+  onBusy,
+}: ThemeElementCardProps): ReactElement {
+
+  const canWrite: boolean = useCanWriteOps();
+  const [draft, setDraft] = useState<ElementDraft>(draftFromElement(element));
+  const canMoveEarlier: boolean = canWrite && elementIndex > 0 && draft.band === element.band;
+  const canMoveLater: boolean = (
+    canWrite
+    && elementIndex < bandLength - 1
+    && draft.band === element.band
+  );
+
+  const handleSave = async (formEvent: FormEvent): Promise<void> => {
+
+    formEvent.preventDefault();
+
+    if (!canWrite) {
+      return;
+    }
+
+    onBusy(true);
+    onError(null);
+
+    try {
+      const patchRequest: ThemeElementPatchRequest = elementRequestFromDraft(draft);
+      await patchThemeElement(themeId, element.id, patchRequest);
+      await onReload("Element saved.");
+    } catch (caughtError: unknown) {
+      onError(caughtError);
+    } finally {
+      onBusy(false);
+    }
+  };
+
+  const handleDelete = async (): Promise<void> => {
+
+    if (!canWrite) {
+      return;
+    }
+
+    onBusy(true);
+    onError(null);
+
+    try {
+      await deleteThemeElement(themeId, element.id);
+      await onReload("Element deleted.");
+    } catch (caughtError: unknown) {
+      onError(caughtError);
+    } finally {
+      onBusy(false);
+    }
+  };
+
+  const handleMove = async (nextSortOrder: number): Promise<void> => {
+
+    if (!canWrite) {
+      return;
+    }
+
+    onBusy(true);
+    onError(null);
+
+    try {
+      await patchThemeElement(themeId, element.id, { sort_order: nextSortOrder });
+      await onReload("Element moved.");
+    } catch (caughtError: unknown) {
+      onError(caughtError);
+    } finally {
+      onBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="card stack-form"
+      onSubmit={(formEvent: FormEvent): void => {
+        void handleSave(formEvent);
+      }}
+    >
+      <fieldset className="form-fieldset" disabled={fieldsDisabled}>
+        <legend>
+          {bandLabel(element.band)} {elementIndex + 1} of {bandLength}
+          {" · "}
+          {element.content_kind === "text" ? "Text" : "Image"}
+        </legend>
+        <ElementFields
+          draft={draft}
+          onDraftChange={setDraft}
+          idPrefix={`element-${element.id}`}
+        />
+      </fieldset>
+      <div className="button-row">
+        <button type="submit" disabled={fieldsDisabled}>
+          {isBusy ? "Saving…" : "Save element"}
+        </button>
+        <button
+          type="button"
+          disabled={!canMoveEarlier || fieldsDisabled}
+          onClick={(): void => {
+            void handleMove(element.sort_order - 1);
+          }}
+        >
+          Move earlier
+        </button>
+        <button
+          type="button"
+          disabled={!canMoveLater || fieldsDisabled}
+          onClick={(): void => {
+            void handleMove(element.sort_order + 1);
+          }}
+        >
+          Move later
+        </button>
+        <button
+          type="button"
+          className="danger"
+          disabled={fieldsDisabled}
+          onClick={(): void => {
+            void handleDelete();
+          }}
+        >
+          Delete element
+        </button>
+      </div>
+    </form>
+  );
+}
+
+interface ElementFieldsProps {
+  draft: ElementDraft;
+  onDraftChange: (nextDraft: ElementDraft) => void;
+  idPrefix: string;
+}
+
+function ElementFields({
+  draft,
+  onDraftChange,
+  idPrefix,
+}: ElementFieldsProps): ReactElement {
+
+  return (
+    <>
+      <label>
+        Band
+        <select
+          value={draft.band}
+          onChange={(changeEvent): void => {
+            const nextBand: string = changeEvent.target.value;
+
+            if (!isThemeElementBand(nextBand)) {
+              return;
+            }
+
+            onDraftChange({ ...draft, band: nextBand });
+          }}
+        >
+          {BAND_OPTIONS.map((bandOption: BandOption): ReactElement => (
+            <option key={bandOption.value} value={bandOption.value}>
+              {bandOption.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Content
+        <select
+          value={draft.contentKind}
+          onChange={(changeEvent): void => {
+            const nextKind: string = changeEvent.target.value;
+
+            if (!isContentKind(nextKind)) {
+              return;
+            }
+
+            onDraftChange({ ...draft, contentKind: nextKind });
+          }}
+        >
+          <option value="text">Text</option>
+          <option value="image">Image</option>
+        </select>
+      </label>
+      <label>
+        Rectangle color
+        <input
+          value={draft.rectangleColor}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, rectangleColor: changeEvent.target.value });
+          }}
+          placeholder="#AABBCC"
+          spellCheck={false}
+        />
+      </label>
+      <p className="field-hint">Blank means a clear rectangle.</p>
+      {draft.contentKind === "text" ? (
+        <TextElementFields
+          draft={draft}
+          onDraftChange={onDraftChange}
+          idPrefix={idPrefix}
+        />
+      ) : (
+        <label>
+          Image asset ref
+          <input
+            value={draft.imageAssetRef}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...draft, imageAssetRef: changeEvent.target.value });
+            }}
+            placeholder="logos/mark.png"
+            spellCheck={false}
+          />
+        </label>
+      )}
+      {draft.contentKind === "image" ? (
+        <p className="field-hint">
+          Relative path ending in .svg, .png, .jpg, or .jpeg. No file upload.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+interface TextElementFieldsProps {
+  draft: ElementDraft;
+  onDraftChange: (nextDraft: ElementDraft) => void;
+  idPrefix: string;
+}
+
+function TextElementFields({
+  draft,
+  onDraftChange,
+  idPrefix,
+}: TextElementFieldsProps): ReactElement {
+
+  const sourceSelectId: string = `${idPrefix}-text-source`;
+
+  return (
+    <>
+      <label htmlFor={sourceSelectId}>
+        Text source
+      </label>
+      <select
+        id={sourceSelectId}
+        value={draft.textSource}
+        onChange={(changeEvent): void => {
+          const nextSource: string = changeEvent.target.value;
+
+          if (!isTextSource(nextSource)) {
+            return;
+          }
+
+          onDraftChange({ ...draft, textSource: nextSource });
+        }}
+      >
+        {TEXT_SOURCE_OPTIONS.map((sourceOption: TextSourceOption): ReactElement => (
+          <option key={sourceOption.value} value={sourceOption.value}>
+            {sourceOption.label}
+          </option>
+        ))}
+      </select>
+      <label>
+        Font family
+        <input
+          value={draft.fontFamily}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, fontFamily: changeEvent.target.value });
+          }}
+          spellCheck={false}
+        />
+      </label>
+      <label>
+        Font size
+        <input
+          type="number"
+          min={1}
+          step={1}
+          value={draft.fontSize}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, fontSize: changeEvent.target.value });
+          }}
+        />
+      </label>
+      <label>
+        Font color
+        <input
+          value={draft.fontColor}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, fontColor: changeEvent.target.value });
+          }}
+          placeholder="#112233"
+          spellCheck={false}
+        />
+      </label>
+      <label>
+        Alignment
+        <select
+          value={draft.alignment}
+          onChange={(changeEvent): void => {
+            const nextAlignment: string = changeEvent.target.value;
+
+            if (!isAlignment(nextAlignment)) {
+              return;
+            }
+
+            onDraftChange({ ...draft, alignment: nextAlignment });
+          }}
+        >
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
+      <label>
+        Font weight
+        <input
+          type="number"
+          min={1}
+          max={1000}
+          step={1}
+          value={draft.fontWeight}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, fontWeight: changeEvent.target.value });
+          }}
+          placeholder="Optional"
+        />
+      </label>
+      <p className="field-hint">Optional. Blank stores no weight. 1 through 1000.</p>
+      <label>
+        <input
+          type="checkbox"
+          checked={draft.bold}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, bold: changeEvent.target.checked });
+          }}
+        />
+        Bold
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={draft.italic}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, italic: changeEvent.target.checked });
+          }}
+        />
+        Italic
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={draft.underline}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, underline: changeEvent.target.checked });
+          }}
+        />
+        Underline
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={draft.strikethrough}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, strikethrough: changeEvent.target.checked });
+          }}
+        />
+        Strikethrough
+      </label>
+    </>
+  );
+}
+
+function emptyElementDraft(): ElementDraft {
+
+  const draft: ElementDraft = {
+    band: "top",
+    contentKind: "text",
+    rectangleColor: "",
+    textSource: "title",
+    fontFamily: "DejaVu Sans",
+    fontSize: "32",
+    fontColor: "#112233",
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    fontWeight: "",
+    alignment: "left",
+    imageAssetRef: "",
+  };
+
+  return draft;
+}
+
+function draftFromElement(element: ThemeElementReadResponse): ElementDraft {
+
+  const draft: ElementDraft = {
+    band: element.band,
+    contentKind: element.content_kind,
+    rectangleColor: element.rectangle_color ?? "",
+    textSource: element.text_source ?? "title",
+    fontFamily: element.font_family ?? "",
+    fontSize: element.font_size === null ? "" : String(element.font_size),
+    fontColor: element.font_color ?? "",
+    bold: element.bold,
+    italic: element.italic,
+    underline: element.underline,
+    strikethrough: element.strikethrough,
+    fontWeight: element.font_weight === null ? "" : String(element.font_weight),
+    alignment: element.alignment ?? "left",
+    imageAssetRef: element.image_asset_ref ?? "",
+  };
+
+  return draft;
+}
+
+function elementRequestFromDraft(
+  draft: ElementDraft,
+): ThemeElementCreateRequest {
+
+  const fontWeight: number | null = parseOptionalFontWeight(draft.fontWeight);
+  const request: ThemeElementCreateRequest = {
+    band: draft.band,
+    content_kind: draft.contentKind,
+    rectangle_color: draft.rectangleColor,
+    bold: draft.bold,
+    italic: draft.italic,
+    underline: draft.underline,
+    strikethrough: draft.strikethrough,
+    font_weight: fontWeight,
+  };
+
+  if (draft.contentKind === "text") {
+    request.text_source = draft.textSource;
+    request.font_family = draft.fontFamily.trim();
+    request.font_size = parseRequiredFontSize(draft.fontSize);
+    request.font_color = draft.fontColor.trim();
+    request.alignment = draft.alignment;
+    request.image_asset_ref = null;
+
+    return request;
+  }
+
+  request.text_source = null;
+  request.image_asset_ref = draft.imageAssetRef.trim();
+
+  return request;
+}
+
+function parseRequiredFontSize(rawValue: string): number {
+
+  const trimmedValue: string = rawValue.trim();
+
+  if (!/^\d+$/.test(trimmedValue)) {
+    throw new Error("font_size must be a positive integer.");
+  }
+
+  const fontSize: number = Number(trimmedValue);
+
+  if (fontSize < 1) {
+    throw new Error("font_size must be a positive integer.");
+  }
+
+  return fontSize;
+}
+
+function parseOptionalFontWeight(rawValue: string): number | null {
+
+  const trimmedValue: string = rawValue.trim();
+
+  if (trimmedValue === "") {
+    return null;
+  }
+
+  if (!/^\d+$/.test(trimmedValue)) {
+    throw new Error("font_weight must be from 1 through 1000.");
+  }
+
+  const fontWeight: number = Number(trimmedValue);
+
+  return fontWeight;
+}
+
+function elementsInBand(
+  elements: ThemeElementReadResponse[],
+  band: ThemeElementBand,
+): ThemeElementReadResponse[] {
+
+  const members: ThemeElementReadResponse[] = elements.filter(
+    (element: ThemeElementReadResponse): boolean => element.band === band,
+  );
+  const orderedMembers: ThemeElementReadResponse[] = [...members].sort(
+    (left: ThemeElementReadResponse, right: ThemeElementReadResponse): number => {
+
+      return left.sort_order - right.sort_order;
+    },
+  );
+
+  return orderedMembers;
+}
+
+function bandLabel(band: ThemeElementBand): string {
+
+  const matchingOption: BandOption | undefined = BAND_OPTIONS.find(
+    (bandOption: BandOption): boolean => bandOption.value === band,
+  );
+
+  if (matchingOption === undefined) {
+    return band;
+  }
+
+  return matchingOption.label;
+}
+
+function isThemeElementBand(value: string): value is ThemeElementBand {
+
+  return value === "top" || value === "middle" || value === "bottom";
+}
+
+function isContentKind(value: string): value is ThemeElementContentKind {
+
+  return value === "text" || value === "image";
+}
+
+function isTextSource(value: string): value is ThemeElementTextSource {
+
+  return TEXT_SOURCE_OPTIONS.some(
+    (sourceOption: TextSourceOption): boolean => sourceOption.value === value,
+  );
+}
+
+function isAlignment(value: string): value is ThemeElementAlignment {
+
+  return value === "left" || value === "center" || value === "right";
+}

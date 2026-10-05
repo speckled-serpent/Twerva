@@ -295,6 +295,17 @@ export interface ThemeCreateRequest {
   template_key?: string | null;
 }
 
+export interface ThemePatchRequest {
+  status?: ThemeStatus | null;
+  page_margin?: number | null;
+  element_gap?: number | null;
+  element_margin?: number | null;
+  background_kind?: BackgroundKind | null;
+  background_color?: string | null;
+  background_gradient?: ThemeGradient | null;
+  background_asset_ref?: string | null;
+}
+
 export type ThemeElementBand = "top" | "middle" | "bottom";
 
 export type ThemeElementContentKind = "text" | "image";
@@ -306,6 +317,42 @@ export type ThemeElementTextSource =
   | "canonical_url";
 
 export type ThemeElementAlignment = "left" | "center" | "right";
+
+export interface ThemeElementCreateRequest {
+  band: ThemeElementBand;
+  content_kind: ThemeElementContentKind;
+  sort_order?: number | null;
+  rectangle_color?: string | null;
+  text_source?: ThemeElementTextSource | null;
+  font_family?: string | null;
+  font_size?: number | null;
+  font_color?: string | null;
+  bold?: boolean | null;
+  italic?: boolean | null;
+  underline?: boolean | null;
+  strikethrough?: boolean | null;
+  font_weight?: number | null;
+  alignment?: ThemeElementAlignment | null;
+  image_asset_ref?: string | null;
+}
+
+export interface ThemeElementPatchRequest {
+  band?: ThemeElementBand | null;
+  content_kind?: ThemeElementContentKind | null;
+  sort_order?: number | null;
+  rectangle_color?: string | null;
+  text_source?: ThemeElementTextSource | null;
+  font_family?: string | null;
+  font_size?: number | null;
+  font_color?: string | null;
+  bold?: boolean | null;
+  italic?: boolean | null;
+  underline?: boolean | null;
+  strikethrough?: boolean | null;
+  font_weight?: number | null;
+  alignment?: ThemeElementAlignment | null;
+  image_asset_ref?: string | null;
+}
 
 export interface ThemeElementReadResponse {
   id: string;
@@ -327,6 +374,26 @@ export interface ThemeElementReadResponse {
   image_asset_ref: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type ThemeSampleBlockReason = "overlap" | "missing_asset" | "measure_error";
+
+export interface ThemeSampleRequest {
+  source_item_id: string;
+}
+
+export interface ThemeSampleOverlap {
+  band_a: ThemeElementBand;
+  band_b: ThemeElementBand;
+  element_ids: string[];
+}
+
+export interface ThemeSampleResponse {
+  preview_id: string;
+  blocked: boolean;
+  block_reason: ThemeSampleBlockReason | null;
+  detail: string | null;
+  overlaps: ThemeSampleOverlap[];
 }
 
 export interface ThemeReadResponse {
