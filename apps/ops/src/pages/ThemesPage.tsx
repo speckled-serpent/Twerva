@@ -12,6 +12,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import { ThemeElementEditor } from "./ThemeElementEditor";
+import { ThemeSamplePanel } from "./ThemeSamplePanel";
 import {
   advertisementTypeLabel,
   formatThemeTemplateKey,
@@ -26,6 +27,7 @@ export interface ThemesPageProps {
 /**
  * Themes tab: list saved themes. Selecting a row opens the frame and elements.
  * Duplicate opens the new Draft and leaves the source row as it was.
+ * Generate samples shows one preview and does not queue a post.
  *
  * @param props - Banner shown after create
  * @returns The Themes list or detail
@@ -541,6 +543,7 @@ function ThemeDetailView({
             theme={selectedTheme}
             onThemeUpdated={onThemeSaved}
           />
+          <ThemeSamplePanel key={selectedTheme.id} themeId={selectedTheme.id} />
         </>
       )}
     </section>

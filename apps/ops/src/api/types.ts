@@ -376,6 +376,26 @@ export interface ThemeElementReadResponse {
   updated_at: string;
 }
 
+export type ThemeSampleBlockReason = "overlap" | "missing_asset" | "measure_error";
+
+export interface ThemeSampleRequest {
+  source_item_id: string;
+}
+
+export interface ThemeSampleOverlap {
+  band_a: ThemeElementBand;
+  band_b: ThemeElementBand;
+  element_ids: string[];
+}
+
+export interface ThemeSampleResponse {
+  preview_id: string;
+  blocked: boolean;
+  block_reason: ThemeSampleBlockReason | null;
+  detail: string | null;
+  overlaps: ThemeSampleOverlap[];
+}
+
 export interface ThemeReadResponse {
   id: string;
   name: string;

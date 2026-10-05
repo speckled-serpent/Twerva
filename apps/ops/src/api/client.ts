@@ -16,6 +16,8 @@ import type {
   ThemeElementReadResponse,
   ThemePatchRequest,
   ThemeReadResponse,
+  ThemeSampleRequest,
+  ThemeSampleResponse,
   CarouselGenerateRequest,
   ClusterAgentSummaryResponse,
   ClusterCreateRequest,
@@ -230,6 +232,47 @@ export async function duplicateTheme(themeId: string): Promise<ThemeReadResponse
     "POST",
     `/api/v1/themes/${themeId}/duplicate`,
   );
+}
+
+/**
+ * Render one theme preview. Does not create an artifact or a post job.
+ *
+ * @param themeId - Theme UUID
+ * @param themeSampleRequest - The one Spotmu source item to render
+ * @returns The preview id and any block reason
+ */
+export async function createThemeSample(
+  themeId: string,
+  themeSampleRequest: ThemeSampleRequest,
+): Promise<ThemeSampleResponse> {
+
+  return requestJson<ThemeSampleResponse>(
+    "POST",
+    `/api/v1/themes/${themeId}/samples`,
+    themeSampleRequest,
+  );
+}
+
+/**
+ * Load one preview PNG. The session cookie is required.
+ *
+ * @param themeId - Theme UUID
+ * @param previewId - Preview UUID from the samples response
+ * @returns PNG bytes
+ */
+export async function fetchThemeSampleImageBlob(
+  themeId: string,
+  previewId: string,
+): Promise<Blob> {
+
+  const requestPath: string = `/api/v1/themes/${themeId}/samples/${previewId}/image`;
+  const response: Response = await sendApiRequest("GET", requestPath);
+
+  await throwIfResponseFailed(response, requestPath);
+
+  const imageBlob: Blob = await response.blob();
+
+  return imageBlob;
 }
 
 export async function createThemeElement(
