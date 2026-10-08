@@ -285,6 +285,82 @@ def delete_theme_element(
     )
 
 
+def prepare_new_theme_elements(
+    element_requests: list[ThemeElementCreateRequest],
+) -> list[tuple[ThemeElementCreateRequest, ResolvedThemeElement]]:
+    """Validate create-body elements before the theme row is staged.
+
+    Args:
+        element_requests: Elements the client wants stored with the theme.
+
+    Returns:
+        Resolved elements in request order.
+
+    Raises:
+        HTTPException: 400 when an element breaks the text or image rules,
+            or when ``sort_order`` is negative.
+    """
+
+    prepared_elements: list[tuple[ThemeElementCreateRequest, ResolvedThemeElement]] = []
+
+    for element_request in element_requests:
+        _reject_negative_sort_order(element_request.sort_order)
+        resolved_element: ResolvedThemeElement = _resolve_or_raise(
+            element_request.content_kind,
+            element_request.rectangle_color,
+            element_request.text_source,
+            element_request.font_family,
+            element_request.font_size,
+            element_request.font_color,
+            _created_flag(element_request.bold),
+            _created_flag(element_request.italic),
+            _created_flag(element_request.underline),
+            _created_flag(element_request.strikethrough),
+            element_request.font_weight,
+            element_request.alignment,
+            element_request.image_asset_ref,
+        )
+        prepared_elements.append((element_request, resolved_element))
+
+    return prepared_elements
+
+
+def attach_prepared_theme_elements(
+    theme: Theme,
+    prepared_elements: list[tuple[ThemeElementCreateRequest, ResolvedThemeElement]],
+    our_database_session: Session,
+) -> None:
+    """Append already validated elements. The caller commits.
+
+    Args:
+        theme: New theme row, already added to the session.
+        prepared_elements: Output of ``prepare_new_theme_elements``.
+        our_database_session: Open session. Flushed, not committed.
+    """
+
+    if len(prepared_elements) == 0:
+
+        return
+
+    our_database_session.flush()
+
+    for element_request, resolved_element in prepared_elements:
+        created_element: ThemeElement = _new_theme_element(
+            theme,
+            element_request.band,
+            resolved_element,
+        )
+        theme.elements.append(created_element)
+        our_database_session.add(created_element)
+        _place_element(
+            our_database_session,
+            list(theme.elements),
+            created_element,
+            element_request.band,
+            element_request.sort_order,
+        )
+
+
 def serialize_theme_element(element: ThemeElement) -> ThemeElementReadResponse:
     """Map a theme element row to the read schema.
 

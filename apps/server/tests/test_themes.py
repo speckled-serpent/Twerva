@@ -14,14 +14,18 @@ from app.api.v1.theme_elements import (
     delete_theme_element,
     patch_theme_element,
 )
+import app.models
 from app.api.v1.themes import (
+    THEME_DELETE_REFERENCED_DETAIL,
     THEME_NAME_REQUIRED_DETAIL,
     THEME_STATUS_REQUIRED_DETAIL,
     create_theme,
+    delete_theme_by_id,
     duplicate_theme_by_id,
     get_theme_by_id,
     list_themes,
     patch_theme_by_id,
+    theme_delete_reference_blockers,
     theme_spacing_negative_detail,
     theme_spacing_required_detail,
 )
@@ -249,8 +253,8 @@ class ThemeStatusPatchTests(unittest.TestCase):
     def test_patch_live_then_draft_and_create_by_name_stays_draft(self) -> None:
         """One theme goes live and back to draft; GET returns each value.
 
-        A name-only create, including a body that asks for live, still
-        stores draft.
+        A name-only create stores draft. A create body that asks for live
+        stores live when the default paper color is a valid payload.
         """
 
         created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
@@ -304,11 +308,11 @@ class ThemeStatusPatchTests(unittest.TestCase):
                 None,
             )
 
-        self.assertEqual(created_theme.status, ThemeStatus.DRAFT)
+        self.assertEqual(created_theme.status, ThemeStatus.LIVE)
         self.assertEqual(created_theme.name, "Harbor")
+        self.assertEqual(created_theme.background_color, DEFAULT_BACKGROUND_COLOR)
         stored_theme: Theme = create_session.add.call_args.args[0]
-        self.assertEqual(stored_theme.status, ThemeStatus.DRAFT)
-        self.assertNotIn("status", ThemeCreateRequest.model_fields)
+        self.assertEqual(stored_theme.status, ThemeStatus.LIVE)
 
     def test_patch_without_status_leaves_the_row_unchanged(self) -> None:
         """An empty partial body does not clear draft."""
@@ -468,29 +472,27 @@ class ThemeSpacingPatchTests(unittest.TestCase):
         self.assertEqual(created_theme.element_gap, DEFAULT_ELEMENT_GAP)
         self.assertEqual(created_theme.element_margin, DEFAULT_ELEMENT_MARGIN)
 
-        ignored_spacing_request: ThemeCreateRequest = ThemeCreateRequest.model_validate(
-            {
-                "name": "Night Shift",
-                "page_margin": -1,
-                "element_gap": 4,
-                "element_margin": 4,
-            },
+        negative_spacing_request: ThemeCreateRequest = ThemeCreateRequest(
+            name="Night Shift",
+            page_margin=-1,
+            element_gap=4,
+            element_margin=4,
         )
-        ignored_session: MagicMock = MagicMock()
-        ignored_session.scalars.return_value.all.return_value = ["harbor"]
-        ignored_session.refresh.side_effect = _assign_persisted_timestamps
+        negative_session: MagicMock = MagicMock()
+        negative_session.scalars.return_value.all.return_value = ["harbor"]
 
-        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
-            ignored_spacing_theme: ThemeReadResponse = create_theme(
-                ignored_spacing_request,
-                ignored_session,
-                None,
-            )
+        with patch(
+            "app.api.v1.themes.commit_database_session_or_raise_conflict",
+        ) as blocked_commit:
+            with self.assertRaises(HTTPException) as negative_error:
+                create_theme(negative_spacing_request, negative_session, None)
 
-        self.assertEqual(ignored_spacing_theme.page_margin, 96)
-        self.assertEqual(ignored_spacing_theme.element_gap, 0)
-        self.assertEqual(ignored_spacing_theme.element_margin, 0)
-        self.assertNotIn("page_margin", ThemeCreateRequest.model_fields)
+        self.assertEqual(negative_error.exception.status_code, 400)
+        self.assertEqual(
+            negative_error.exception.detail,
+            theme_spacing_negative_detail("page_margin"),
+        )
+        blocked_commit.assert_not_called()
 
     def test_partial_spacing_patch_leaves_the_other_edges_alone(self) -> None:
         """Sending only element_gap does not reset page margin or element margin."""
@@ -743,13 +745,7 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
         fake_session: MagicMock = MagicMock()
         fake_session.scalars.return_value.all.return_value = []
         fake_session.refresh.side_effect = _assign_persisted_timestamps
-        theme_create_request: ThemeCreateRequest = ThemeCreateRequest.model_validate(
-            {
-                "name": "Harbor",
-                "background_kind": "picture",
-                "background_color": "",
-            },
-        )
+        theme_create_request: ThemeCreateRequest = ThemeCreateRequest(name="Harbor")
 
         with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
             created_theme: ThemeReadResponse = create_theme(
@@ -1492,6 +1488,192 @@ def _text_element_request(
     )
 
     return text_request
+
+
+class ThemeCreatePresetTests(unittest.TestCase):
+    """Create stores the frame and elements together, or stores nothing."""
+
+    def test_create_stores_frame_and_elements(self) -> None:
+        """Live spacing, a text element, and an image element come back together."""
+
+        fake_session: MagicMock = MagicMock()
+        fake_session.scalars.return_value.all.return_value = []
+        fake_session.refresh.side_effect = _assign_persisted_timestamps
+        fake_session.flush.side_effect = _assign_theme_id_on_flush(fake_session)
+        theme_create_request: ThemeCreateRequest = ThemeCreateRequest(
+            name="Harbor",
+            status=ThemeStatus.LIVE,
+            page_margin=40,
+            element_gap=8,
+            element_margin=4,
+            background_kind=BackgroundKind.COLOR,
+            background_color="#112233",
+            elements=[
+                ThemeElementCreateRequest(
+                    band=ThemeElementBand.TOP,
+                    content_kind=ThemeElementContentKind.TEXT,
+                    text_source=ThemeElementTextSource.TITLE,
+                    font_family="DejaVu Sans",
+                    font_size=32,
+                    font_color="#112233",
+                    alignment=ThemeElementAlignment.CENTER,
+                ),
+                ThemeElementCreateRequest(
+                    band=ThemeElementBand.BOTTOM,
+                    content_kind=ThemeElementContentKind.IMAGE,
+                    image_asset_ref="logos/mark.png",
+                ),
+            ],
+        )
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            created_theme: ThemeReadResponse = create_theme(
+                theme_create_request,
+                fake_session,
+                None,
+            )
+
+        self.assertEqual(created_theme.status, ThemeStatus.LIVE)
+        self.assertEqual(created_theme.page_margin, 40)
+        self.assertEqual(created_theme.element_gap, 8)
+        self.assertEqual(created_theme.element_margin, 4)
+        self.assertEqual(created_theme.background_color, "#112233")
+        self.assertEqual(len(created_theme.elements), 2)
+        self.assertEqual(created_theme.elements[0].band, ThemeElementBand.TOP)
+        self.assertEqual(created_theme.elements[0].text_source, ThemeElementTextSource.TITLE)
+        self.assertEqual(created_theme.elements[1].band, ThemeElementBand.BOTTOM)
+        self.assertEqual(created_theme.elements[1].image_asset_ref, "logos/mark.png")
+        self.assertNotEqual(created_theme.elements[0].id, created_theme.elements[1].id)
+
+    def test_live_create_with_blank_color_stores_nothing(self) -> None:
+        """A Live color theme with a blank color is 400 and is not committed."""
+
+        fake_session: MagicMock = MagicMock()
+        fake_session.scalars.return_value.all.return_value = []
+        theme_create_request: ThemeCreateRequest = ThemeCreateRequest(
+            name="Harbor",
+            status=ThemeStatus.LIVE,
+            background_color="",
+        )
+
+        with patch(
+            "app.api.v1.themes.commit_database_session_or_raise_conflict",
+        ) as blocked_commit:
+            with self.assertRaises(HTTPException) as create_error:
+                create_theme(theme_create_request, fake_session, None)
+
+        self.assertEqual(create_error.exception.status_code, 400)
+        self.assertEqual(create_error.exception.detail, LIVE_COLOR_PAYLOAD_DETAIL)
+        blocked_commit.assert_not_called()
+        fake_session.add.assert_not_called()
+
+    def test_invalid_element_stores_nothing(self) -> None:
+        """A text element without a family is 400 and is not committed."""
+
+        fake_session: MagicMock = MagicMock()
+        fake_session.scalars.return_value.all.return_value = []
+        theme_create_request: ThemeCreateRequest = ThemeCreateRequest(
+            name="Harbor",
+            elements=[
+                ThemeElementCreateRequest(
+                    band=ThemeElementBand.MIDDLE,
+                    content_kind=ThemeElementContentKind.TEXT,
+                    text_source=ThemeElementTextSource.TITLE,
+                    font_size=32,
+                    font_color="#112233",
+                    alignment=ThemeElementAlignment.LEFT,
+                ),
+            ],
+        )
+
+        with patch(
+            "app.api.v1.themes.commit_database_session_or_raise_conflict",
+        ) as blocked_commit:
+            with self.assertRaises(HTTPException) as create_error:
+                create_theme(theme_create_request, fake_session, None)
+
+        self.assertEqual(create_error.exception.status_code, 400)
+        blocked_commit.assert_not_called()
+        fake_session.add.assert_not_called()
+
+
+class ThemeDeleteTests(unittest.TestCase):
+    """Delete removes a theme. Elements cascade. Other references block it."""
+
+    def test_delete_removes_the_theme(self) -> None:
+        """DELETE hands the row to the session and commits."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+
+        with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
+            delete_theme_by_id(paper_theme.id, fake_session, None)
+
+        fake_session.delete.assert_called_once_with(paper_theme)
+
+    def test_missing_theme_delete_returns_404(self) -> None:
+        """DELETE raises HTTP 404 when the row is absent."""
+
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = None
+        missing_theme_id: uuid.UUID = uuid.uuid4()
+
+        with self.assertRaises(HTTPException) as delete_error:
+            delete_theme_by_id(missing_theme_id, fake_session, None)
+
+        self.assertEqual(delete_error.exception.status_code, 404)
+        fake_session.delete.assert_not_called()
+
+    def test_only_cascaded_elements_reference_themes(self) -> None:
+        """Elements follow the theme. No other table may block or cascade."""
+
+        _ = app.models
+        self.assertEqual(theme_delete_reference_blockers(), [])
+
+    def test_other_reference_blocks_delete(self) -> None:
+        """A non-cascade foreign key refuses the delete and leaves the row."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+
+        with patch(
+            "app.api.v1.themes.theme_delete_reference_blockers",
+            return_value=["campaigns"],
+        ):
+            with self.assertRaises(HTTPException) as delete_error:
+                delete_theme_by_id(paper_theme.id, fake_session, None)
+
+        self.assertEqual(delete_error.exception.status_code, 409)
+        self.assertIn("still referenced", delete_error.exception.detail)
+        self.assertIn("campaigns", delete_error.exception.detail)
+        fake_session.delete.assert_not_called()
+
+
+def _assign_theme_id_on_flush(fake_session: MagicMock):
+    """Give the pending theme an id the way a database flush would."""
+
+    def assign_theme_id() -> None:
+
+        pending_theme: Theme = fake_session.add.call_args_list[0].args[0]
+
+        if pending_theme.id is None:
+            pending_theme.id = uuid.uuid4()
+
+    return assign_theme_id
 
 
 def _assign_persisted_timestamps(theme: Theme) -> None:

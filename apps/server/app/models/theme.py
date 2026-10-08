@@ -35,16 +35,16 @@ class Theme(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """Row in `themes`.
 
     Create stores a name, a unique slug derived from that name,
-    ``advertisement_type`` (carousel only), ``status`` ``draft``, and
-    the three spacing integers, and one background. Each spacing column
-    is one value applied on every edge. The background is a kind plus
-    optional color, gradient, and asset ref on this row. Create stores
-    kind ``color`` and paper ``#F6F1E8``. Optional ``template_key``
-    points at a restricted carousel generator such as
-    ``spotmu_paper_v1``. Creating a theme does not render artifacts or
-    bind a campaign. ``live``, non-default spacing, and other background
-    kinds are stored only by a later partial patch. Elements, when any,
-    live on ``theme_elements``. Creating a theme does not insert elements.
+    ``advertisement_type`` (carousel only), status, the three spacing
+    integers, and one background. Omitted frame fields stay ``draft``,
+    spacing 96 / 0 / 0, and kind ``color`` with paper ``#F6F1E8``.
+    A present status, spacing, background, or element list is stored in
+    the same write. Each spacing column is one value applied on every
+    edge. The background is a kind plus optional color, gradient, and
+    asset ref on this row. Optional ``template_key`` points at a
+    restricted carousel generator such as ``spotmu_paper_v1``. Creating
+    a theme does not render artifacts or bind a campaign. Elements, when
+    any, live on ``theme_elements`` and are removed with the theme.
     """
 
     __tablename__ = "themes"

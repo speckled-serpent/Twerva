@@ -276,6 +276,30 @@ td {
   font-size: 0.85rem;
 }
 
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  padding: 1rem;
+}
+
+.confirm-dialog {
+  background: #fff;
+  color: #111;
+  max-width: 28rem;
+  width: 100%;
+  padding: 1.25rem;
+  border: 1px solid #ccc;
+}
+
+.confirm-dialog h2 {
+  margin-top: 0;
+}
+
 .slide-lightbox {
   position: fixed;
   inset: 0;

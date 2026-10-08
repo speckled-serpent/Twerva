@@ -22,6 +22,7 @@ import { useCanWriteOps } from "../session/OpsSessionContext";
 export interface ThemeElementEditorProps {
   theme: ThemeReadResponse;
   onThemeUpdated: (updatedTheme: ThemeReadResponse) => void;
+  onLocalElementsChange?: (nextElements: ThemeElementReadResponse[]) => void;
 }
 
 interface TextSourceOption {
@@ -67,12 +68,15 @@ const BAND_OPTIONS: BandOption[] = [
 /**
  * Add, edit, delete, reorder, and move theme elements. No placement fields.
  *
+ * When `onLocalElementsChange` is set, edits stay in memory for Create Theme.
+ *
  * @param props - The open theme and a callback after each saved change
  * @returns The element editor under the frame form
  */
 export function ThemeElementEditor({
   theme,
   onThemeUpdated,
+  onLocalElementsChange,
 }: ThemeElementEditorProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
@@ -81,6 +85,7 @@ export function ThemeElementEditor({
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const fieldsDisabled: boolean = !canWrite || busyKey !== null;
+  const isLocal: boolean = onLocalElementsChange !== undefined;
 
   const reloadTheme = async (): Promise<ThemeReadResponse> => {
 
@@ -89,6 +94,15 @@ export function ThemeElementEditor({
     onThemeUpdated(reloadedTheme);
 
     return reloadedTheme;
+  };
+
+  const publishLocalElements = (nextElements: ThemeElementReadResponse[]): void => {
+
+    if (onLocalElementsChange === undefined) {
+      return;
+    }
+
+    onLocalElementsChange(nextElements);
   };
 
   const handleAddElement = async (formEvent: FormEvent): Promise<void> => {
@@ -105,15 +119,59 @@ export function ThemeElementEditor({
 
     try {
       const createRequest: ThemeElementCreateRequest = elementRequestFromDraft(addDraft);
-      await createThemeElement(theme.id, createRequest);
-      await reloadTheme();
-      setAddDraft(emptyElementDraft());
-      setStatusMessage("Element added.");
+
+      if (isLocal) {
+        const createdElement: ThemeElementReadResponse = localElementFromRequest(
+          theme.id,
+          theme.elements,
+          createRequest,
+        );
+
+        publishLocalElements([...theme.elements, createdElement]);
+        setAddDraft(emptyElementDraft());
+        setStatusMessage("Element added. It is stored when you create the theme.");
+      } else {
+        await createThemeElement(theme.id, createRequest);
+        await reloadTheme();
+        setAddDraft(emptyElementDraft());
+        setStatusMessage("Element added.");
+      }
     } catch (caughtError: unknown) {
       setActionError(caughtError);
     } finally {
       setBusyKey(null);
     }
+  };
+
+  const handleLocalSave = (elementId: string, draft: ElementDraft): void => {
+
+    const currentElement: ThemeElementReadResponse | undefined = theme.elements.find(
+      (element: ThemeElementReadResponse): boolean => element.id === elementId,
+    );
+
+    if (currentElement === undefined) {
+      return;
+    }
+
+    const request: ThemeElementCreateRequest = elementRequestFromDraft(draft);
+    const updatedElement: ThemeElementReadResponse = applyRequestToElement(
+      currentElement,
+      request,
+    );
+
+    publishLocalElements(
+      placeSavedLocalElement(theme.elements, currentElement, updatedElement),
+    );
+  };
+
+  const handleLocalDelete = (elementId: string): void => {
+
+    publishLocalElements(deleteLocalElement(theme.elements, elementId));
+  };
+
+  const handleLocalMove = (elementId: string, nextSortOrder: number): void => {
+
+    publishLocalElements(moveLocalElement(theme.elements, elementId, nextSortOrder));
   };
 
   return (
@@ -172,11 +230,17 @@ export function ThemeElementEditor({
                     onError={setActionError}
                     onReload={async (message: string): Promise<void> => {
                       setStatusMessage(message);
-                      await reloadTheme();
+
+                      if (!isLocal) {
+                        await reloadTheme();
+                      }
                     }}
                     onBusy={(isBusy: boolean): void => {
                       setBusyKey(isBusy ? element.id : null);
                     }}
+                    onLocalSave={isLocal ? handleLocalSave : undefined}
+                    onLocalDelete={isLocal ? handleLocalDelete : undefined}
+                    onLocalMove={isLocal ? handleLocalMove : undefined}
                   />
                 ),
               )
@@ -198,6 +262,9 @@ interface ThemeElementCardProps {
   onError: (error: unknown) => void;
   onReload: (message: string) => Promise<void>;
   onBusy: (isBusy: boolean) => void;
+  onLocalSave?: (elementId: string, draft: ElementDraft) => void;
+  onLocalDelete?: (elementId: string) => void;
+  onLocalMove?: (elementId: string, nextSortOrder: number) => void;
 }
 
 function ThemeElementCard({
@@ -210,6 +277,9 @@ function ThemeElementCard({
   onError,
   onReload,
   onBusy,
+  onLocalSave,
+  onLocalDelete,
+  onLocalMove,
 }: ThemeElementCardProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
@@ -233,6 +303,13 @@ function ThemeElementCard({
     onError(null);
 
     try {
+      if (onLocalSave !== undefined) {
+        onLocalSave(element.id, draft);
+        await onReload("Element updated. It is stored when you create the theme.");
+
+        return;
+      }
+
       const patchRequest: ThemeElementPatchRequest = elementRequestFromDraft(draft);
       await patchThemeElement(themeId, element.id, patchRequest);
       await onReload("Element saved.");
@@ -253,6 +330,13 @@ function ThemeElementCard({
     onError(null);
 
     try {
+      if (onLocalDelete !== undefined) {
+        onLocalDelete(element.id);
+        await onReload("Element removed. It is stored when you create the theme.");
+
+        return;
+      }
+
       await deleteThemeElement(themeId, element.id);
       await onReload("Element deleted.");
     } catch (caughtError: unknown) {
@@ -272,6 +356,13 @@ function ThemeElementCard({
     onError(null);
 
     try {
+      if (onLocalMove !== undefined) {
+        onLocalMove(element.id, nextSortOrder);
+        await onReload("Element moved. It is stored when you create the theme.");
+
+        return;
+      }
+
       await patchThemeElement(themeId, element.id, { sort_order: nextSortOrder });
       await onReload("Element moved.");
     } catch (caughtError: unknown) {
@@ -623,6 +714,61 @@ function draftFromElement(element: ThemeElementReadResponse): ElementDraft {
   return draft;
 }
 
+/**
+ * Build the create-body element from a staged row. Sort order is omitted
+ * so the server appends; callers send rows in band order.
+ *
+ * @param element - Staged element from the create form
+ * @returns The element payload for POST /api/v1/themes
+ */
+export function themeElementCreateRequestFromElement(
+  element: ThemeElementReadResponse,
+): ThemeElementCreateRequest {
+
+  const request: ThemeElementCreateRequest = elementRequestFromDraft(
+    draftFromElement(element),
+  );
+
+  return request;
+}
+
+/**
+ * Return create payloads in Top, Middle, Bottom order.
+ *
+ * Each payload omits sort_order so the server appends and keeps this order.
+ *
+ * @param elements - Staged elements on the create form
+ * @returns Element bodies for one theme create
+ */
+export function themeElementCreateRequestsInBandOrder(
+  elements: ThemeElementReadResponse[],
+): ThemeElementCreateRequest[] {
+
+  const bandRank: Record<ThemeElementBand, number> = {
+    top: 0,
+    middle: 1,
+    bottom: 2,
+  };
+  const orderedElements: ThemeElementReadResponse[] = [...elements].sort(
+    (left: ThemeElementReadResponse, right: ThemeElementReadResponse): number => {
+
+      if (left.band !== right.band) {
+        return bandRank[left.band] - bandRank[right.band];
+      }
+
+      return left.sort_order - right.sort_order;
+    },
+  );
+  const requests: ThemeElementCreateRequest[] = orderedElements.map(
+    (element: ThemeElementReadResponse): ThemeElementCreateRequest => {
+
+      return themeElementCreateRequestFromElement(element);
+    },
+  );
+
+  return requests;
+}
+
 function elementRequestFromDraft(
   draft: ElementDraft,
 ): ThemeElementCreateRequest {
@@ -741,4 +887,222 @@ function isTextSource(value: string): value is ThemeElementTextSource {
 function isAlignment(value: string): value is ThemeElementAlignment {
 
   return value === "left" || value === "center" || value === "right";
+}
+
+function localElementFromRequest(
+  themeId: string,
+  existingElements: ThemeElementReadResponse[],
+  request: ThemeElementCreateRequest,
+): ThemeElementReadResponse {
+
+  const bandCount: number = existingElements.filter(
+    (element: ThemeElementReadResponse): boolean => element.band === request.band,
+  ).length;
+  const now: string = new Date().toISOString();
+  const createdElement: ThemeElementReadResponse = {
+    id: crypto.randomUUID(),
+    theme_id: themeId,
+    band: request.band,
+    sort_order: bandCount,
+    content_kind: request.content_kind,
+    rectangle_color: emptyToNull(request.rectangle_color),
+    text_source: request.content_kind === "text" ? request.text_source ?? null : null,
+    font_family: request.content_kind === "text" ? request.font_family ?? null : null,
+    font_size: request.content_kind === "text" ? request.font_size ?? null : null,
+    font_color: request.content_kind === "text" ? request.font_color ?? null : null,
+    bold: request.bold ?? false,
+    italic: request.italic ?? false,
+    underline: request.underline ?? false,
+    strikethrough: request.strikethrough ?? false,
+    font_weight: request.font_weight ?? null,
+    alignment: request.content_kind === "text" ? request.alignment ?? null : null,
+    image_asset_ref: request.content_kind === "image"
+      ? request.image_asset_ref ?? null
+      : null,
+    created_at: now,
+    updated_at: now,
+  };
+
+  return createdElement;
+}
+
+function applyRequestToElement(
+  element: ThemeElementReadResponse,
+  request: ThemeElementCreateRequest,
+): ThemeElementReadResponse {
+
+  const updatedElement: ThemeElementReadResponse = {
+    ...element,
+    band: request.band,
+    content_kind: request.content_kind,
+    rectangle_color: emptyToNull(request.rectangle_color),
+    text_source: request.content_kind === "text" ? request.text_source ?? null : null,
+    font_family: request.content_kind === "text" ? request.font_family ?? null : null,
+    font_size: request.content_kind === "text" ? request.font_size ?? null : null,
+    font_color: request.content_kind === "text" ? request.font_color ?? null : null,
+    bold: request.bold ?? false,
+    italic: request.italic ?? false,
+    underline: request.underline ?? false,
+    strikethrough: request.strikethrough ?? false,
+    font_weight: request.font_weight ?? null,
+    alignment: request.content_kind === "text" ? request.alignment ?? null : null,
+    image_asset_ref: request.content_kind === "image"
+      ? request.image_asset_ref ?? null
+      : null,
+    updated_at: new Date().toISOString(),
+  };
+
+  return updatedElement;
+}
+
+function placeSavedLocalElement(
+  elements: ThemeElementReadResponse[],
+  previous: ThemeElementReadResponse,
+  updated: ThemeElementReadResponse,
+): ThemeElementReadResponse[] {
+
+  if (updated.band === previous.band) {
+    const sameBand: ThemeElementReadResponse[] = elements.map(
+      (element: ThemeElementReadResponse): ThemeElementReadResponse => {
+
+        if (element.id !== updated.id) {
+          return element;
+        }
+
+        return { ...updated, sort_order: previous.sort_order };
+      },
+    );
+
+    return sameBand;
+  }
+
+  const withoutMoved: ThemeElementReadResponse[] = elements.filter(
+    (element: ThemeElementReadResponse): boolean => element.id !== previous.id,
+  );
+  const compacted: ThemeElementReadResponse[] = compactBand(withoutMoved, previous.band);
+  const destinationLength: number = compacted.filter(
+    (element: ThemeElementReadResponse): boolean => element.band === updated.band,
+  ).length;
+  const movedElement: ThemeElementReadResponse = {
+    ...updated,
+    sort_order: destinationLength,
+  };
+
+  return [...compacted, movedElement];
+}
+
+function deleteLocalElement(
+  elements: ThemeElementReadResponse[],
+  elementId: string,
+): ThemeElementReadResponse[] {
+
+  const target: ThemeElementReadResponse | undefined = elements.find(
+    (element: ThemeElementReadResponse): boolean => element.id === elementId,
+  );
+
+  if (target === undefined) {
+    return elements;
+  }
+
+  const withoutTarget: ThemeElementReadResponse[] = elements.filter(
+    (element: ThemeElementReadResponse): boolean => element.id !== elementId,
+  );
+
+  return compactBand(withoutTarget, target.band);
+}
+
+function moveLocalElement(
+  elements: ThemeElementReadResponse[],
+  elementId: string,
+  requestedSortOrder: number,
+): ThemeElementReadResponse[] {
+
+  const target: ThemeElementReadResponse | undefined = elements.find(
+    (element: ThemeElementReadResponse): boolean => element.id === elementId,
+  );
+
+  if (target === undefined) {
+    return elements;
+  }
+
+  const others: ThemeElementReadResponse[] = elements.filter(
+    (element: ThemeElementReadResponse): boolean => element.id !== elementId,
+  );
+  const targetMembers: ThemeElementReadResponse[] = others
+    .filter((element: ThemeElementReadResponse): boolean => element.band === target.band)
+    .sort(
+      (left: ThemeElementReadResponse, right: ThemeElementReadResponse): number => {
+
+        return left.sort_order - right.sort_order;
+      },
+    );
+  const targetIndex: number = requestedSortOrder > targetMembers.length
+    ? targetMembers.length
+    : requestedSortOrder;
+  const placedMembers: ThemeElementReadResponse[] = [...targetMembers];
+
+  placedMembers.splice(targetIndex, 0, target);
+
+  const movedAt: string = new Date().toISOString();
+  const compactedMembers: ThemeElementReadResponse[] = placedMembers.map(
+    (member: ThemeElementReadResponse, index: number): ThemeElementReadResponse => {
+
+      return {
+        ...member,
+        sort_order: index,
+        updated_at: member.id === elementId ? movedAt : member.updated_at,
+      };
+    },
+  );
+  const rest: ThemeElementReadResponse[] = others.filter(
+    (element: ThemeElementReadResponse): boolean => element.band !== target.band,
+  );
+
+  return [...rest, ...compactedMembers];
+}
+
+function compactBand(
+  elements: ThemeElementReadResponse[],
+  band: ThemeElementBand,
+): ThemeElementReadResponse[] {
+
+  const members: ThemeElementReadResponse[] = elements
+    .filter((element: ThemeElementReadResponse): boolean => element.band === band)
+    .sort(
+      (left: ThemeElementReadResponse, right: ThemeElementReadResponse): number => {
+
+        return left.sort_order - right.sort_order;
+      },
+    );
+  const orderById: Map<string, number> = new Map(
+    members.map(
+      (element: ThemeElementReadResponse, index: number): [string, number] => {
+
+        return [element.id, index];
+      },
+    ),
+  );
+  const compacted: ThemeElementReadResponse[] = elements.map(
+    (element: ThemeElementReadResponse): ThemeElementReadResponse => {
+
+      const nextOrder: number | undefined = orderById.get(element.id);
+
+      if (nextOrder === undefined) {
+        return element;
+      }
+
+      return { ...element, sort_order: nextOrder };
+    },
+  );
+
+  return compacted;
+}
+
+function emptyToNull(value: string | null | undefined): string | null {
+
+  if (value === undefined || value === null || value.trim() === "") {
+    return null;
+  }
+
+  return value;
 }

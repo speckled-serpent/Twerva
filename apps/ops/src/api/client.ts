@@ -226,6 +226,17 @@ export async function patchTheme(
  * @param themeId - Source theme UUID
  * @returns The new Draft theme
  */
+/**
+ * Delete one theme and its elements.
+ *
+ * @param themeId - Theme UUID
+ * @returns Nothing when the theme is gone
+ */
+export async function deleteTheme(themeId: string): Promise<void> {
+
+  await requestJson<undefined>("DELETE", `/api/v1/themes/${themeId}`);
+}
+
 export async function duplicateTheme(themeId: string): Promise<ThemeReadResponse> {
 
   return requestJson<ThemeReadResponse>(

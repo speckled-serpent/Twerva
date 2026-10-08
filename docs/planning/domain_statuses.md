@@ -261,7 +261,7 @@ styling for carousels. Short video is not implemented. The table reuses
 | `slug` | Unique, derived from `name` |
 | `advertisement_type` | `carousel` |
 | `template_key` | Optional unique link to a carousel generator (`spotmu_paper_v1`, `spotmu_bold_v1`). Null when the theme is not tied to a generator yet |
-| `status` | `ThemeStatus`. Default `draft`. Create always stores `draft`. `PATCH /api/v1/themes/{id}` may set `draft` or `live` |
+| `status` | `ThemeStatus`. Default `draft`. A name-only create stores `draft`. `POST /api/v1/themes` stores a present `status`. `PATCH /api/v1/themes/{id}` may set `draft` or `live` |
 | `page_margin` | One integer, applied on every edge of the frame. Default **96**. `PATCH` may change it. Negative is HTTP 400 |
 | `element_gap` | One integer, applied between elements. Default **0**. Negative is HTTP 400 |
 | `element_margin` | One integer, applied on every edge of an element rectangle. Default **0**. Negative is HTTP 400 |
@@ -275,11 +275,15 @@ styling for carousels. Short video is not implemented. The table reuses
 generation will use for posts that ship. Shipping
 `POST /api/v1/generate/carousel` does not read `status` yet.
 
-`POST /api/v1/themes` requires a non-empty name. A `status` field on
-that body is ignored. Spacing fields on create are ignored too. A
-name-only create stores `page_margin` 96, `element_gap` 0, and
-`element_margin` 0, kind `color`, color `#F6F1E8`, and null gradient
-and asset ref. Background fields on create are ignored.
+`POST /api/v1/themes` requires a non-empty name. Omitted frame fields
+use the defaults. A name-only create stores `page_margin` 96,
+`element_gap` 0, and `element_margin` 0, kind `color`, color
+`#F6F1E8`, null gradient and asset ref, status `draft`, and zero
+elements. Present `status`, spacing, background, and `elements`
+fields are stored in that same write. A Live create requires the
+payload for its kind. A validation error stores no row.
+`DELETE /api/v1/themes/{id}` removes the theme and its elements.
+Another table that referenced the theme would block the delete.
 `PATCH /api/v1/themes/{id}` may set any of those integers and the
 background columns; omitted fields stay as they are. Zero is allowed.
 A negative spacing value is HTTP 400 and does not write. A Draft may
