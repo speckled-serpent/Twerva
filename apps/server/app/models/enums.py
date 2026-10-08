@@ -107,8 +107,9 @@ class CampaignStatus(enum.StrEnum):
 class ThemeStatus(enum.StrEnum):
     """Whether a Theme is still being edited or used for posts that ship.
 
-    Create always stores `draft`. `PATCH /api/v1/themes/{id}` may set
-    `draft` or `live`. Shipping generate does not read this value yet.
+    A name-only create stores `draft`. `POST /api/v1/themes` may set
+    `draft` or `live` when the body includes `status`. `PATCH` may set
+    either value too. Shipping generate does not read this value yet.
     """
 
     DRAFT = "draft"

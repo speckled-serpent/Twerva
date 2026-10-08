@@ -183,6 +183,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
 
         self.assertIn("patch", theme_item_methods)
         self.assertIn("get", theme_item_methods)
+        self.assertIn("delete", theme_item_methods)
 
     def test_theme_element_routes_accept_post_patch_and_delete(self) -> None:
         """1.10b-ii: element create, patch, and delete are registered."""

@@ -7,12 +7,14 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import fetch_theme_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
     ThemeCreateRequest,
+    ThemeElementCreateRequest,
     ThemeElementReadResponse,
     ThemePatchRequest,
     ThemeReadResponse,
@@ -28,6 +30,7 @@ from app.models import (
     ThemeElement,
     ThemeStatus,
 )
+from app.models.base import Base
 from app.models.theme import (
     DEFAULT_BACKGROUND_COLOR,
     DEFAULT_ELEMENT_GAP,
@@ -39,7 +42,7 @@ from app.themes.background import (
     ThemeBackgroundError,
     resolve_patched_background,
 )
-from app.themes.elements import ordered_theme_elements
+from app.themes.elements import ResolvedThemeElement, ordered_theme_elements
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
 
@@ -47,6 +50,20 @@ THEME_NAME_REQUIRED_DETAIL: str = "Theme name is required."
 THEME_STATUS_REQUIRED_DETAIL: str = "Theme status is required."
 UNKNOWN_TEMPLATE_KEY_DETAIL: str = "Unknown carousel template."
 DUPLICATE_THEME_NAME_PREFIX: str = "Copy of "
+THEME_DELETE_CONFLICT_DETAIL: str = "Theme could not be deleted (conflict)."
+THEME_DELETE_REFERENCED_DETAIL: str = (
+    "Theme is still referenced and was not deleted."
+)
+_CREATE_FRAME_FIELDS: tuple[str, ...] = (
+    "status",
+    "page_margin",
+    "element_gap",
+    "element_margin",
+    "background_kind",
+    "background_color",
+    "background_gradient",
+    "background_asset_ref",
+)
 
 themes_router: APIRouter = APIRouter(prefix="/themes", tags=["themes"])
 
@@ -61,7 +78,11 @@ def create_theme(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
 ) -> ThemeReadResponse:
-    """Persist a carousel theme. Does not render or bind a campaign."""
+    """Persist a carousel theme and its elements in one write.
+
+    Omitted frame fields keep the defaults. A validation error commits
+    nothing. Does not render or bind a campaign.
+    """
 
     if theme_create_request.advertisement_type != AdvertisementType.CAROUSEL:
         raise HTTPException(
@@ -101,12 +122,29 @@ def create_theme(
         background_asset_ref=None,
         created_by=created_by,
     )
+    from app.api.v1.theme_elements import prepare_new_theme_elements
+
+    prepared_elements = prepare_new_theme_elements(theme_create_request.elements)
+    frame_patch: ThemePatchRequest | None = _frame_patch_for_create(theme_create_request)
+
+    if frame_patch is not None:
+        _apply_theme_patch(created_theme, frame_patch)
+
     our_database_session.add(created_theme)
+    _attach_create_elements(
+        created_theme,
+        prepared_elements,
+        our_database_session,
+    )
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Theme slug or template already exists.",
     )
     our_database_session.refresh(created_theme)
+
+    for created_element in list(created_theme.elements):
+        our_database_session.refresh(created_element)
+
     theme_read_response: ThemeReadResponse = serialize_theme(created_theme)
 
     return theme_read_response
@@ -142,6 +180,41 @@ def get_theme_by_id(
     theme_read_response: ThemeReadResponse = serialize_theme(found_theme)
 
     return theme_read_response
+
+
+@themes_router.delete(
+    "/{theme_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_theme_by_id(
+    theme_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
+) -> None:
+    """Delete one theme and its elements.
+
+    ``theme_elements`` uses ``ON DELETE CASCADE``. Any other table that
+    references ``themes`` blocks the delete. Preview files on disk are
+    not rows and are left in place. ``template_key`` is a column on this
+    row, not a foreign key from campaigns or artifacts.
+    """
+
+    _ = current_ops_operator
+    found_theme: Theme = fetch_theme_by_id_or_raise(theme_id, our_database_session)
+    reference_blockers: list[str] = theme_delete_reference_blockers()
+
+    if len(reference_blockers) > 0:
+        blocker_names: str = ", ".join(reference_blockers)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{THEME_DELETE_REFERENCED_DETAIL} Referenced by {blocker_names}.",
+        )
+
+    our_database_session.delete(found_theme)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail=THEME_DELETE_CONFLICT_DETAIL,
+    )
 
 
 @themes_router.patch("/{theme_id}", response_model=ThemeReadResponse)
@@ -289,6 +362,85 @@ def theme_spacing_negative_detail(field_name: str) -> str:
     negative_detail: str = f"{field_name} must be zero or greater."
 
     return negative_detail
+
+
+def theme_delete_reference_blockers() -> list[str]:
+    """Return tables, other than cascaded elements, that point at themes.
+
+    Returns:
+        Sorted table names that would make a silent delete unsafe.
+    """
+
+    blocker_names: list[str] = []
+
+    for table in Base.metadata.tables.values():
+
+        for foreign_key in table.foreign_keys:
+
+            if foreign_key.column.table.name != "themes":
+                continue
+
+            ondelete_action: str = (foreign_key.ondelete or "").upper()
+
+            if table.name == "theme_elements" and ondelete_action == "CASCADE":
+                continue
+
+            blocker_names.append(table.name)
+
+    unique_blockers: list[str] = sorted(set(blocker_names))
+
+    return unique_blockers
+
+
+def _frame_patch_for_create(
+    theme_create_request: ThemeCreateRequest,
+) -> ThemePatchRequest | None:
+    """Return a patch for the frame fields the create body included."""
+
+    assigned_fields: set[str] = theme_create_request.model_fields_set
+    frame_values: dict[str, object] = {}
+
+    for field_name in _CREATE_FRAME_FIELDS:
+
+        if field_name not in assigned_fields:
+            continue
+
+        frame_values[field_name] = getattr(theme_create_request, field_name)
+
+    if len(frame_values) == 0:
+
+        return None
+
+    frame_patch: ThemePatchRequest = ThemePatchRequest.model_validate(frame_values)
+
+    return frame_patch
+
+
+def _attach_create_elements(
+    created_theme: Theme,
+    prepared_elements: list[tuple[ThemeElementCreateRequest, ResolvedThemeElement]],
+    our_database_session: Session,
+) -> None:
+    """Append create-body elements. A slug clash on flush is HTTP 409."""
+
+    from app.api.v1.theme_elements import attach_prepared_theme_elements
+
+    if len(prepared_elements) == 0:
+
+        return
+
+    try:
+        attach_prepared_theme_elements(
+            created_theme,
+            prepared_elements,
+            our_database_session,
+        )
+    except IntegrityError as integrity_error:
+        our_database_session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Theme slug or template already exists.",
+        ) from integrity_error
 
 
 def _apply_theme_patch(theme: Theme, theme_patch_request: ThemePatchRequest) -> None:

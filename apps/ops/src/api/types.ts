@@ -293,6 +293,15 @@ export interface ThemeCreateRequest {
   name: string;
   advertisement_type?: AdvertisementType;
   template_key?: string | null;
+  status?: ThemeStatus;
+  page_margin?: number;
+  element_gap?: number;
+  element_margin?: number;
+  background_kind?: BackgroundKind;
+  background_color?: string | null;
+  background_gradient?: ThemeGradient | null;
+  background_asset_ref?: string | null;
+  elements?: ThemeElementCreateRequest[];
 }
 
 export interface ThemePatchRequest {

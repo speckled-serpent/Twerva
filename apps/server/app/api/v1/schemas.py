@@ -99,12 +99,13 @@ class ThemeCreateRequest(BaseModel):
 
     Slug is generated from ``name``. ``advertisement_type`` defaults to
     carousel (the only implemented format). ``template_key`` is optional
-    and, when set, must name an existing carousel generator. A ``status``
-    field in the body is ignored; the row is always stored as ``draft``.
-    Spacing fields are ignored here too. A name-only create stores
-    ``page_margin`` 96, ``element_gap`` 0, and ``element_margin`` 0.
-    Background fields are ignored. Create stores kind ``color``, color
-    ``#F6F1E8``, and null gradient and asset ref.
+    and, when set, must name an existing carousel generator. Omitted
+    frame fields use the defaults: ``status`` ``draft``, spacing 96 / 0 /
+    0, kind ``color``, color ``#F6F1E8``, and null gradient and asset
+    ref. Present frame fields are stored, and a Live row must have the
+    payload for its kind. ``elements`` are created in the same write.
+    An omitted or empty list stores zero elements. A validation error
+    stores nothing.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -112,6 +113,15 @@ class ThemeCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     advertisement_type: AdvertisementType = AdvertisementType.CAROUSEL
     template_key: str | None = None
+    status: ThemeStatus | None = None
+    page_margin: int | None = None
+    element_gap: int | None = None
+    element_margin: int | None = None
+    background_kind: BackgroundKind | None = None
+    background_color: str | None = None
+    background_gradient: dict[str, object] | None = None
+    background_asset_ref: str | None = None
+    elements: list["ThemeElementCreateRequest"] = Field(default_factory=list)
 
 
 class ThemeGradientStop(BaseModel):
@@ -186,6 +196,9 @@ class ThemeElementCreateRequest(BaseModel):
     font_weight: int | None = None
     alignment: ThemeElementAlignment | None = None
     image_asset_ref: str | None = None
+
+
+ThemeCreateRequest.model_rebuild()
 
 
 class ThemeElementPatchRequest(BaseModel):
