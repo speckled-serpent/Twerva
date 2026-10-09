@@ -321,6 +321,8 @@ class DomainEnumTests(unittest.TestCase):
             "sort_order",
             "content_kind",
             "rectangle_color",
+            "rectangle_opacity",
+            "rectangle_radius",
             "text_source",
             "font_family",
             "font_size",
@@ -366,6 +368,13 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(theme_foreign_key.ondelete, "CASCADE")
         self.assertFalse(ThemeElement.__table__.columns["sort_order"].nullable)
         self.assertTrue(ThemeElement.__table__.columns["rectangle_color"].nullable)
+        opacity_column: Column[object] = ThemeElement.__table__.columns["rectangle_opacity"]
+        radius_column: Column[object] = ThemeElement.__table__.columns["rectangle_radius"]
+
+        self.assertFalse(opacity_column.nullable)
+        self.assertFalse(radius_column.nullable)
+        self.assertEqual(str(opacity_column.server_default.arg), "100")
+        self.assertEqual(str(radius_column.server_default.arg), "0")
         self.assertTrue(ThemeElement.__table__.columns["text_source"].nullable)
         self.assertTrue(ThemeElement.__table__.columns["font_weight"].nullable)
         self.assertTrue(ThemeElement.__table__.columns["image_asset_ref"].nullable)
@@ -386,11 +395,27 @@ class DomainEnumTests(unittest.TestCase):
             if isinstance(table_constraint, CheckConstraint)
         ]
 
-        self.assertEqual(len(content_checks), 1)
-        self.assertEqual(content_checks[0].name, "ck_theme_elements_content")
+        checks_by_name: dict[str, CheckConstraint] = {
+            table_constraint.name: table_constraint
+            for table_constraint in content_checks
+            if table_constraint.name is not None
+        }
+
         self.assertEqual(
-            str(content_checks[0].sqltext),
+            set(checks_by_name),
+            {"ck_theme_elements_content", "ck_theme_elements_rectangle_style"},
+        )
+        self.assertEqual(
+            str(checks_by_name["ck_theme_elements_content"].sqltext),
             THEME_ELEMENT_CONTENT_CHECK_SQL,
+        )
+        self.assertIn(
+            "rectangle_opacity >= 0 AND rectangle_opacity <= 100",
+            str(checks_by_name["ck_theme_elements_rectangle_style"].sqltext),
+        )
+        self.assertIn(
+            "rectangle_radius >= 0 AND rectangle_radius <= 10000",
+            str(checks_by_name["ck_theme_elements_rectangle_style"].sqltext),
         )
         self.assertIn(
             "content_kind = 'text'::theme_element_content_kind",

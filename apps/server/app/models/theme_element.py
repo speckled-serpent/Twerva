@@ -84,7 +84,10 @@ class ThemeElement(Base, UuidPrimaryKeyMixin, TimestampMixin):
     ``alignment``. ``image`` requires ``image_asset_ref`` (relative path,
     no ``..``, no scheme, suffix ``.svg`` / ``.png`` / ``.jpg`` /
     ``.jpeg``) and forbids ``text_source``. Style booleans default false.
-    ``font_weight`` is optional, from 1 through 1000. This table does not
+    ``font_weight`` is optional, from 1 through 1000.
+    ``rectangle_opacity`` is 0 through 100 and defaults to 100.
+    ``rectangle_radius`` is pixels from 0 through 10000 and defaults to 0.
+    A null ``rectangle_color`` is still clear. This table does not
     measure text or read image bytes.
     """
 
@@ -99,6 +102,11 @@ class ThemeElement(Base, UuidPrimaryKeyMixin, TimestampMixin):
         CheckConstraint(
             THEME_ELEMENT_CONTENT_CHECK_SQL,
             name="content",
+        ),
+        CheckConstraint(
+            "rectangle_opacity >= 0 AND rectangle_opacity <= 100"
+            " AND rectangle_radius >= 0 AND rectangle_radius <= 10000",
+            name="rectangle_style",
         ),
     )
 
@@ -117,6 +125,18 @@ class ThemeElement(Base, UuidPrimaryKeyMixin, TimestampMixin):
         nullable=False,
     )
     rectangle_color: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rectangle_opacity: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,
+        server_default=text("100"),
+    )
+    rectangle_radius: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+    )
     text_source: Mapped[ThemeElementTextSource | None] = mapped_column(
         THEME_ELEMENT_TEXT_SOURCE_ENUM,
         nullable=True,

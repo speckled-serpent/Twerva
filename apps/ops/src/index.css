@@ -427,6 +427,10 @@ td {
   margin: 0 0 0.45rem;
 }
 
+.font-family-select {
+  width: 100%;
+}
+
 .gradient-stop {
   display: flex;
   flex-direction: column;

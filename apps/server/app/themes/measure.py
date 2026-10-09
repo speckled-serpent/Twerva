@@ -28,6 +28,7 @@ from app.models.enums import (
     ThemeElementContentKind,
 )
 from app.storage.artifacts import ArtifactAssetPathEscapeError
+from app.themes.bundled_fonts import bundled_font_path
 from app.themes.default_images import resolve_theme_image_path
 from app.themes.layout import (
     LayoutElement,
@@ -45,6 +46,7 @@ _RASTER_SUFFIXES: frozenset[str] = frozenset({".png", ".jpg", ".jpeg"})
 _LIGHT_WEIGHT: int = 300
 _MEDIUM_WEIGHT: int = 500
 _SEMIBOLD_WEIGHT: int = 600
+_REGULAR_AXIS_WEIGHT: int = 400
 _BOLD_WEIGHT: int = 700
 _FONT_FILES_BY_KEY: dict[str, Path] | None = None
 
@@ -443,6 +445,21 @@ def _load_face(
     """Load the requested face, or the carousel DejaVu / Liberation fallback."""
 
     safe_size: int = font_size if font_size > 0 else 1
+    prefer_bold: bool = bold or _weight_requests_bold(font_weight)
+    axis_weight: int = _axis_weight(font_weight, bold)
+    bundled_path: Path | None = bundled_font_path(font_family, italic, prefer_bold)
+
+    if bundled_path is not None:
+        bundled_face: ImageFont.FreeTypeFont | None = _load_font_file(
+            bundled_path,
+            safe_size,
+        )
+
+        if bundled_face is not None:
+            _apply_weight_axis(bundled_face, axis_weight)
+
+            return bundled_face
+
     family_face: ImageFont.FreeTypeFont | None = _load_family_face(
         font_family,
         safe_size,
@@ -452,15 +469,14 @@ def _load_face(
     )
 
     if family_face is not None:
-        _apply_weight_axis(family_face, font_weight)
+        _apply_weight_axis(family_face, axis_weight)
 
         return family_face
 
-    use_bold_fallback: bool = bold or _weight_requests_bold(font_weight)
-    fallback_face: ImageFont.ImageFont = _load_fallback_face(safe_size, use_bold_fallback)
+    fallback_face: ImageFont.ImageFont = _load_fallback_face(safe_size, prefer_bold)
 
     if isinstance(fallback_face, ImageFont.FreeTypeFont):
-        _apply_weight_axis(fallback_face, font_weight)
+        _apply_weight_axis(fallback_face, axis_weight)
 
     return fallback_face
 
@@ -666,12 +682,22 @@ def _font_files_by_key() -> dict[str, Path]:
     return found_files
 
 
-def _apply_weight_axis(face: ImageFont.FreeTypeFont, font_weight: int | None) -> None:
+def _axis_weight(font_weight: int | None, bold: bool) -> int:
+    """Weight for a variable ``wght`` axis. Bold with no number is 700."""
+
+    if font_weight is not None:
+
+        return font_weight
+
+    if bold:
+
+        return _BOLD_WEIGHT
+
+    return _REGULAR_AXIS_WEIGHT
+
+
+def _apply_weight_axis(face: ImageFont.FreeTypeFont, font_weight: int) -> None:
     """Set a variable font's ``wght`` axis when the face has one."""
-
-    if font_weight is None:
-
-        return
 
     variation_getter: object = getattr(face, "get_variation_axes", None)
 
@@ -703,7 +729,9 @@ def _apply_weight_axis(face: ImageFont.FreeTypeFont, font_weight: int | None) ->
         if isinstance(axis_name, bytes):
             axis_name = axis_name.decode("ascii", "replace")
 
-        if axis_name == "wght":
+        axis_label: str = axis_name if isinstance(axis_name, str) else ""
+
+        if axis_label.lower() in {"wght", "weight"}:
             minimum: float = float(raw_axis.get("minimum", font_weight))
             maximum: float = float(raw_axis.get("maximum", font_weight))
             clamped_weight: float = min(max(float(font_weight), minimum), maximum)

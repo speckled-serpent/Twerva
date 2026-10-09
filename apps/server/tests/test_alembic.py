@@ -19,6 +19,7 @@ THEMES_CREATE_REVISION_ID: str = "themes_create"
 THEMES_STATUS_REVISION_ID: str = "themes_status"
 THEMES_SPACING_REVISION_ID: str = "themes_spacing"
 THEMES_DROP_TEXTURE_REVISION_ID: str = "themes_drop_texture"
+THEMES_ELEMENT_RECTANGLE_REVISION_ID: str = "themes_element_rectangle"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -57,6 +58,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{THEMES_BACKGROUND_REVISION_ID}.py",
                 f"{THEMES_CREATE_REVISION_ID}.py",
                 f"{THEMES_DROP_TEXTURE_REVISION_ID}.py",
+                f"{THEMES_ELEMENT_RECTANGLE_REVISION_ID}.py",
                 f"{THEMES_SPACING_REVISION_ID}.py",
                 f"{THEMES_STATUS_REVISION_ID}.py",
             ],
@@ -408,6 +410,34 @@ class AlembicInitializationTests(unittest.TestCase):
             revision_source,
         )
         self.assertNotIn("background_asset_ref = NULL", revision_source)
+
+    def test_themes_element_rectangle_follows_drop_texture(self) -> None:
+        """Opacity and radius follow the texture drop and default existing rows."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEMES_ELEMENT_RECTANGLE_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            THEMES_ELEMENT_RECTANGLE_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            THEMES_DROP_TEXTURE_REVISION_ID,
+        )
+        self.assertIn('server_default="100"', revision_source)
+        self.assertIn('server_default="0"', revision_source)
+        self.assertIn("ck_theme_elements_rectangle_style", revision_source)
+        self.assertIn("rectangle_opacity >= 0 AND rectangle_opacity <= 100", revision_source)
+        self.assertIn("rectangle_radius >= 0 AND rectangle_radius <= 10000", revision_source)
+        self.assertIn('op.drop_column("theme_elements", "rectangle_opacity")', revision_source)
+        self.assertIn('op.drop_column("theme_elements", "rectangle_radius")', revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

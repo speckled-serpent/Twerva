@@ -32,6 +32,8 @@ from app.themes.elements import (
     assign_temporary_sort_orders,
     elements_in_band,
     insert_index,
+    rectangle_opacity_value,
+    rectangle_radius_value,
     resolve_theme_element,
 )
 
@@ -93,6 +95,8 @@ def create_theme_element(
         theme_element_create_request.font_weight,
         theme_element_create_request.alignment,
         theme_element_create_request.image_asset_ref,
+        theme_element_create_request.rectangle_opacity,
+        theme_element_create_request.rectangle_radius,
     )
     created_element: ThemeElement = _new_theme_element(
         found_theme,
@@ -217,6 +221,18 @@ def patch_theme_element(
             theme_element_patch_request.image_asset_ref,
             found_element.image_asset_ref,
         ),
+        _overlay(
+            "rectangle_opacity",
+            assigned_fields,
+            theme_element_patch_request.rectangle_opacity,
+            found_element.rectangle_opacity,
+        ),
+        _overlay(
+            "rectangle_radius",
+            assigned_fields,
+            theme_element_patch_request.rectangle_radius,
+            found_element.rectangle_radius,
+        ),
     )
     _apply_resolved_element(found_element, resolved_element)
     resulting_band: ThemeElementBand = found_element.band
@@ -319,6 +335,8 @@ def prepare_new_theme_elements(
             element_request.font_weight,
             element_request.alignment,
             element_request.image_asset_ref,
+            element_request.rectangle_opacity,
+            element_request.rectangle_radius,
         )
         prepared_elements.append((element_request, resolved_element))
 
@@ -378,6 +396,8 @@ def serialize_theme_element(element: ThemeElement) -> ThemeElementReadResponse:
         sort_order=element.sort_order,
         content_kind=element.content_kind,
         rectangle_color=element.rectangle_color,
+        rectangle_opacity=rectangle_opacity_value(element.rectangle_opacity),
+        rectangle_radius=rectangle_radius_value(element.rectangle_radius),
         text_source=element.text_source,
         font_family=element.font_family,
         font_size=element.font_size,
@@ -409,6 +429,8 @@ def _new_theme_element(
         sort_order=-1,
         content_kind=resolved_element.content_kind,
         rectangle_color=resolved_element.rectangle_color,
+        rectangle_opacity=resolved_element.rectangle_opacity,
+        rectangle_radius=resolved_element.rectangle_radius,
         text_source=resolved_element.text_source,
         font_family=resolved_element.font_family,
         font_size=resolved_element.font_size,
@@ -433,6 +455,8 @@ def _apply_resolved_element(
 
     element.content_kind = resolved_element.content_kind
     element.rectangle_color = resolved_element.rectangle_color
+    element.rectangle_opacity = resolved_element.rectangle_opacity
+    element.rectangle_radius = resolved_element.rectangle_radius
     element.text_source = resolved_element.text_source
     element.font_family = resolved_element.font_family
     element.font_size = resolved_element.font_size
@@ -528,6 +552,8 @@ def _resolve_or_raise(
     font_weight: int | None,
     alignment: ThemeElementAlignment | None,
     image_asset_ref: str | None,
+    rectangle_opacity: int | None = None,
+    rectangle_radius: int | None = None,
 ) -> ResolvedThemeElement:
     """Validate one element and map a rule failure to HTTP 400."""
 
@@ -546,6 +572,8 @@ def _resolve_or_raise(
             font_weight,
             alignment,
             image_asset_ref,
+            rectangle_opacity,
+            rectangle_radius,
         )
     except ThemeElementError as element_error:
         raise HTTPException(

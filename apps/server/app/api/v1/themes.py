@@ -17,6 +17,8 @@ from app.api.v1.schemas import (
     ThemeDefaultImagesResponse,
     ThemeElementCreateRequest,
     ThemeElementReadResponse,
+    ThemeFontFamiliesResponse,
+    ThemeFontFamilyResponse,
     ThemeImageAlbumResponse,
     ThemePatchRequest,
     ThemeReadResponse,
@@ -44,8 +46,17 @@ from app.themes.background import (
     ThemeBackgroundError,
     resolve_patched_background,
 )
+from app.themes.bundled_fonts import (
+    FALLBACK_FONT_FAMILY_NAME,
+    list_bundled_font_families,
+)
 from app.themes.default_images import list_theme_image_albums
-from app.themes.elements import ResolvedThemeElement, ordered_theme_elements
+from app.themes.elements import (
+    ResolvedThemeElement,
+    ordered_theme_elements,
+    rectangle_opacity_value,
+    rectangle_radius_value,
+)
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
 
@@ -193,6 +204,30 @@ def list_theme_default_images() -> ThemeDefaultImagesResponse:
     )
 
     return images_response
+
+
+@themes_router.get("/font-families", response_model=ThemeFontFamiliesResponse)
+def list_theme_font_families() -> ThemeFontFamiliesResponse:
+    """Return bundled font families. Readers may call this, same as preview.
+
+    Registered before ``/{theme_id}`` so ``font-families`` is not parsed
+    as a theme id.
+    """
+
+    family_responses: list[ThemeFontFamilyResponse] = [
+        ThemeFontFamilyResponse(
+            family_id=family.family_id,
+            name=family.name,
+            category=family.category,
+        )
+        for family in list_bundled_font_families()
+    ]
+    fonts_response: ThemeFontFamiliesResponse = ThemeFontFamiliesResponse(
+        families=family_responses,
+        fallback_name=FALLBACK_FONT_FAMILY_NAME,
+    )
+
+    return fonts_response
 
 
 @themes_router.get("/{theme_id}", response_model=ThemeReadResponse)
@@ -705,6 +740,8 @@ def _copy_theme_element(
         sort_order=source_element.sort_order,
         content_kind=source_element.content_kind,
         rectangle_color=source_element.rectangle_color,
+        rectangle_opacity=rectangle_opacity_value(source_element.rectangle_opacity),
+        rectangle_radius=rectangle_radius_value(source_element.rectangle_radius),
         text_source=source_element.text_source,
         font_family=source_element.font_family,
         font_size=source_element.font_size,
