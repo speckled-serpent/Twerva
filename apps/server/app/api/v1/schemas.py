@@ -322,6 +322,20 @@ class ThemeSampleResponse(BaseModel):
     overlaps: list[ThemeSampleOverlapResponse]
 
 
+class ThemeImageAlbumResponse(BaseModel):
+    """One album of concrete image paths. More albums can be added later."""
+
+    album_id: str
+    name: str
+    asset_refs: list[str]
+
+
+class ThemeDefaultImagesResponse(BaseModel):
+    """Albums the theme editor can offer for picture and image fields."""
+
+    albums: list[ThemeImageAlbumResponse]
+
+
 class ThemePreviewRequest(BaseModel):
     """Body for `POST /api/v1/themes/preview`.
 

@@ -16,6 +16,7 @@ import type {
   ThemeElementReadResponse,
   ThemePreviewRequest,
   ThemePreviewResponse,
+  ThemeDefaultImagesResponse,
   ThemePatchRequest,
   ThemeReadResponse,
   ThemeSampleRequest,
@@ -197,6 +198,11 @@ export async function listThemes(): Promise<ThemeReadResponse[]> {
 export async function fetchThemeById(themeId: string): Promise<ThemeReadResponse> {
 
   return requestJson<ThemeReadResponse>("GET", `/api/v1/themes/${themeId}`);
+}
+
+export async function fetchThemeDefaultImages(): Promise<ThemeDefaultImagesResponse> {
+
+  return requestJson<ThemeDefaultImagesResponse>("GET", "/api/v1/themes/default-images");
 }
 
 export async function createTheme(

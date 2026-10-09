@@ -14,8 +14,10 @@ from app.api.v1.lookups import fetch_theme_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
     ThemeCreateRequest,
+    ThemeDefaultImagesResponse,
     ThemeElementCreateRequest,
     ThemeElementReadResponse,
+    ThemeImageAlbumResponse,
     ThemePatchRequest,
     ThemeReadResponse,
 )
@@ -42,6 +44,7 @@ from app.themes.background import (
     ThemeBackgroundError,
     resolve_patched_background,
 )
+from app.themes.default_images import list_theme_image_albums
 from app.themes.elements import ResolvedThemeElement, ordered_theme_elements
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
@@ -167,6 +170,29 @@ def list_themes(
     ]
 
     return theme_read_responses
+
+
+@themes_router.get("/default-images", response_model=ThemeDefaultImagesResponse)
+def list_theme_default_images() -> ThemeDefaultImagesResponse:
+    """Return bundled image albums. Readers may call this, same as preview.
+
+    Registered before ``/{theme_id}`` so ``default-images`` is not parsed
+    as a theme id.
+    """
+
+    album_responses: list[ThemeImageAlbumResponse] = [
+        ThemeImageAlbumResponse(
+            album_id=album.album_id,
+            name=album.name,
+            asset_refs=list(album.asset_refs),
+        )
+        for album in list_theme_image_albums()
+    ]
+    images_response: ThemeDefaultImagesResponse = ThemeDefaultImagesResponse(
+        albums=album_responses,
+    )
+
+    return images_response
 
 
 @themes_router.get("/{theme_id}", response_model=ThemeReadResponse)
