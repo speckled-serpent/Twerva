@@ -21,6 +21,7 @@ READER_ALLOWED_MUTATION_PATHS: frozenset[str] = frozenset(
     {
         "/api/v1/auth/change-password",
         "/api/v1/auth/logout",
+        "/api/v1/themes/preview",
     },
 )
 

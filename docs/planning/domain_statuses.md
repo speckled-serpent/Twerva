@@ -284,6 +284,11 @@ fields are stored in that same write. A Live create requires the
 payload for its kind. A validation error stores no row.
 `DELETE /api/v1/themes/{id}` removes the theme and its elements.
 Another table that referenced the theme would block the delete.
+`POST /api/v1/themes/preview` renders one 1080 frame from a frame and
+element payload and returns the PNG inline. It does not insert a theme,
+artifact, or post job, and it does not write a preview file. Readers
+may call it. `POST /api/v1/themes/{id}/samples` still renders a saved
+theme and writes a preview file; that route stays admin-only.
 `PATCH /api/v1/themes/{id}` may set any of those integers and the
 background columns; omitted fields stay as they are. Zero is allowed.
 A negative spacing value is HTTP 400 and does not write. A Draft may

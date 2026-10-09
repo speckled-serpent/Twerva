@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 import {
   createThemeElement,
@@ -23,6 +23,10 @@ export interface ThemeElementEditorProps {
   theme: ThemeReadResponse;
   onThemeUpdated: (updatedTheme: ThemeReadResponse) => void;
   onLocalElementsChange?: (nextElements: ThemeElementReadResponse[]) => void;
+  onPreviewElementsChange?: (
+    elements: ThemeElementCreateRequest[] | null,
+    draftError: string | null,
+  ) => void;
 }
 
 interface TextSourceOption {
@@ -77,13 +81,18 @@ export function ThemeElementEditor({
   theme,
   onThemeUpdated,
   onLocalElementsChange,
+  onPreviewElementsChange,
 }: ThemeElementEditorProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
   const [addDraft, setAddDraft] = useState<ElementDraft>(emptyElementDraft());
+  const [cardDrafts, setCardDrafts] = useState<Record<string, ElementDraft>>({});
   const [actionError, setActionError] = useState<unknown>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const previewCallbackRef = useRef(onPreviewElementsChange);
+  const lastPreviewKeyRef = useRef<string | null>(null);
+  previewCallbackRef.current = onPreviewElementsChange;
   const fieldsDisabled: boolean = !canWrite || busyKey !== null;
   const isLocal: boolean = onLocalElementsChange !== undefined;
 
@@ -174,6 +183,54 @@ export function ThemeElementEditor({
     publishLocalElements(moveLocalElement(theme.elements, elementId, nextSortOrder));
   };
 
+  const handleCardDraftChange = (elementId: string, draft: ElementDraft): void => {
+
+    setCardDrafts((currentDrafts: Record<string, ElementDraft>): Record<string, ElementDraft> => {
+      const previousDraft: ElementDraft | undefined = currentDrafts[elementId];
+
+      if (previousDraft !== undefined && JSON.stringify(previousDraft) === JSON.stringify(draft)) {
+        return currentDrafts;
+      }
+
+      return { ...currentDrafts, [elementId]: draft };
+    });
+  };
+
+  useEffect((): void => {
+    const previewCallback = previewCallbackRef.current;
+
+    if (previewCallback === undefined) {
+      return;
+    }
+
+    try {
+      const requests: ThemeElementCreateRequest[] = previewRequestsFromElements(
+        theme.elements,
+        cardDrafts,
+      );
+      const previewKey: string = JSON.stringify(requests);
+
+      if (previewKey === lastPreviewKeyRef.current) {
+        return;
+      }
+
+      lastPreviewKeyRef.current = previewKey;
+      previewCallback(requests, null);
+    } catch (caughtError: unknown) {
+      const message: string = caughtError instanceof Error
+        ? caughtError.message
+        : String(caughtError);
+      const previewKey: string = `error:${message}`;
+
+      if (previewKey === lastPreviewKeyRef.current) {
+        return;
+      }
+
+      lastPreviewKeyRef.current = previewKey;
+      previewCallback(null, message);
+    }
+  }, [theme.elements, cardDrafts]);
+
   return (
     <section className="summary-block">
       <h2>Elements</h2>
@@ -241,6 +298,7 @@ export function ThemeElementEditor({
                     onLocalSave={isLocal ? handleLocalSave : undefined}
                     onLocalDelete={isLocal ? handleLocalDelete : undefined}
                     onLocalMove={isLocal ? handleLocalMove : undefined}
+                    onDraftChange={handleCardDraftChange}
                   />
                 ),
               )
@@ -265,6 +323,7 @@ interface ThemeElementCardProps {
   onLocalSave?: (elementId: string, draft: ElementDraft) => void;
   onLocalDelete?: (elementId: string) => void;
   onLocalMove?: (elementId: string, nextSortOrder: number) => void;
+  onDraftChange: (elementId: string, draft: ElementDraft) => void;
 }
 
 function ThemeElementCard({
@@ -280,10 +339,15 @@ function ThemeElementCard({
   onLocalSave,
   onLocalDelete,
   onLocalMove,
+  onDraftChange,
 }: ThemeElementCardProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
   const [draft, setDraft] = useState<ElementDraft>(draftFromElement(element));
+
+  useEffect((): void => {
+    onDraftChange(element.id, draft);
+  }, [draft, element.id, onDraftChange]);
   const canMoveEarlier: boolean = canWrite && elementIndex > 0 && draft.band === element.band;
   const canMoveLater: boolean = (
     canWrite
@@ -765,6 +829,46 @@ export function themeElementCreateRequestsInBandOrder(
       return themeElementCreateRequestFromElement(element);
     },
   );
+
+  return requests;
+}
+
+function previewRequestsFromElements(
+  elements: ThemeElementReadResponse[],
+  cardDrafts: Record<string, ElementDraft>,
+): ThemeElementCreateRequest[] {
+
+  const bandOrder: ThemeElementBand[] = ["top", "middle", "bottom"];
+  const requests: ThemeElementCreateRequest[] = [];
+
+  bandOrder.forEach((band: ThemeElementBand): void => {
+    const members: ThemeElementReadResponse[] = elements.filter(
+      (element: ThemeElementReadResponse): boolean => {
+        const draft: ElementDraft = cardDrafts[element.id] ?? draftFromElement(element);
+
+        return draft.band === band;
+      },
+    );
+    const stayed: ThemeElementReadResponse[] = members
+      .filter((element: ThemeElementReadResponse): boolean => element.band === band)
+      .sort(
+        (left: ThemeElementReadResponse, right: ThemeElementReadResponse): number => {
+
+          return left.sort_order - right.sort_order;
+        },
+      );
+    const moved: ThemeElementReadResponse[] = members.filter(
+      (element: ThemeElementReadResponse): boolean => element.band !== band,
+    );
+    const orderedMembers: ThemeElementReadResponse[] = [...stayed, ...moved];
+
+    orderedMembers.forEach((element: ThemeElementReadResponse, index: number): void => {
+      const draft: ElementDraft = cardDrafts[element.id] ?? draftFromElement(element);
+      const request: ThemeElementCreateRequest = elementRequestFromDraft(draft);
+      request.sort_order = index;
+      requests.push(request);
+    });
+  });
 
   return requests;
 }

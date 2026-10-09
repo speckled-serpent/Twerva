@@ -786,6 +786,25 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(delete_theme_response.status_code, 403)
         self.assertIn("read-only", delete_theme_response.json()["detail"].lower())
 
+        sample_response = self.test_client.post(
+            f"/api/v1/themes/{uuid.uuid4()}/samples",
+            json={"source_item_id": str(uuid.uuid4())},
+        )
+
+        self.assertEqual(sample_response.status_code, 403)
+        self.assertIn("read-only", sample_response.json()["detail"].lower())
+
+    def test_reader_can_preview_a_theme_payload(self) -> None:
+        """Readers may POST /api/v1/themes/preview. A missing source is 404."""
+
+        preview_response = self.test_client.post(
+            "/api/v1/themes/preview",
+            json={"source_item_id": str(uuid.uuid4())},
+        )
+
+        self.assertEqual(preview_response.status_code, 404)
+        self.assertNotIn("read-only", preview_response.json()["detail"].lower())
+
     def test_reader_can_change_own_password(self) -> None:
         """Readers may POST /auth/change-password."""
 

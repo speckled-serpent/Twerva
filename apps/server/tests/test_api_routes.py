@@ -221,6 +221,9 @@ class ApiRouteSurfaceTests(unittest.TestCase):
 
         self.assertIn("post", sample_methods)
         self.assertIn("get", sample_image_methods)
+        preview_methods: set[str] = methods_by_path["/api/v1/themes/preview"]
+
+        self.assertIn("post", preview_methods)
 
     def test_publish_run_route_accepts_post(self) -> None:
         """1.6c-i: POST /api/v1/publish/run/{post_job_id} is registered."""
