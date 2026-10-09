@@ -24,6 +24,12 @@ from app.models.enums import (
     ThemeElementTextSource,
     ThemeStatus,
 )
+from app.models.theme import (
+    DEFAULT_BACKGROUND_COLOR,
+    DEFAULT_ELEMENT_GAP,
+    DEFAULT_ELEMENT_MARGIN,
+    DEFAULT_PAGE_MARGIN,
+)
 
 
 class CampaignInterestWrite(BaseModel):
@@ -314,6 +320,42 @@ class ThemeSampleResponse(BaseModel):
     block_reason: Literal["overlap", "missing_asset", "measure_error"] | None
     detail: str | None
     overlaps: list[ThemeSampleOverlapResponse]
+
+
+class ThemePreviewRequest(BaseModel):
+    """Body for `POST /api/v1/themes/preview`.
+
+    Frame fields and elements are the form as it stands, including a
+    theme that has not been saved. Omitted frame fields use the create
+    defaults. The handler does not insert a theme, an artifact, or a
+    post job.
+    """
+
+    source_item_id: uuid.UUID
+    status: ThemeStatus = ThemeStatus.DRAFT
+    page_margin: int = DEFAULT_PAGE_MARGIN
+    element_gap: int = DEFAULT_ELEMENT_GAP
+    element_margin: int = DEFAULT_ELEMENT_MARGIN
+    background_kind: BackgroundKind = BackgroundKind.COLOR
+    background_color: str | None = DEFAULT_BACKGROUND_COLOR
+    background_gradient: ThemeGradient | None = None
+    background_asset_ref: str | None = None
+    elements: list[ThemeElementCreateRequest] = Field(default_factory=list)
+
+
+class ThemePreviewResponse(BaseModel):
+    """One stateless frame. The PNG is inline. Nothing is stored.
+
+    ``block_reason`` matches the saved-theme sample response. A missing
+    font file uses the same Pillow fallback as that renderer and is not
+    an error by itself.
+    """
+
+    blocked: bool
+    block_reason: Literal["overlap", "missing_asset", "measure_error"] | None
+    detail: str | None
+    overlaps: list[ThemeSampleOverlapResponse]
+    image_png_base64: str
 
 
 class SpotmuInterestSearchHitResponse(BaseModel):

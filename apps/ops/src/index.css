@@ -250,6 +250,36 @@ td {
   object-fit: cover;
 }
 
+.theme-editor-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.theme-live-preview {
+  flex: 0 0 22rem;
+  width: 22rem;
+  position: sticky;
+  top: 0.75rem;
+}
+
+.theme-editor-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .theme-editor-layout {
+    flex-direction: column;
+  }
+
+  .theme-live-preview {
+    position: static;
+    flex-basis: auto;
+    width: 100%;
+  }
+}
+
 .sample-preview {
   margin: 0.75rem 0 0;
   max-width: 22rem;

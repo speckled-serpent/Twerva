@@ -7,18 +7,22 @@ import {
   listThemes,
   patchTheme,
 } from "../api/client";
-import type { ThemePatchRequest, ThemeReadResponse } from "../api/types";
+import type {
+  ThemeElementCreateRequest,
+  ThemePatchRequest,
+  ThemeReadResponse,
+} from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import { ThemeElementEditor } from "./ThemeElementEditor";
+import { ThemeLivePreview } from "./ThemeLivePreview";
 import {
   ThemeFrameFields,
   frameDraftFromTheme,
   themePatchFromFrameDraft,
   type ThemeFrameDraft,
 } from "./ThemeFrameFields";
-import { ThemeSamplePanel } from "./ThemeSamplePanel";
 import {
   advertisementTypeLabel,
   formatThemeTemplateKey,
@@ -354,6 +358,10 @@ function ThemeDetailView({
 
   const canWrite: boolean = useCanWriteOps();
   const [editedDraft, setEditedDraft] = useState<ThemeFrameDraft | null>(null);
+  const [previewElements, setPreviewElements] = useState<ThemeElementCreateRequest[] | null>(
+    null,
+  );
+  const [previewDraftError, setPreviewDraftError] = useState<string | null>(null);
   const [editedForKey, setEditedForKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
@@ -468,6 +476,13 @@ function ThemeDetailView({
         loadError === null ? <p>Loading theme…</p> : null
       ) : (
         <>
+          <div className="theme-editor-layout">
+            <ThemeLivePreview
+              frameDraft={frameDraft}
+              elements={previewElements}
+              draftError={previewDraftError}
+            />
+          <div className="theme-editor-main">
           <dl className="campaign-detail-list">
             <dt>Name</dt>
             <dd>{selectedTheme.name}</dd>
@@ -503,8 +518,16 @@ function ThemeDetailView({
           <ThemeElementEditor
             theme={selectedTheme}
             onThemeUpdated={onThemeSaved}
+            onPreviewElementsChange={(
+              elements: ThemeElementCreateRequest[] | null,
+              draftError: string | null,
+            ): void => {
+              setPreviewElements(elements);
+              setPreviewDraftError(draftError);
+            }}
           />
-          <ThemeSamplePanel key={selectedTheme.id} themeId={selectedTheme.id} />
+          </div>
+          </div>
         </>
       )}
     </section>

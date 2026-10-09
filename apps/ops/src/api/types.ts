@@ -405,6 +405,27 @@ export interface ThemeSampleResponse {
   overlaps: ThemeSampleOverlap[];
 }
 
+export interface ThemePreviewRequest {
+  source_item_id: string;
+  status?: ThemeStatus;
+  page_margin?: number;
+  element_gap?: number;
+  element_margin?: number;
+  background_kind?: BackgroundKind;
+  background_color?: string | null;
+  background_gradient?: ThemeGradient | null;
+  background_asset_ref?: string | null;
+  elements?: ThemeElementCreateRequest[];
+}
+
+export interface ThemePreviewResponse {
+  blocked: boolean;
+  block_reason: ThemeSampleBlockReason | null;
+  detail: string | null;
+  overlaps: ThemeSampleOverlap[];
+  image_png_base64: string;
+}
+
 export interface ThemeReadResponse {
   id: string;
   name: string;

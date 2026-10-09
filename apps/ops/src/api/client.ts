@@ -14,6 +14,8 @@ import type {
   ThemeElementCreateRequest,
   ThemeElementPatchRequest,
   ThemeElementReadResponse,
+  ThemePreviewRequest,
+  ThemePreviewResponse,
   ThemePatchRequest,
   ThemeReadResponse,
   ThemeSampleRequest,
@@ -252,6 +254,23 @@ export async function duplicateTheme(themeId: string): Promise<ThemeReadResponse
  * @param themeSampleRequest - The one Spotmu source item to render
  * @returns The preview id and any block reason
  */
+/**
+ * Render one frame from the form payload. Does not save a theme.
+ *
+ * @param themePreviewRequest - Source, frame, and elements as they stand
+ * @returns The PNG and any block reason
+ */
+export async function createThemePreview(
+  themePreviewRequest: ThemePreviewRequest,
+): Promise<ThemePreviewResponse> {
+
+  return requestJson<ThemePreviewResponse>(
+    "POST",
+    "/api/v1/themes/preview",
+    themePreviewRequest,
+  );
+}
+
 export async function createThemeSample(
   themeId: string,
   themeSampleRequest: ThemeSampleRequest,

@@ -4,6 +4,7 @@ import { createTheme } from "../api/client";
 import type {
   AdvertisementType,
   ThemeCreateRequest,
+  ThemeElementCreateRequest,
   ThemeElementReadResponse,
   ThemePatchRequest,
   ThemeReadResponse,
@@ -15,6 +16,7 @@ import {
   ThemeElementEditor,
   themeElementCreateRequestsInBandOrder,
 } from "./ThemeElementEditor";
+import { ThemeLivePreview } from "./ThemeLivePreview";
 import {
   ThemeFrameFields,
   emptyThemeFrameDraft,
@@ -44,6 +46,10 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
   );
   const [frameDraft, setFrameDraft] = useState<ThemeFrameDraft>(emptyThemeFrameDraft());
   const [localElements, setLocalElements] = useState<ThemeElementReadResponse[]>([]);
+  const [previewElements, setPreviewElements] = useState<ThemeElementCreateRequest[] | null>(
+    null,
+  );
+  const [previewDraftError, setPreviewDraftError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
   const trimmedThemeName: string = themeName.trim();
@@ -104,6 +110,13 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
       </div>
       <ReadOnlyNotice />
 
+      <div className="theme-editor-layout">
+        <ThemeLivePreview
+          frameDraft={frameDraft}
+          elements={previewElements}
+          draftError={previewDraftError}
+        />
+        <div className="theme-editor-main">
       <form
         id="create-theme-form"
         className="stack-form campaign-form"
@@ -150,6 +163,13 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
           return;
         }}
         onLocalElementsChange={setLocalElements}
+        onPreviewElementsChange={(
+          elements: ThemeElementCreateRequest[] | null,
+          draftError: string | null,
+        ): void => {
+          setPreviewElements(elements);
+          setPreviewDraftError(draftError);
+        }}
       />
 
       {canWrite && !isBusy && trimmedThemeName === "" ? (
@@ -163,6 +183,8 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
         <button type="button" onClick={onCancel} disabled={isBusy}>
           Cancel
         </button>
+      </div>
+        </div>
       </div>
     </section>
   );
