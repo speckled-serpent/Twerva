@@ -7,6 +7,14 @@ import type {
   ThemeReadResponse,
   ThemeStatus,
 } from "../api/types";
+import {
+  gradientDefaultsIfEmpty,
+  gradientProblem,
+  normalizeHexColor,
+  offsetFromPercentInput,
+  percentTextFromOffset,
+  type GradientStopDraft,
+} from "./themeColors";
 
 export interface ThemeGradientStopDraft {
   offset: string;
@@ -82,7 +90,7 @@ export function ThemeFrameFields({
               return;
             }
 
-            onDraftChange({ ...frameDraft, backgroundKind: nextKind });
+            onDraftChange(frameDraftForKind(frameDraft, nextKind));
           }}
         >
           {BACKGROUND_KIND_OPTIONS.map(
@@ -105,13 +113,21 @@ export function ThemeFrameFields({
                 backgroundColor: changeEvent.target.value,
               });
             }}
+            onBlur={(blurEvent): void => {
+              onDraftChange({
+                ...frameDraft,
+                backgroundColor: normalizeHexColor(blurEvent.currentTarget.value),
+              });
+            }}
             placeholder="#F6F1E8"
             spellCheck={false}
           />
         </label>
       ) : null}
       {frameDraft.backgroundKind === "color" ? (
-        <p className="field-hint"># plus six hex digits. Blank clears the color.</p>
+        <p className="field-hint">
+          3 or 6 hex digits, with or without #. Blank clears the color.
+        </p>
       ) : null}
       {frameDraft.backgroundKind === "gradient" ? (
         <ThemeGradientFields frameDraft={frameDraft} onDraftChange={onDraftChange} />
@@ -211,7 +227,7 @@ export function emptyThemeFrameDraft(): ThemeFrameDraft {
 export function frameDraftFromTheme(theme: ThemeReadResponse): ThemeFrameDraft {
 
   const storedGradient: ThemeGradient | null = theme.background_gradient;
-  const gradientStops: ThemeGradientStopDraft[] = storedGradient === null
+  const unsortedStops: ThemeGradientStopDraft[] = storedGradient === null
     ? [
         { offset: "0", color: "" },
         { offset: "1", color: "" },
@@ -225,6 +241,12 @@ export function frameDraftFromTheme(theme: ThemeReadResponse): ThemeFrameDraft {
 
         return stopDraft;
       });
+  const gradientStops: ThemeGradientStopDraft[] = [...unsortedStops].sort(
+    (leftStop: ThemeGradientStopDraft, rightStop: ThemeGradientStopDraft): number => {
+
+      return Number(leftStop.offset) - Number(rightStop.offset);
+    },
+  );
   const frameDraft: ThemeFrameDraft = {
     status: theme.status,
     backgroundKind: theme.background_kind,
@@ -267,7 +289,7 @@ export function themePatchFromFrameDraft(frameDraft: ThemeFrameDraft): ThemePatc
   };
 
   if (frameDraft.backgroundKind === "color") {
-    themePatchRequest.background_color = frameDraft.backgroundColor;
+    themePatchRequest.background_color = normalizeHexColor(frameDraft.backgroundColor);
 
     return themePatchRequest;
   }
@@ -293,97 +315,169 @@ function ThemeGradientFields({
   onDraftChange,
 }: ThemeGradientFieldsProps): ReactElement {
 
+  const offsets: number[] = frameDraft.gradientStops.map(
+    (stopDraft: ThemeGradientStopDraft): number => Number(stopDraft.offset),
+  );
+  const angleNumber: number = Number(frameDraft.gradientAngle);
+  const sliderAngle: number = Number.isFinite(angleNumber)
+    ? Math.min(360, Math.max(0, angleNumber))
+    : 0;
+
   return (
     <>
-      <label>
-        Gradient angle
+      <div className="slider-field">
+        <label className="slider-number-label">
+          Angle
+          <input
+            className="slider-number"
+            type="number"
+            min={0}
+            max={360}
+            step={1}
+            value={frameDraft.gradientAngle}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...frameDraft, gradientAngle: changeEvent.target.value });
+            }}
+          />
+        </label>
         <input
-          type="number"
+          className="slider-range"
+          type="range"
           min={0}
           max={360}
-          step="any"
-          value={frameDraft.gradientAngle}
+          step={1}
+          value={sliderAngle}
+          aria-label="Gradient angle"
           onChange={(changeEvent): void => {
             onDraftChange({ ...frameDraft, gradientAngle: changeEvent.target.value });
           }}
         />
-      </label>
+      </div>
+      <p className="field-hint">0 points up. 90 points right. 180 points down.</p>
       <p className="field-hint">
-        Degrees from 0 through 360. Blank leaves the gradient empty. 0 points up.
-        90 points right.
+        An offset is where that color sits along the gradient, from 0% at the
+        start to 100% at the end.
       </p>
       {frameDraft.gradientStops.map(
-        (stopDraft: ThemeGradientStopDraft, stopIndex: number): ReactElement => (
-          <div className="inline-add-row" key={stopIndex}>
-            <label>
-              Stop {stopIndex + 1} offset
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step="any"
-                value={stopDraft.offset}
-                onChange={(changeEvent): void => {
-                  const nextStops: ThemeGradientStopDraft[] = frameDraft.gradientStops.map(
-                    (currentStop: ThemeGradientStopDraft, currentIndex: number): ThemeGradientStopDraft => {
+        (stopDraft: ThemeGradientStopDraft, stopIndex: number): ReactElement => {
+          const previousOffset: number = stopIndex === 0 ? 0 : offsets[stopIndex - 1];
+          const followingOffset: number = stopIndex === frameDraft.gradientStops.length - 1
+            ? 1
+            : offsets[stopIndex + 1];
+          const rawMin: number = (Number.isFinite(previousOffset) ? previousOffset : 0) * 100;
+          const rawMax: number = (Number.isFinite(followingOffset) ? followingOffset : 1) * 100;
+          const neighborMin: number = Math.max(0, Math.min(rawMin, 100));
+          const neighborMax: number = Math.max(neighborMin, Math.min(rawMax, 100));
+          const storedPercent: number = Number(stopDraft.offset) * 100;
+          const sliderPercent: number = Number.isFinite(storedPercent)
+            ? Math.min(neighborMax, Math.max(neighborMin, storedPercent))
+            : neighborMin;
 
-                      if (currentIndex !== stopIndex) {
-                        return currentStop;
-                      }
+          return (
+            <div className="gradient-stop" key={stopIndex}>
+              <div className="slider-field">
+                <label className="slider-number-label">
+                  Stop {stopIndex + 1}
+                  <input
+                    className="slider-number"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={percentTextFromOffset(stopDraft.offset)}
+                    aria-label={`Stop ${stopIndex + 1} offset percent`}
+                    onChange={(changeEvent): void => {
+                      const nextOffset: string = offsetFromPercentInput(
+                        offsets,
+                        stopIndex,
+                        changeEvent.target.value,
+                      );
+                      const nextStops: ThemeGradientStopDraft[] = replaceStop(
+                        frameDraft.gradientStops,
+                        stopIndex,
+                        { ...stopDraft, offset: nextOffset },
+                      );
 
-                      return { ...currentStop, offset: changeEvent.target.value };
-                    },
-                  );
+                      onDraftChange({ ...frameDraft, gradientStops: nextStops });
+                    }}
+                  />
+                </label>
+                <input
+                  className="slider-range"
+                  type="range"
+                  min={neighborMin}
+                  max={neighborMax}
+                  step={1}
+                  value={sliderPercent}
+                  aria-label={`Stop ${stopIndex + 1} offset`}
+                  onChange={(changeEvent): void => {
+                    const nextOffset: string = offsetFromPercentInput(
+                      offsets,
+                      stopIndex,
+                      changeEvent.target.value,
+                    );
+                    const nextStops: ThemeGradientStopDraft[] = replaceStop(
+                      frameDraft.gradientStops,
+                      stopIndex,
+                      { ...stopDraft, offset: nextOffset },
+                    );
 
-                  onDraftChange({ ...frameDraft, gradientStops: nextStops });
-                }}
-              />
-            </label>
-            <label>
-              Stop {stopIndex + 1} color
-              <input
-                value={stopDraft.color}
-                onChange={(changeEvent): void => {
-                  const nextStops: ThemeGradientStopDraft[] = frameDraft.gradientStops.map(
-                    (currentStop: ThemeGradientStopDraft, currentIndex: number): ThemeGradientStopDraft => {
+                    onDraftChange({ ...frameDraft, gradientStops: nextStops });
+                  }}
+                />
+              </div>
+              <label>
+                Stop {stopIndex + 1} color
+                <input
+                  value={stopDraft.color}
+                  onChange={(changeEvent): void => {
+                    const nextStops: ThemeGradientStopDraft[] = replaceStop(
+                      frameDraft.gradientStops,
+                      stopIndex,
+                      { ...stopDraft, color: changeEvent.target.value },
+                    );
 
-                      if (currentIndex !== stopIndex) {
-                        return currentStop;
-                      }
+                    onDraftChange({ ...frameDraft, gradientStops: nextStops });
+                  }}
+                  onBlur={(blurEvent): void => {
+                    const nextStops: ThemeGradientStopDraft[] = replaceStop(
+                      frameDraft.gradientStops,
+                      stopIndex,
+                      { ...stopDraft, color: normalizeHexColor(blurEvent.currentTarget.value) },
+                    );
 
-                      return { ...currentStop, color: changeEvent.target.value };
-                    },
-                  );
+                    onDraftChange({ ...frameDraft, gradientStops: nextStops });
+                  }}
+                  placeholder="#4A4A4A"
+                  spellCheck={false}
+                />
+              </label>
+              <div className="button-row">
+                <button
+                  type="button"
+                  onClick={(): void => {
+                    const nextStops: ThemeGradientStopDraft[] = [];
 
-                  onDraftChange({ ...frameDraft, gradientStops: nextStops });
-                }}
-                placeholder="#112233"
-                spellCheck={false}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={(): void => {
-                const nextStops: ThemeGradientStopDraft[] = [];
+                    frameDraft.gradientStops.forEach(
+                      (currentStop: ThemeGradientStopDraft, currentIndex: number): void => {
 
-                frameDraft.gradientStops.forEach(
-                  (currentStop: ThemeGradientStopDraft, currentIndex: number): void => {
+                        if (currentIndex === stopIndex) {
+                          return;
+                        }
 
-                    if (currentIndex === stopIndex) {
-                      return;
-                    }
+                        nextStops.push(currentStop);
+                      },
+                    );
 
-                    nextStops.push(currentStop);
-                  },
-                );
-
-                onDraftChange({ ...frameDraft, gradientStops: nextStops });
-              }}
-            >
-              Remove stop
-            </button>
-          </div>
-        ),
+                    onDraftChange({ ...frameDraft, gradientStops: nextStops });
+                  }}
+                >
+                  Remove stop
+                </button>
+              </div>
+            </div>
+          );
+        },
       )}
       <div className="button-row">
         <button
@@ -391,7 +485,7 @@ function ThemeGradientFields({
           onClick={(): void => {
             const nextStops: ThemeGradientStopDraft[] = [
               ...frameDraft.gradientStops,
-              { offset: "", color: "" },
+              { offset: "1", color: "" },
             ];
 
             onDraftChange({ ...frameDraft, gradientStops: nextStops });
@@ -406,37 +500,100 @@ function ThemeGradientFields({
 
 function gradientFromDraft(frameDraft: ThemeFrameDraft): ThemeGradient | null {
 
-  const trimmedAngle: string = frameDraft.gradientAngle.trim();
+  const problem: string | null = gradientProblem(
+    frameDraft.gradientAngle,
+    frameDraft.gradientStops,
+  );
 
-  if (trimmedAngle === "") {
-    return null;
-  }
-
-  if (!isDecimalText(trimmedAngle)) {
-    throw new Error("Gradient angle must be a number.");
+  if (problem !== null) {
+    throw new Error(problem);
   }
 
   const stops: ThemeGradient["stops"] = frameDraft.gradientStops.map(
     (stopDraft: ThemeGradientStopDraft): ThemeGradient["stops"][number] => {
 
-      const trimmedOffset: string = stopDraft.offset.trim();
-
-      if (!isDecimalText(trimmedOffset)) {
-        throw new Error("Each gradient stop offset must be a number.");
-      }
-
       return {
-        offset: Number(trimmedOffset),
-        color: stopDraft.color.trim(),
+        offset: Number(stopDraft.offset),
+        color: normalizeHexColor(stopDraft.color),
       };
     },
   );
   const gradient: ThemeGradient = {
-    angle_deg: Number(trimmedAngle),
+    angle_deg: Number(frameDraft.gradientAngle),
     stops,
   };
 
   return gradient;
+}
+
+/**
+ * Return the frame error the preview should show, or null when the draft can render.
+ *
+ * @param frameDraft - Current frame fields
+ * @returns The gradient or spacing sentence, or null
+ */
+export function frameDraftError(frameDraft: ThemeFrameDraft): string | null {
+
+  try {
+    themePatchFromFrameDraft(frameDraft);
+
+    return null;
+  } catch (caughtError: unknown) {
+    const message: string = caughtError instanceof Error
+      ? caughtError.message
+      : String(caughtError);
+
+    return message;
+  }
+}
+
+function frameDraftForKind(
+  frameDraft: ThemeFrameDraft,
+  nextKind: BackgroundKind,
+): ThemeFrameDraft {
+
+  const nextDraft: ThemeFrameDraft = { ...frameDraft, backgroundKind: nextKind };
+
+  if (nextKind !== "gradient") {
+    return nextDraft;
+  }
+
+  const defaults: { angle: string; stops: GradientStopDraft[] } | null = gradientDefaultsIfEmpty(
+    frameDraft.gradientAngle,
+    frameDraft.gradientStops,
+  );
+
+  if (defaults === null) {
+    return nextDraft;
+  }
+
+  const filledDraft: ThemeFrameDraft = {
+    ...nextDraft,
+    gradientAngle: defaults.angle,
+    gradientStops: defaults.stops,
+  };
+
+  return filledDraft;
+}
+
+function replaceStop(
+  stops: ThemeGradientStopDraft[],
+  stopIndex: number,
+  nextStop: ThemeGradientStopDraft,
+): ThemeGradientStopDraft[] {
+
+  const nextStops: ThemeGradientStopDraft[] = stops.map(
+    (currentStop: ThemeGradientStopDraft, currentIndex: number): ThemeGradientStopDraft => {
+
+      if (currentIndex !== stopIndex) {
+        return currentStop;
+      }
+
+      return nextStop;
+    },
+  );
+
+  return nextStops;
 }
 
 function parseWholeNumber(rawValue: string): number | null {
@@ -450,11 +607,6 @@ function parseWholeNumber(rawValue: string): number | null {
   const parsedValue: number = Number(trimmedValue);
 
   return parsedValue;
-}
-
-function isDecimalText(rawValue: string): boolean {
-
-  return /^-?\d+(\.\d+)?$/.test(rawValue);
 }
 
 function isThemeStatus(value: string): value is ThemeStatus {

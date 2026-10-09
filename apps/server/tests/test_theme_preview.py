@@ -33,6 +33,13 @@ from app.models.enums import (
 )
 from app.models.theme import DEFAULT_BACKGROUND_COLOR
 from app.themes.layout import THEME_FRAME_HEIGHT_PIXELS, THEME_FRAME_WIDTH_PIXELS
+from app.themes.background import (
+    GRADIENT_ANGLE_DETAIL,
+    GRADIENT_NEEDS_SECOND_COLOR_DETAIL,
+    GRADIENT_OFFSET_DETAIL,
+    default_theme_gradient,
+    gradient_stop_color_detail,
+)
 from app.themes.samples import BACKGROUND_COLOR_MISSING_DETAIL
 
 
@@ -156,6 +163,97 @@ class ThemePreviewTests(unittest.TestCase):
             self.assertEqual(response.detail, BACKGROUND_COLOR_MISSING_DETAIL)
             self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self._assert_nothing_stored(session, storage)
+
+    def test_gradient_preview_names_the_problem(self) -> None:
+        """A bad gradient blocks with the same sentence the form shows."""
+
+        cases: list[tuple[dict[str, object], str]] = [
+            (
+                {
+                    "angle_deg": 180,
+                    "stops": [{"offset": 0, "color": "#112233"}],
+                },
+                GRADIENT_NEEDS_SECOND_COLOR_DETAIL,
+            ),
+            (
+                {
+                    "angle_deg": 400,
+                    "stops": [
+                        {"offset": 0, "color": "#112233"},
+                        {"offset": 1, "color": "#AABBCC"},
+                    ],
+                },
+                GRADIENT_ANGLE_DETAIL,
+            ),
+            (
+                {
+                    "angle_deg": 180,
+                    "stops": [
+                        {"offset": 0, "color": "#112233"},
+                        {"offset": 1.5, "color": "#AABBCC"},
+                    ],
+                },
+                GRADIENT_OFFSET_DETAIL,
+            ),
+            (
+                {
+                    "angle_deg": 180,
+                    "stops": [
+                        {"offset": 0, "color": "#112233"},
+                        {"offset": 1, "color": "zzzz"},
+                    ],
+                },
+                gradient_stop_color_detail(2),
+            ),
+        ]
+
+        for gradient_payload, expected_detail in cases:
+            with self.subTest(expected_detail=expected_detail):
+                with tempfile.TemporaryDirectory() as storage_directory:
+                    storage: Path = Path(storage_directory)
+                    source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
+                    session: _PreviewMemorySession = _PreviewMemorySession(source_item)
+                    preview_request: ThemePreviewRequest = ThemePreviewRequest(
+                        source_item_id=source_item.id,
+                        background_kind=BackgroundKind.GRADIENT,
+                        background_gradient=gradient_payload,
+                    )
+
+                    response: ThemePreviewResponse = _preview(
+                        preview_request,
+                        session,
+                        storage,
+                    )
+
+                    self.assertTrue(response.blocked)
+                    self.assertEqual(response.block_reason, "measure_error")
+                    self.assertEqual(response.detail, expected_detail)
+
+    def test_default_gradient_blends_end_to_end(self) -> None:
+        """The editor default is dark at the top and light at the bottom."""
+
+        default_gradient: dict[str, object] = default_theme_gradient()
+
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage: Path = Path(storage_directory)
+            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
+            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
+            preview_request: ThemePreviewRequest = ThemePreviewRequest(
+                source_item_id=source_item.id,
+                background_kind=BackgroundKind.GRADIENT,
+                background_color=None,
+                background_gradient=default_gradient,
+            )
+
+            response: ThemePreviewResponse = _preview(preview_request, session, storage)
+
+            self.assertFalse(response.blocked)
+            image: Image.Image = _decoded_image(response)
+            top_pixel: tuple[int, ...] = image.getpixel((540, 80))
+            bottom_pixel: tuple[int, ...] = image.getpixel((540, 1840))
+
+            self.assertLess(abs(top_pixel[0] - 0x4A), 8)
+            self.assertGreater(bottom_pixel[0], top_pixel[0] + 40)
 
     def test_invalid_element_stores_nothing(self) -> None:
         """A text element without a family is 400 and does not render."""

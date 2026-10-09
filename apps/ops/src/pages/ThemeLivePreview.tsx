@@ -10,7 +10,11 @@ import type {
   ThemeSampleResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { themePatchFromFrameDraft, type ThemeFrameDraft } from "./ThemeFrameFields";
+import {
+  frameDraftError,
+  themePatchFromFrameDraft,
+  type ThemeFrameDraft,
+} from "./ThemeFrameFields";
 import { sampleBlockMessage } from "./themeSampleMessage";
 
 export interface ThemeLivePreviewProps {
@@ -114,7 +118,7 @@ export function ThemeLivePreview({
 
   const refreshPreview = async (): Promise<void> => {
 
-    if (sourceItemId === "" || elements === null || draftError !== null) {
+    if (sourceItemId === "" || elements === null || visibleDraftError !== null) {
       return;
     }
 
@@ -167,11 +171,13 @@ export function ThemeLivePreview({
     }
   };
 
-  const payloadKey: string = previewPayloadKey(frameDraft, elements, draftError);
+  const frameError: string | null = frameDraftError(frameDraft);
+  const visibleDraftError: string | null = draftError ?? frameError;
+  const payloadKey: string = previewPayloadKey(frameDraft, elements, visibleDraftError);
 
   useEffect((): (() => void) => {
 
-    if (!sourcesReady || sourceItemId === "" || elements === null || draftError !== null) {
+    if (!sourcesReady || sourceItemId === "" || elements === null || visibleDraftError !== null) {
       return (): void => {
         return;
       };
@@ -187,7 +193,7 @@ export function ThemeLivePreview({
   }, [payloadKey, sourceItemId, sourcesReady]);
 
   const blockMessage: string | null = (
-    draftError === null
+    visibleDraftError === null
     && preview !== null
     && preview.sample.blocked
   )
@@ -197,7 +203,7 @@ export function ThemeLivePreview({
     !sourcesReady
     || sourceItemId === ""
     || elements === null
-    || draftError !== null
+    || visibleDraftError !== null
     || isRefreshing
   );
 
@@ -210,8 +216,8 @@ export function ThemeLivePreview({
       </p>
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
-      {draftError !== null ? (
-        <p className="error-banner" role="alert">{draftError}</p>
+      {visibleDraftError !== null ? (
+        <p className="error-banner" role="alert">{visibleDraftError}</p>
       ) : null}
       {blockMessage !== null ? (
         <p className="error-banner" role="alert">{blockMessage}</p>
