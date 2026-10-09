@@ -127,7 +127,7 @@ def measure_theme_elements(
 
     Args:
         frame_width: Frame width in pixels. Carousel themes use 1080.
-        frame_height: Frame height in pixels. Carousel themes use 1080.
+        frame_height: Frame height in pixels. Carousel themes use 1920.
         page_margin: Inset applied on every edge of the frame.
         element_gap: Space between rectangles in the same band.
         element_margin: Space between content and each edge of the rectangle.

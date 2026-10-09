@@ -298,6 +298,8 @@ td {
   display: block;
   width: 100%;
   height: auto;
+  aspect-ratio: 1080 / 1920;
+  object-fit: contain;
 }
 
 .sample-preview figcaption {

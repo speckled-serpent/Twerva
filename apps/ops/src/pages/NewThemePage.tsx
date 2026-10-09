@@ -14,7 +14,9 @@ import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import {
   ThemeElementEditor,
+  previewElementStateFromElements,
   themeElementCreateRequestsInBandOrder,
+  type ThemePreviewElementState,
 } from "./ThemeElementEditor";
 import { ThemeLivePreview } from "./ThemeLivePreview";
 import {
@@ -46,13 +48,12 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
   );
   const [frameDraft, setFrameDraft] = useState<ThemeFrameDraft>(emptyThemeFrameDraft());
   const [localElements, setLocalElements] = useState<ThemeElementReadResponse[]>([]);
-  const [previewElements, setPreviewElements] = useState<ThemeElementCreateRequest[] | null>(
-    null,
-  );
-  const [previewDraftError, setPreviewDraftError] = useState<string | null>(null);
+  const [previewReport, setPreviewReport] = useState<ThemePreviewElementState | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
   const trimmedThemeName: string = themeName.trim();
+  const savedPreview: ThemePreviewElementState = previewElementStateFromElements(localElements);
+  const activePreview: ThemePreviewElementState = previewReport ?? savedPreview;
   const canCreate: boolean = canWrite && !isBusy && trimmedThemeName !== "";
   const localTheme: ThemeReadResponse = localThemeRecord(localElements);
 
@@ -162,8 +163,7 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
           elements: ThemeElementCreateRequest[] | null,
           draftError: string | null,
         ): void => {
-          setPreviewElements(elements);
-          setPreviewDraftError(draftError);
+          setPreviewReport({ elements, draftError });
         }}
       />
 
@@ -182,8 +182,8 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
         </div>
         <ThemeLivePreview
           frameDraft={frameDraft}
-          elements={previewElements}
-          draftError={previewDraftError}
+          elements={activePreview.elements}
+          draftError={activePreview.draftError}
         />
       </div>
     </section>

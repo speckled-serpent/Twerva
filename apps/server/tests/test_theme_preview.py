@@ -32,6 +32,7 @@ from app.models.enums import (
     ThemeElementTextSource,
 )
 from app.models.theme import DEFAULT_BACKGROUND_COLOR
+from app.themes.layout import THEME_FRAME_HEIGHT_PIXELS, THEME_FRAME_WIDTH_PIXELS
 from app.themes.samples import BACKGROUND_COLOR_MISSING_DETAIL
 
 
@@ -42,7 +43,7 @@ class ThemePreviewTests(unittest.TestCase):
     """Preview renders the payload and leaves the database alone."""
 
     def test_clear_preview_returns_png_without_rows(self) -> None:
-        """A paper frame with one text element is a 1080 PNG and stores nothing."""
+        """A paper frame with one text element is a 1080×1920 PNG and stores nothing."""
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
@@ -59,7 +60,7 @@ class ThemePreviewTests(unittest.TestCase):
 
             self.assertFalse(response.blocked)
             self.assertIsNone(response.block_reason)
-            self.assertEqual(image.size, (1080, 1080))
+            self.assertEqual(image.size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self.assertEqual(image.getpixel((0, 0)), PAPER)
             self._assert_nothing_stored(session, storage)
 
@@ -83,7 +84,7 @@ class ThemePreviewTests(unittest.TestCase):
             response: ThemePreviewResponse = _preview(preview_request, session, storage)
 
             self.assertFalse(response.blocked)
-            self.assertEqual(_decoded_image(response).size, (1080, 1080))
+            self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self._assert_nothing_stored(session, storage)
 
     def test_overlap_is_blocked_and_stores_nothing(self) -> None:
@@ -111,7 +112,7 @@ class ThemePreviewTests(unittest.TestCase):
             self.assertEqual(len(response.overlaps), 1)
             self.assertEqual(response.overlaps[0].band_a, ThemeElementBand.TOP)
             self.assertEqual(response.overlaps[0].band_b, ThemeElementBand.MIDDLE)
-            self.assertEqual(_decoded_image(response).size, (1080, 1080))
+            self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self._assert_nothing_stored(session, storage)
 
     def test_missing_asset_is_blocked_and_stores_nothing(self) -> None:
@@ -132,7 +133,7 @@ class ThemePreviewTests(unittest.TestCase):
             self.assertTrue(response.blocked)
             self.assertEqual(response.block_reason, "missing_asset")
             self.assertIn("missing", (response.detail or "").lower())
-            self.assertEqual(_decoded_image(response).size, (1080, 1080))
+            self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self._assert_nothing_stored(session, storage)
 
     def test_blank_color_is_measure_error_and_stores_nothing(self) -> None:
@@ -153,7 +154,7 @@ class ThemePreviewTests(unittest.TestCase):
             self.assertTrue(response.blocked)
             self.assertEqual(response.block_reason, "measure_error")
             self.assertEqual(response.detail, BACKGROUND_COLOR_MISSING_DETAIL)
-            self.assertEqual(_decoded_image(response).size, (1080, 1080))
+            self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self._assert_nothing_stored(session, storage)
 
     def test_invalid_element_stores_nothing(self) -> None:

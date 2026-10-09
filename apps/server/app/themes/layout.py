@@ -1,4 +1,4 @@
-"""Place theme elements on the 1080×1080 carousel frame.
+"""Place theme elements on the 1080×1920 carousel frame.
 
 Bands are independent. Top stacks downward from the top page margin,
 bottom stacks upward from the bottom page margin, and middle is one
@@ -16,7 +16,7 @@ from app.models.enums import ThemeElementBand
 
 
 THEME_FRAME_WIDTH_PIXELS: int = 1080
-THEME_FRAME_HEIGHT_PIXELS: int = 1080
+THEME_FRAME_HEIGHT_PIXELS: int = 1920
 
 
 @dataclass(frozen=True)
@@ -90,7 +90,7 @@ def place_theme_elements(
 
     Args:
         frame_width: Frame width in pixels. Carousel themes use 1080.
-        frame_height: Frame height in pixels. Carousel themes use 1080.
+        frame_height: Frame height in pixels. Carousel themes use 1920.
         page_margin: Inset applied on every edge of the frame.
         element_gap: Space between rectangles in the same band.
         element_margin: Space between content and each edge of the rectangle.
