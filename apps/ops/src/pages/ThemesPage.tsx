@@ -477,11 +477,6 @@ function ThemeDetailView({
       ) : (
         <>
           <div className="theme-editor-layout">
-            <ThemeLivePreview
-              frameDraft={frameDraft}
-              elements={previewElements}
-              draftError={previewDraftError}
-            />
           <div className="theme-editor-main">
           <dl className="campaign-detail-list">
             <dt>Name</dt>
@@ -527,6 +522,11 @@ function ThemeDetailView({
             }}
           />
           </div>
+            <ThemeLivePreview
+              frameDraft={frameDraft}
+              elements={previewElements}
+              draftError={previewDraftError}
+            />
           </div>
         </>
       )}

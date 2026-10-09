@@ -111,11 +111,6 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
       <ReadOnlyNotice />
 
       <div className="theme-editor-layout">
-        <ThemeLivePreview
-          frameDraft={frameDraft}
-          elements={previewElements}
-          draftError={previewDraftError}
-        />
         <div className="theme-editor-main">
       <form
         id="create-theme-form"
@@ -185,6 +180,11 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
         </button>
       </div>
         </div>
+        <ThemeLivePreview
+          frameDraft={frameDraft}
+          elements={previewElements}
+          draftError={previewDraftError}
+        />
       </div>
     </section>
   );

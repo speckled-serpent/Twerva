@@ -33,7 +33,7 @@ const PREVIEW_REFRESH_DELAY_MS: number = 450;
  * changes. Nothing is saved, queued, or published.
  *
  * @param props - Current frame draft, element payload, and a client draft error
- * @returns The left-hand preview panel
+ * @returns The preview panel beside the form
  */
 export function ThemeLivePreview({
   frameDraft,
