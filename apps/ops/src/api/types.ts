@@ -332,6 +332,8 @@ export interface ThemeElementCreateRequest {
   content_kind: ThemeElementContentKind;
   sort_order?: number | null;
   rectangle_color?: string | null;
+  rectangle_opacity?: number | null;
+  rectangle_radius?: number | null;
   text_source?: ThemeElementTextSource | null;
   font_family?: string | null;
   font_size?: number | null;
@@ -350,6 +352,8 @@ export interface ThemeElementPatchRequest {
   content_kind?: ThemeElementContentKind | null;
   sort_order?: number | null;
   rectangle_color?: string | null;
+  rectangle_opacity?: number | null;
+  rectangle_radius?: number | null;
   text_source?: ThemeElementTextSource | null;
   font_family?: string | null;
   font_size?: number | null;
@@ -370,6 +374,8 @@ export interface ThemeElementReadResponse {
   sort_order: number;
   content_kind: ThemeElementContentKind;
   rectangle_color: string | null;
+  rectangle_opacity: number;
+  rectangle_radius: number;
   text_source: ThemeElementTextSource | null;
   font_family: string | null;
   font_size: number | null;
@@ -434,6 +440,17 @@ export interface ThemeImageAlbumResponse {
 
 export interface ThemeDefaultImagesResponse {
   albums: ThemeImageAlbumResponse[];
+}
+
+export interface ThemeFontFamilyResponse {
+  family_id: string;
+  name: string;
+  category: string;
+}
+
+export interface ThemeFontFamiliesResponse {
+  families: ThemeFontFamilyResponse[];
+  fallback_name: string;
 }
 
 export interface ThemeReadResponse {

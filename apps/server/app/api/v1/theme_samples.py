@@ -270,6 +270,8 @@ def _append_preview_elements(
             sort_order=0,
             content_kind=resolved_element.content_kind,
             rectangle_color=resolved_element.rectangle_color,
+            rectangle_opacity=resolved_element.rectangle_opacity,
+            rectangle_radius=resolved_element.rectangle_radius,
             text_source=resolved_element.text_source,
             font_family=resolved_element.font_family,
             font_size=resolved_element.font_size,
@@ -315,6 +317,8 @@ def _resolve_preview_element(
             element_request.font_weight,
             element_request.alignment,
             element_request.image_asset_ref,
+            element_request.rectangle_opacity,
+            element_request.rectangle_radius,
         )
     except ThemeElementError as element_error:
         raise HTTPException(

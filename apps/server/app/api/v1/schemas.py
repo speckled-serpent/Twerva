@@ -191,6 +191,8 @@ class ThemeElementCreateRequest(BaseModel):
     content_kind: ThemeElementContentKind
     sort_order: int | None = None
     rectangle_color: str | None = None
+    rectangle_opacity: int | None = 100
+    rectangle_radius: int | None = 0
     text_source: ThemeElementTextSource | None = None
     font_family: str | None = None
     font_size: int | None = None
@@ -222,6 +224,8 @@ class ThemeElementPatchRequest(BaseModel):
     content_kind: ThemeElementContentKind | None = None
     sort_order: int | None = None
     rectangle_color: str | None = None
+    rectangle_opacity: int | None = None
+    rectangle_radius: int | None = None
     text_source: ThemeElementTextSource | None = None
     font_family: str | None = None
     font_size: int | None = None
@@ -246,6 +250,8 @@ class ThemeElementReadResponse(BaseModel):
     sort_order: int
     content_kind: ThemeElementContentKind
     rectangle_color: str | None
+    rectangle_opacity: int
+    rectangle_radius: int
     text_source: ThemeElementTextSource | None
     font_family: str | None
     font_size: int | None
@@ -334,6 +340,21 @@ class ThemeDefaultImagesResponse(BaseModel):
     """Albums the theme editor can offer for picture and image fields."""
 
     albums: list[ThemeImageAlbumResponse]
+
+
+class ThemeFontFamilyResponse(BaseModel):
+    """One family the font dropdown can offer."""
+
+    family_id: str
+    name: str
+    category: str
+
+
+class ThemeFontFamiliesResponse(BaseModel):
+    """Bundled families plus the name used when a stored family is unknown."""
+
+    families: list[ThemeFontFamilyResponse]
+    fallback_name: str
 
 
 class ThemePreviewRequest(BaseModel):

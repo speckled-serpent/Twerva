@@ -493,6 +493,109 @@ class ThemeSampleTests(unittest.TestCase):
             self.assertFalse((storage / "theme-previews").exists())
             self._assert_no_artifact_or_post_job(session)
 
+    def test_rectangle_opacity_blends_over_the_background(self) -> None:
+        """A 50% green rectangle blends over red and does not stay solid."""
+
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage: Path = Path(storage_directory)
+            theme: Theme = _theme_row(ThemeStatus.DRAFT)
+            theme.background_color = "#FF0000"
+            theme.page_margin = 0
+            theme.element_margin = 0
+            theme.element_gap = 0
+            source_item: SourceItem = _source_item("Harbor light", SourceType.SPOTMU_INTEREST)
+            text_element: ThemeElement = _text_element(
+                theme,
+                ThemeElementBand.TOP,
+                ThemeElementTextSource.TITLE,
+                rectangle_color="#00FF00",
+                rectangle_opacity=50,
+                rectangle_radius=0,
+            )
+            theme.elements.append(text_element)
+            response: ThemeSampleResponse
+            _, response = _create_sample(theme, source_item, storage)
+            preview_path: Path = _preview_path(storage, theme.id, response.preview_id)
+            blended_pixel: tuple[int, int, int, int] = _pixel(preview_path, 1000, 12)
+
+            self.assertFalse(response.blocked)
+            self.assertEqual(blended_pixel, (127, 128, 0, 255))
+            self.assertNotEqual(blended_pixel, (0, 255, 0, 255))
+
+    def test_blank_rectangle_color_stays_clear_when_opacity_is_set(self) -> None:
+        """Opacity does not invent a fill when the rectangle color is blank."""
+
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage: Path = Path(storage_directory)
+            theme: Theme = _theme_row(ThemeStatus.DRAFT)
+            theme.background_color = "#FF0000"
+            theme.page_margin = 0
+            theme.element_margin = 0
+            source_item: SourceItem = _source_item("Harbor light", SourceType.SPOTMU_INTEREST)
+            text_element: ThemeElement = _text_element(
+                theme,
+                ThemeElementBand.TOP,
+                ThemeElementTextSource.TITLE,
+                rectangle_color=None,
+                rectangle_opacity=50,
+                rectangle_radius=40,
+            )
+            theme.elements.append(text_element)
+            response: ThemeSampleResponse
+            _, response = _create_sample(theme, source_item, storage)
+            preview_path: Path = _preview_path(storage, theme.id, response.preview_id)
+
+            self.assertEqual(_pixel(preview_path, 1000, 12), (255, 0, 0, 255))
+
+    def test_rectangle_radius_rounds_the_corner_and_clamps(self) -> None:
+        """A large radius leaves the corner on the background and fills inside."""
+
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage: Path = Path(storage_directory)
+            theme: Theme = _theme_row(ThemeStatus.DRAFT)
+            theme.background_color = "#0000FF"
+            theme.page_margin = 0
+            theme.element_margin = 0
+            source_item: SourceItem = _source_item("Harbor light", SourceType.SPOTMU_INTEREST)
+            rounded_element: ThemeElement = _text_element(
+                theme,
+                ThemeElementBand.TOP,
+                ThemeElementTextSource.TITLE,
+                rectangle_color="#FFFFFF",
+                rectangle_opacity=100,
+                rectangle_radius=5000,
+            )
+            theme.elements.append(rounded_element)
+            response: ThemeSampleResponse
+            _, response = _create_sample(theme, source_item, storage)
+            preview_path: Path = _preview_path(storage, theme.id, response.preview_id)
+
+            self.assertFalse(response.blocked)
+            self.assertEqual(_pixel(preview_path, 0, 0), (0, 0, 255, 255))
+            self.assertEqual(_pixel(preview_path, 900, 20), (255, 255, 255, 255))
+
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage = Path(storage_directory)
+            theme = _theme_row(ThemeStatus.DRAFT)
+            theme.background_color = "#0000FF"
+            theme.page_margin = 0
+            theme.element_margin = 0
+            source_item = _source_item("Harbor light", SourceType.SPOTMU_INTEREST)
+            square_element: ThemeElement = _text_element(
+                theme,
+                ThemeElementBand.TOP,
+                ThemeElementTextSource.TITLE,
+                rectangle_color="#FFFFFF",
+                rectangle_opacity=100,
+                rectangle_radius=0,
+            )
+            theme.elements.append(square_element)
+            response_square: ThemeSampleResponse
+            _, response_square = _create_sample(theme, source_item, storage)
+            square_path: Path = _preview_path(storage, theme.id, response_square.preview_id)
+
+            self.assertEqual(_pixel(square_path, 0, 0), (255, 255, 255, 255))
+
     def _assert_no_artifact_or_post_job(self, session: "_SampleMemorySession") -> None:
         """The handler must not insert an artifact or a post job, or commit."""
 
@@ -634,6 +737,10 @@ def _text_element(
     band: ThemeElementBand,
     text_source: ThemeElementTextSource,
     rectangle_color: str | None,
+    rectangle_opacity: int | None = None,
+    rectangle_radius: int | None = None,
+    font_family: str = "DejaVu Sans",
+    font_size: int = 64,
 ) -> ThemeElement:
     """Build one text element. Family is a face installed on this machine."""
 
@@ -645,8 +752,8 @@ def _text_element(
         content_kind=ThemeElementContentKind.TEXT,
         rectangle_color=rectangle_color,
         text_source=text_source,
-        font_family="DejaVu Sans",
-        font_size=64,
+        font_family=font_family,
+        font_size=font_size,
         font_color="#112233",
         bold=False,
         italic=False,
@@ -658,6 +765,12 @@ def _text_element(
         created_at=CREATED_AT,
         updated_at=CREATED_AT,
     )
+
+    if rectangle_opacity is not None:
+        text_element.rectangle_opacity = rectangle_opacity
+
+    if rectangle_radius is not None:
+        text_element.rectangle_radius = rectangle_radius
 
     return text_element
 

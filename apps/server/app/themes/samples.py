@@ -37,7 +37,11 @@ from app.themes.background import (
     expand_hex_color,
 )
 from app.themes.default_images import resolve_theme_image_path
-from app.themes.elements import ordered_theme_elements
+from app.themes.elements import (
+    ordered_theme_elements,
+    rectangle_opacity_value,
+    rectangle_radius_value,
+)
 from app.themes.layout import (
     THEME_FRAME_HEIGHT_PIXELS,
     THEME_FRAME_WIDTH_PIXELS,
@@ -486,7 +490,16 @@ def _draw_element(
     rectangle_color: tuple[int, int, int] | None = _parse_hex_color(element.rectangle_color)
 
     if element.rectangle_color is not None and rectangle_color is not None:
-        _fill_rectangle(canvas_draw, rectangle, rectangle_color)
+        rectangle_opacity: int = rectangle_opacity_value(element.rectangle_opacity)
+        rectangle_radius: int = rectangle_radius_value(element.rectangle_radius)
+        _fill_rectangle(
+            canvas,
+            canvas_draw,
+            rectangle,
+            rectangle_color,
+            rectangle_opacity,
+            rectangle_radius,
+        )
 
     content_box: tuple[int, int, int, int] | None = _content_box(rectangle, element_margin)
 
@@ -528,22 +541,65 @@ def _draw_element(
 
 
 def _fill_rectangle(
+    canvas: Image.Image,
     canvas_draw: ImageDraw.ImageDraw,
     rectangle: LayoutRectangle,
     color: tuple[int, int, int],
+    opacity: int,
+    radius: int,
 ) -> None:
-    """Fill an integer rectangle. Pillow's box includes the far edge."""
+    """Fill an integer rectangle. Pillow's box includes the far edge.
+
+    ``opacity`` is 0 through 100. ``radius`` is pixels and is clamped to
+    half the shorter side. A blank rectangle color never reaches this
+    function, so opacity and radius do not paint a clear box.
+    """
 
     if rectangle.width <= 0 or rectangle.height <= 0:
 
         return
 
+    if opacity <= 0:
+
+        return
+
     far_x: int = rectangle.x + rectangle.width - 1
     far_y: int = rectangle.y + rectangle.height - 1
-    canvas_draw.rectangle(
-        (rectangle.x, rectangle.y, far_x, far_y),
-        fill=_opaque(color),
-    )
+    box: tuple[int, int, int, int] = (rectangle.x, rectangle.y, far_x, far_y)
+    shorter_side: int = rectangle.width if rectangle.width < rectangle.height else rectangle.height
+    maximum_radius: int = shorter_side // 2
+    clamped_radius: int = radius
+
+    if clamped_radius < 0:
+        clamped_radius = 0
+
+    if clamped_radius > maximum_radius:
+        clamped_radius = maximum_radius
+
+    fill_color: tuple[int, int, int, int] = _with_opacity(color, opacity)
+    # ImageDraw writes the alpha byte over the pixel. A partial opacity
+    # has to be composited onto what is already on the canvas.
+    draw_target: ImageDraw.ImageDraw = canvas_draw
+
+    if fill_color[3] < _OPAQUE_ALPHA:
+        overlay: Image.Image = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        draw_target = ImageDraw.Draw(overlay)
+
+        if clamped_radius <= 0:
+            draw_target.rectangle(box, fill=fill_color)
+        else:
+            draw_target.rounded_rectangle(box, radius=clamped_radius, fill=fill_color)
+
+        canvas.alpha_composite(overlay)
+
+        return
+
+    if clamped_radius <= 0:
+        draw_target.rectangle(box, fill=fill_color)
+
+        return
+
+    draw_target.rounded_rectangle(box, radius=clamped_radius, fill=fill_color)
 
 
 def _content_box(
@@ -1028,11 +1084,31 @@ def _open_raster(image_path: Path) -> Image.Image | None:
 def _opaque(color: tuple[int, int, int]) -> tuple[int, int, int, int]:
     """Add a solid alpha channel."""
 
-    opaque_color: tuple[int, int, int, int] = (
+    opaque_color: tuple[int, int, int, int] = _with_opacity(color, 100)
+
+    return opaque_color
+
+
+def _with_opacity(
+    color: tuple[int, int, int],
+    opacity: int,
+) -> tuple[int, int, int, int]:
+    """Map a 0-100 opacity onto an RGBA fill."""
+
+    clamped_opacity: int = opacity
+
+    if clamped_opacity < 0:
+        clamped_opacity = 0
+
+    if clamped_opacity > 100:
+        clamped_opacity = 100
+
+    alpha: int = round(clamped_opacity / 100 * _OPAQUE_ALPHA)
+    filled_color: tuple[int, int, int, int] = (
         color[0],
         color[1],
         color[2],
-        _OPAQUE_ALPHA,
+        alpha,
     )
 
-    return opaque_color
+    return filled_color

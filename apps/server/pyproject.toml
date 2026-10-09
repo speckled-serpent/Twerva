@@ -28,4 +28,10 @@ include = ["app*"]
 include-package-data = true
 
 [tool.setuptools.package-data]
-"app.themes" = ["default_images/*.jpg", "default_images/*.md"]
+"app.themes" = [
+    "default_images/*.jpg",
+    "default_images/*.md",
+    "bundled_fonts/*.md",
+    "bundled_fonts/*/*.ttf",
+    "bundled_fonts/*/*.txt",
+]

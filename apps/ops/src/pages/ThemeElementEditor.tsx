@@ -19,7 +19,9 @@ import type {
 import { ErrorBanner } from "../components/ErrorBanner";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import { ThemeAssetAlbumField } from "./ThemeAssetAlbumField";
+import { ThemeFontFamilyField } from "./ThemeFontFamilyField";
 import { normalizeHexColor } from "./themeColors";
+import { DEFAULT_FONT_FAMILY } from "./themeFonts";
 
 export interface ThemeElementEditorProps {
   theme: ThemeReadResponse;
@@ -45,6 +47,8 @@ interface ElementDraft {
   band: ThemeElementBand;
   contentKind: ThemeElementContentKind;
   rectangleColor: string;
+  rectangleOpacity: string;
+  rectangleRadius: string;
   textSource: ThemeElementTextSource;
   fontFamily: string;
   fontSize: string;
@@ -565,6 +569,7 @@ function ElementFields({
         />
       </label>
       <p className="field-hint">Blank means a clear rectangle.</p>
+      <RectangleStyleFields draft={draft} onDraftChange={onDraftChange} />
       {draft.contentKind === "text" ? (
         <TextElementFields
           draft={draft}
@@ -623,16 +628,13 @@ function TextElementFields({
           </option>
         ))}
       </select>
-      <label>
-        Font family
-        <input
-          value={draft.fontFamily}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, fontFamily: changeEvent.target.value });
-          }}
-          spellCheck={false}
-        />
-      </label>
+      <ThemeFontFamilyField
+        fontFamily={draft.fontFamily}
+        idPrefix={idPrefix}
+        onFontFamilyChange={(nextFontFamily: string): void => {
+          onDraftChange({ ...draft, fontFamily: nextFontFamily });
+        }}
+      />
       <label>
         Font size
         <input
@@ -746,8 +748,10 @@ function emptyElementDraft(): ElementDraft {
     band: "top",
     contentKind: "text",
     rectangleColor: "",
+    rectangleOpacity: "100",
+    rectangleRadius: "0",
     textSource: "title",
-    fontFamily: "DejaVu Sans",
+    fontFamily: DEFAULT_FONT_FAMILY,
     fontSize: "32",
     fontColor: "#112233",
     bold: false,
@@ -768,6 +772,8 @@ function draftFromElement(element: ThemeElementReadResponse): ElementDraft {
     band: element.band,
     contentKind: element.content_kind,
     rectangleColor: element.rectangle_color ?? "",
+    rectangleOpacity: String(element.rectangle_opacity),
+    rectangleRadius: String(element.rectangle_radius),
     textSource: element.text_source ?? "title",
     fontFamily: element.font_family ?? "",
     fontSize: element.font_size === null ? "" : String(element.font_size),
@@ -927,6 +933,8 @@ function elementRequestFromDraft(
     band: draft.band,
     content_kind: draft.contentKind,
     rectangle_color: normalizeHexColor(draft.rectangleColor),
+    rectangle_opacity: parseRectangleOpacity(draft.rectangleOpacity),
+    rectangle_radius: parseRectangleRadius(draft.rectangleRadius),
     bold: draft.bold,
     italic: draft.italic,
     underline: draft.underline,
@@ -949,6 +957,137 @@ function elementRequestFromDraft(
   request.image_asset_ref = draft.imageAssetRef.trim();
 
   return request;
+}
+
+const RECTANGLE_OPACITY_MAX: number = 100;
+const RECTANGLE_RADIUS_SLIDER_MAX: number = 540;
+const RECTANGLE_RADIUS_MAX: number = 10000;
+
+function RectangleStyleFields({
+  draft,
+  onDraftChange,
+}: {
+  draft: ElementDraft;
+  onDraftChange: (nextDraft: ElementDraft) => void;
+}): ReactElement {
+
+  const opacityNumber: number = Number(draft.rectangleOpacity);
+  const radiusNumber: number = Number(draft.rectangleRadius);
+  const sliderOpacity: number = Number.isFinite(opacityNumber)
+    ? Math.min(RECTANGLE_OPACITY_MAX, Math.max(0, opacityNumber))
+    : RECTANGLE_OPACITY_MAX;
+  const sliderRadius: number = Number.isFinite(radiusNumber)
+    ? Math.min(RECTANGLE_RADIUS_SLIDER_MAX, Math.max(0, radiusNumber))
+    : 0;
+
+  return (
+    <>
+      <div className="slider-field">
+        <label className="slider-number-label">
+          Rectangle opacity
+          <input
+            className="slider-number"
+            type="number"
+            min={0}
+            max={RECTANGLE_OPACITY_MAX}
+            step={1}
+            value={draft.rectangleOpacity}
+            aria-label="Rectangle opacity percent"
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...draft, rectangleOpacity: changeEvent.target.value });
+            }}
+          />
+        </label>
+        <input
+          className="slider-range"
+          type="range"
+          min={0}
+          max={RECTANGLE_OPACITY_MAX}
+          step={1}
+          value={sliderOpacity}
+          aria-label="Rectangle opacity"
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, rectangleOpacity: changeEvent.target.value });
+          }}
+        />
+      </div>
+      <p className="field-hint">0% is clear. 100% is solid. A blank color still draws nothing.</p>
+      <div className="slider-field">
+        <label className="slider-number-label">
+          Corner radius
+          <input
+            className="slider-number"
+            type="number"
+            min={0}
+            max={RECTANGLE_RADIUS_MAX}
+            step={1}
+            value={draft.rectangleRadius}
+            aria-label="Rectangle corner radius pixels"
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...draft, rectangleRadius: changeEvent.target.value });
+            }}
+          />
+        </label>
+        <input
+          className="slider-range"
+          type="range"
+          min={0}
+          max={RECTANGLE_RADIUS_SLIDER_MAX}
+          step={1}
+          value={sliderRadius}
+          aria-label="Rectangle corner radius"
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, rectangleRadius: changeEvent.target.value });
+          }}
+        />
+      </div>
+      <p className="field-hint">
+        Pixels. The preview clamps this to half the shorter side of the box.
+      </p>
+    </>
+  );
+}
+
+function parseRectangleOpacity(rawValue: string): number {
+
+  const trimmedValue: string = rawValue.trim();
+
+  if (trimmedValue === "") {
+    return 100;
+  }
+
+  if (!/^\d+$/.test(trimmedValue)) {
+    throw new Error("rectangle_opacity must be an integer from 0 through 100.");
+  }
+
+  const opacity: number = Number(trimmedValue);
+
+  if (opacity > RECTANGLE_OPACITY_MAX) {
+    throw new Error("rectangle_opacity must be an integer from 0 through 100.");
+  }
+
+  return opacity;
+}
+
+function parseRectangleRadius(rawValue: string): number {
+
+  const trimmedValue: string = rawValue.trim();
+
+  if (trimmedValue === "") {
+    return 0;
+  }
+
+  if (!/^\d+$/.test(trimmedValue)) {
+    throw new Error("rectangle_radius must be an integer from 0 through 10000.");
+  }
+
+  const radius: number = Number(trimmedValue);
+
+  if (radius > RECTANGLE_RADIUS_MAX) {
+    throw new Error("rectangle_radius must be an integer from 0 through 10000.");
+  }
+
+  return radius;
 }
 
 function parseRequiredFontSize(rawValue: string): number {
@@ -1055,6 +1194,8 @@ function localElementFromRequest(
     sort_order: bandCount,
     content_kind: request.content_kind,
     rectangle_color: emptyToNull(request.rectangle_color),
+    rectangle_opacity: request.rectangle_opacity ?? 100,
+    rectangle_radius: request.rectangle_radius ?? 0,
     text_source: request.content_kind === "text" ? request.text_source ?? null : null,
     font_family: request.content_kind === "text" ? request.font_family ?? null : null,
     font_size: request.content_kind === "text" ? request.font_size ?? null : null,
@@ -1085,6 +1226,8 @@ function applyRequestToElement(
     band: request.band,
     content_kind: request.content_kind,
     rectangle_color: emptyToNull(request.rectangle_color),
+    rectangle_opacity: request.rectangle_opacity ?? 100,
+    rectangle_radius: request.rectangle_radius ?? 0,
     text_source: request.content_kind === "text" ? request.text_source ?? null : null,
     font_family: request.content_kind === "text" ? request.font_family ?? null : null,
     font_size: request.content_kind === "text" ? request.font_size ?? null : null,

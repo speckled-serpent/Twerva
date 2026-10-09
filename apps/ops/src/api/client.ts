@@ -17,6 +17,7 @@ import type {
   ThemePreviewRequest,
   ThemePreviewResponse,
   ThemeDefaultImagesResponse,
+  ThemeFontFamiliesResponse,
   ThemePatchRequest,
   ThemeReadResponse,
   ThemeSampleRequest,
@@ -203,6 +204,11 @@ export async function fetchThemeById(themeId: string): Promise<ThemeReadResponse
 export async function fetchThemeDefaultImages(): Promise<ThemeDefaultImagesResponse> {
 
   return requestJson<ThemeDefaultImagesResponse>("GET", "/api/v1/themes/default-images");
+}
+
+export async function fetchThemeFontFamilies(): Promise<ThemeFontFamiliesResponse> {
+
+  return requestJson<ThemeFontFamiliesResponse>("GET", "/api/v1/themes/font-families");
 }
 
 export async function createTheme(

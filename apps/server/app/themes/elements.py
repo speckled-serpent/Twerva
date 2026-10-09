@@ -33,6 +33,16 @@ THEME_ELEMENT_IMAGE_REF_DETAIL: str = (
 THEME_ELEMENT_SORT_ORDER_DETAIL: str = "sort_order must be zero or greater."
 THEME_ELEMENT_CONTENT_KIND_REQUIRED_DETAIL: str = "content_kind is required."
 THEME_ELEMENT_BAND_REQUIRED_DETAIL: str = "band is required."
+THEME_ELEMENT_RECTANGLE_OPACITY_DETAIL: str = (
+    "rectangle_opacity must be an integer from 0 through 100."
+)
+THEME_ELEMENT_RECTANGLE_RADIUS_DETAIL: str = (
+    "rectangle_radius must be an integer from 0 through 10000."
+)
+DEFAULT_RECTANGLE_OPACITY: int = 100
+DEFAULT_RECTANGLE_RADIUS: int = 0
+MAX_RECTANGLE_OPACITY: int = 100
+MAX_RECTANGLE_RADIUS: int = 10000
 
 BAND_READ_ORDER: tuple[ThemeElementBand, ...] = (
     ThemeElementBand.TOP,
@@ -68,6 +78,8 @@ class ResolvedThemeElement:
         font_weight: int | None,
         alignment: ThemeElementAlignment | None,
         image_asset_ref: str | None,
+        rectangle_opacity: int,
+        rectangle_radius: int,
     ) -> None:
 
         self.content_kind: ThemeElementContentKind = content_kind
@@ -83,6 +95,8 @@ class ResolvedThemeElement:
         self.font_weight: int | None = font_weight
         self.alignment: ThemeElementAlignment | None = alignment
         self.image_asset_ref: str | None = image_asset_ref
+        self.rectangle_opacity: int = rectangle_opacity
+        self.rectangle_radius: int = rectangle_radius
 
 
 def resolve_theme_element(
@@ -99,6 +113,8 @@ def resolve_theme_element(
     font_weight: int | None,
     alignment: ThemeElementAlignment | None,
     image_asset_ref: str | None,
+    rectangle_opacity: int | None = None,
+    rectangle_radius: int | None = None,
 ) -> ResolvedThemeElement:
     """Return element columns that satisfy the text or image check.
 
@@ -116,6 +132,8 @@ def resolve_theme_element(
         font_weight: Optional weight from 1 through 1000.
         alignment: Horizontal alignment. Required for text.
         image_asset_ref: Relative image path. Required for image.
+        rectangle_opacity: 0 through 100. Null stores 100.
+        rectangle_radius: Corner radius in pixels. Null stores 0.
 
     Returns:
         Columns to store, with blanks normalized to null.
@@ -137,6 +155,8 @@ def resolve_theme_element(
     stored_font_family: str | None = _blank_to_none(font_family)
     stored_font_color: str | None = _blank_to_none(font_color)
     stored_font_size: int | None = _optional_positive_font_size(font_size)
+    stored_rectangle_opacity: int = _rectangle_opacity_to_store(rectangle_opacity)
+    stored_rectangle_radius: int = _rectangle_radius_to_store(rectangle_radius)
 
     if content_kind == ThemeElementContentKind.TEXT:
         _require_text_payload(
@@ -163,6 +183,8 @@ def resolve_theme_element(
         stored_font_weight,
         alignment,
         stored_image_asset_ref,
+        stored_rectangle_opacity,
+        stored_rectangle_radius,
     )
 
     return resolved_element
@@ -317,6 +339,52 @@ def _image_asset_ref_to_store(image_asset_ref: str | None) -> str | None:
         raise ThemeElementError(THEME_ELEMENT_IMAGE_REF_DETAIL) from background_error
 
     return stored_asset_ref
+
+
+def rectangle_opacity_value(rectangle_opacity: int | None) -> int:
+    """Return a stored opacity. Null means the column default, 100."""
+
+    if rectangle_opacity is None:
+
+        return DEFAULT_RECTANGLE_OPACITY
+
+    return rectangle_opacity
+
+
+def rectangle_radius_value(rectangle_radius: int | None) -> int:
+    """Return a stored radius. Null means the column default, 0."""
+
+    if rectangle_radius is None:
+
+        return DEFAULT_RECTANGLE_RADIUS
+
+    return rectangle_radius
+
+
+def _rectangle_opacity_to_store(rectangle_opacity: int | None) -> int:
+    """Return 0 through 100. Null stores a solid rectangle."""
+
+    if rectangle_opacity is None:
+
+        return DEFAULT_RECTANGLE_OPACITY
+
+    if rectangle_opacity < 0 or rectangle_opacity > MAX_RECTANGLE_OPACITY:
+        raise ThemeElementError(THEME_ELEMENT_RECTANGLE_OPACITY_DETAIL)
+
+    return rectangle_opacity
+
+
+def _rectangle_radius_to_store(rectangle_radius: int | None) -> int:
+    """Return a non-negative radius. Null stores square corners."""
+
+    if rectangle_radius is None:
+
+        return DEFAULT_RECTANGLE_RADIUS
+
+    if rectangle_radius < 0 or rectangle_radius > MAX_RECTANGLE_RADIUS:
+        raise ThemeElementError(THEME_ELEMENT_RECTANGLE_RADIUS_DETAIL)
+
+    return rectangle_radius
 
 
 def _font_weight_to_store(font_weight: int | None) -> int | None:
