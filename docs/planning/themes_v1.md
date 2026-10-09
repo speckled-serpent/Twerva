@@ -46,7 +46,8 @@ A frame has one background. The background is one of:
 - picture
 - solid color
 - gradient
-- texture
+
+Texture is dropped for now. A texture is a picture of a texture, and it may return later as a default album of texture images.
 
 ---
 

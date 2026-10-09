@@ -277,7 +277,7 @@ export interface CampaignReadResponse {
 
 export type ThemeStatus = "draft" | "live";
 
-export type BackgroundKind = "picture" | "color" | "gradient" | "texture";
+export type BackgroundKind = "picture" | "color" | "gradient";
 
 export interface ThemeGradientStop {
   offset: number;

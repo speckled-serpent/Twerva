@@ -34,7 +34,7 @@ LIVE_GRADIENT_PAYLOAD_DETAIL: str = (
     "A live gradient theme requires a background gradient."
 )
 LIVE_ASSET_PAYLOAD_DETAIL: str = (
-    "A live picture or texture theme requires a background asset ref."
+    "A live picture theme requires a background asset ref."
 )
 
 
@@ -279,12 +279,7 @@ def require_live_background_payload(
     if background_kind == BackgroundKind.GRADIENT and background_gradient is None:
         raise ThemeBackgroundError(LIVE_GRADIENT_PAYLOAD_DETAIL)
 
-    asset_kinds: set[BackgroundKind] = {
-        BackgroundKind.PICTURE,
-        BackgroundKind.TEXTURE,
-    }
-
-    if background_kind in asset_kinds and background_asset_ref is None:
+    if background_kind == BackgroundKind.PICTURE and background_asset_ref is None:
         raise ThemeBackgroundError(LIVE_ASSET_PAYLOAD_DETAIL)
 
 

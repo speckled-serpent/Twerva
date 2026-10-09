@@ -18,6 +18,7 @@ THEMES_BACKGROUND_REVISION_ID: str = "themes_background"
 THEMES_CREATE_REVISION_ID: str = "themes_create"
 THEMES_STATUS_REVISION_ID: str = "themes_status"
 THEMES_SPACING_REVISION_ID: str = "themes_spacing"
+THEMES_DROP_TEXTURE_REVISION_ID: str = "themes_drop_texture"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -55,6 +56,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{THEME_ELEMENTS_REVISION_ID}.py",
                 f"{THEMES_BACKGROUND_REVISION_ID}.py",
                 f"{THEMES_CREATE_REVISION_ID}.py",
+                f"{THEMES_DROP_TEXTURE_REVISION_ID}.py",
                 f"{THEMES_SPACING_REVISION_ID}.py",
                 f"{THEMES_STATUS_REVISION_ID}.py",
             ],
@@ -374,6 +376,38 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertNotIn('"y"', revision_source)
         self.assertNotIn('"width"', revision_source)
         self.assertIn("DROP TYPE theme_element_band", revision_source)
+
+    def test_themes_drop_texture_follows_theme_elements(self) -> None:
+        """Texture rows become picture and keep their asset ref."""
+
+        assigned_values: dict[str, object] = _revision_module_constants(
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEMES_DROP_TEXTURE_REVISION_ID}.py",
+        )
+        revision_source: str = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEMES_DROP_TEXTURE_REVISION_ID}.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            THEMES_DROP_TEXTURE_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            THEME_ELEMENTS_REVISION_ID,
+        )
+        self.assertIn("SET background_kind = 'picture'", revision_source)
+        self.assertIn("WHERE background_kind = 'texture'", revision_source)
+        self.assertIn(
+            "('picture', 'color', 'gradient')",
+            revision_source,
+        )
+        self.assertNotIn("background_asset_ref = NULL", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

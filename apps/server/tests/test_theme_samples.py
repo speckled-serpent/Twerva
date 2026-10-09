@@ -164,38 +164,36 @@ class ThemeSampleTests(unittest.TestCase):
             self.assertFalse((storage / "theme-previews").exists())
             self.assertEqual(theme.status, ThemeStatus.DRAFT)
 
-    def test_missing_picture_and_texture_do_not_invent_a_fill(self) -> None:
+    def test_missing_picture_does_not_invent_a_fill(self) -> None:
         """A missing background file blocks and leaves the frame transparent."""
 
-        for background_kind in (BackgroundKind.PICTURE, BackgroundKind.TEXTURE):
-            with self.subTest(background_kind=background_kind):
-                with tempfile.TemporaryDirectory() as storage_directory:
-                    storage: Path = Path(storage_directory)
-                    theme: Theme = _theme_row(ThemeStatus.DRAFT)
-                    theme.background_kind = background_kind
-                    theme.background_color = None
-                    theme.background_asset_ref = "backgrounds/missing.png"
-                    source_item: SourceItem = _source_item(
-                        "Harbor light",
-                        SourceType.SPOTMU_INTEREST,
-                    )
-                    session: _SampleMemorySession
-                    response: ThemeSampleResponse
-                    session, response = _create_sample(theme, source_item, storage)
-                    preview_path: Path = _preview_path(
-                        storage,
-                        theme.id,
-                        response.preview_id,
-                    )
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage: Path = Path(storage_directory)
+            theme: Theme = _theme_row(ThemeStatus.DRAFT)
+            theme.background_kind = BackgroundKind.PICTURE
+            theme.background_color = None
+            theme.background_asset_ref = "backgrounds/missing.png"
+            source_item: SourceItem = _source_item(
+                "Harbor light",
+                SourceType.SPOTMU_INTEREST,
+            )
+            session: _SampleMemorySession
+            response: ThemeSampleResponse
+            session, response = _create_sample(theme, source_item, storage)
+            preview_path: Path = _preview_path(
+                storage,
+                theme.id,
+                response.preview_id,
+            )
 
-                    self.assertTrue(response.blocked)
-                    self.assertEqual(response.block_reason, "missing_asset")
-                    self.assertEqual(response.detail, "Background image file is missing.")
-                    self.assertEqual(response.overlaps, [])
-                    self.assertTrue(preview_path.is_file())
-                    self.assertEqual(_pixel(preview_path, 0, 0), (0, 0, 0, 0))
-                    self.assertEqual(theme.status, ThemeStatus.DRAFT)
-                    self._assert_no_artifact_or_post_job(session)
+            self.assertTrue(response.blocked)
+            self.assertEqual(response.block_reason, "missing_asset")
+            self.assertEqual(response.detail, "Background image file is missing.")
+            self.assertEqual(response.overlaps, [])
+            self.assertTrue(preview_path.is_file())
+            self.assertEqual(_pixel(preview_path, 0, 0), (0, 0, 0, 0))
+            self.assertEqual(theme.status, ThemeStatus.DRAFT)
+            self._assert_no_artifact_or_post_job(session)
 
     def test_gradient_runs_from_the_first_stop(self) -> None:
         """0° puts the first stop at the bottom. 90° puts it at the left."""
@@ -261,39 +259,37 @@ class ThemeSampleTests(unittest.TestCase):
                     self._assert_no_artifact_or_post_job(session)
 
     def test_picture_background_scales_to_fill(self) -> None:
-        """Picture and texture cover the frame with the file. They do not tile a gap."""
+        """A picture covers the frame with the file. It does not tile a gap."""
 
-        for background_kind in (BackgroundKind.PICTURE, BackgroundKind.TEXTURE):
-            with self.subTest(background_kind=background_kind):
-                with tempfile.TemporaryDirectory() as storage_directory:
-                    storage: Path = Path(storage_directory)
-                    _solid_png(storage / "backgrounds" / "red.png", 8, 4, (255, 0, 0))
-                    theme: Theme = _theme_row(ThemeStatus.DRAFT)
-                    theme.background_kind = background_kind
-                    theme.background_color = DEFAULT_BACKGROUND_COLOR
-                    theme.background_asset_ref = "backgrounds/red.png"
-                    source_item: SourceItem = _source_item(
-                        "Harbor light",
-                        SourceType.SPOTMU_INTEREST,
-                    )
-                    response: ThemeSampleResponse
-                    _, response = _create_sample(theme, source_item, storage)
-                    preview_path: Path = _preview_path(
-                        storage,
-                        theme.id,
-                        response.preview_id,
-                    )
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage: Path = Path(storage_directory)
+            _solid_png(storage / "backgrounds" / "red.png", 8, 4, (255, 0, 0))
+            theme: Theme = _theme_row(ThemeStatus.DRAFT)
+            theme.background_kind = BackgroundKind.PICTURE
+            theme.background_color = DEFAULT_BACKGROUND_COLOR
+            theme.background_asset_ref = "backgrounds/red.png"
+            source_item: SourceItem = _source_item(
+                "Harbor light",
+                SourceType.SPOTMU_INTEREST,
+            )
+            response: ThemeSampleResponse
+            _, response = _create_sample(theme, source_item, storage)
+            preview_path: Path = _preview_path(
+                storage,
+                theme.id,
+                response.preview_id,
+            )
 
-                    self.assertFalse(response.blocked)
-                    self.assertEqual(_pixel(preview_path, 0, 0), (255, 0, 0, 255))
-                    self.assertEqual(
-                        _pixel(
-                            preview_path,
-                            THEME_FRAME_WIDTH_PIXELS - 1,
-                            THEME_FRAME_HEIGHT_PIXELS - 1,
-                        ),
-                        (255, 0, 0, 255),
-                    )
+            self.assertFalse(response.blocked)
+            self.assertEqual(_pixel(preview_path, 0, 0), (255, 0, 0, 255))
+            self.assertEqual(
+                _pixel(
+                    preview_path,
+                    THEME_FRAME_WIDTH_PIXELS - 1,
+                    THEME_FRAME_HEIGHT_PIXELS - 1,
+                ),
+                (255, 0, 0, 255),
+            )
 
     def test_image_element_is_drawn_and_clear_rectangle_is_not_filled(self) -> None:
         """A PNG fills its content box. A null rectangle color leaves the background."""
