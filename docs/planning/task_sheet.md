@@ -182,7 +182,7 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 **Storage lock for MVP:** `ARTIFACT_STORAGE_DIR` (default `/opt/twerva/artifacts` on server, local `./data/artifacts` in README). `slides[].asset_ref` = relative path under that dir. Revisit S3 when volume or multi-host needs it.
 
 #### 1.4a — Template spec
-- [x] **1.4a-i** Write `docs/planning/carousel_template_v1.md`: slide roles (`cover`, `heading`, `bullet`, `cta`), canvas size (lock **1080×1080** IG-friendly unless spike says otherwise), typography/color tokens (calm, text-led; cite Spotmu palette lightly or neutrals), CTA rules (`cta_url` = source `canonical_url` or `https://spotmu.com/interest/{slug}`).
+- [x] **1.4a-i** Write `docs/planning/carousel_template_v1.md`: slide roles (`cover`, `heading`, `bullet`, `cta`), canvas size (lock **1080×1920**, the theme frame), typography/color tokens (calm, text-led; cite Spotmu palette lightly or neutrals), CTA rules (`cta_url` = source `canonical_url` or `https://spotmu.com/interest/{slug}`).
 - [x] **1.4a-ii** Caption/hashtag rules: short caption from title/heading + 3–8 generic/safe hashtags; no scraped spam tags.
 - [x] **1.4a-iii** Bullet slide policy: 1 bullet per slide (or max N chars); overflow → extra slides; empty bullets skipped.
 

@@ -1,7 +1,8 @@
 """Named Spotmu carousel templates (internal, restricted set).
 
-Phase 1–2: Spotmu-only variants that share the 1080×1080 text-led rules
-in `docs/planning/carousel_template_v1.md`. No freeform brand designer.
+Phase 1–2: Spotmu-only variants that share the 1080×1920 text-led rules
+in `docs/planning/carousel_template_v1.md`. The canvas is the theme frame.
+No freeform brand designer.
 """
 
 from __future__ import annotations
@@ -9,13 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.generate.errors import CarouselUnknownTemplateError
+from app.themes.layout import THEME_FRAME_HEIGHT_PIXELS, THEME_FRAME_WIDTH_PIXELS
 
 
 TEMPLATE_ID_SPOTMU_PAPER_V1: str = "spotmu_paper_v1"
 TEMPLATE_ID_SPOTMU_BOLD_V1: str = "spotmu_bold_v1"
 DEFAULT_CAROUSEL_TEMPLATE_ID: str = TEMPLATE_ID_SPOTMU_PAPER_V1
-CANVAS_WIDTH_PIXELS: int = 1080
-CANVAS_HEIGHT_PIXELS: int = 1080
+CANVAS_WIDTH_PIXELS: int = THEME_FRAME_WIDTH_PIXELS
+CANVAS_HEIGHT_PIXELS: int = THEME_FRAME_HEIGHT_PIXELS
 
 
 @dataclass(frozen=True)
@@ -45,8 +47,8 @@ SPOTMU_PAPER_V1: CarouselTemplate = CarouselTemplate(
     color_muted="#57534E",
     color_accent="#0F766E",
     color_rule="#D6D3D1",
-    accent_rule_width_pixels=120,
-    accent_rule_height_pixels=4,
+    accent_rule_width_pixels=220,
+    accent_rule_height_pixels=8,
     left_edge_stripe_width_pixels=0,
     body_align_center=True,
 )
@@ -59,8 +61,8 @@ SPOTMU_BOLD_V1: CarouselTemplate = CarouselTemplate(
     color_muted="#A8A29E",
     color_accent="#2DD4BF",
     color_rule="#44403C",
-    accent_rule_width_pixels=280,
-    accent_rule_height_pixels=12,
+    accent_rule_width_pixels=480,
+    accent_rule_height_pixels=18,
     left_edge_stripe_width_pixels=20,
     body_align_center=False,
 )
