@@ -294,7 +294,7 @@ class DomainEnumTests(unittest.TestCase):
 
         self.assertEqual(
             {member.value for member in BackgroundKind},
-            {"picture", "color", "gradient", "texture"},
+            {"picture", "color", "gradient"},
         )
         kind_column: Column[object] = Theme.__table__.columns["background_kind"]
         color_column: Column[object] = Theme.__table__.columns["background_color"]

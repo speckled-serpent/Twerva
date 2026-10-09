@@ -588,7 +588,7 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
     """Each background kind round-trips. Live color needs a hex. Draft picture may be empty."""
 
     def test_each_kind_round_trips(self) -> None:
-        """Color, gradient, picture, and texture survive PATCH and GET."""
+        """Color, gradient, and picture survive PATCH and GET."""
 
         created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
         paper_theme: Theme = _theme_row(
@@ -654,20 +654,20 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
         self.assertEqual(picture_theme.background_kind, BackgroundKind.PICTURE)
         self.assertEqual(picture_theme.background_asset_ref, "backgrounds/harbor.png")
 
-        self._patch(
-            paper_theme,
-            fake_session,
-            ThemePatchRequest(
-                background_kind=BackgroundKind.TEXTURE,
-                background_asset_ref="textures/grain.jpeg",
-            ),
-        )
-        texture_theme: ThemeReadResponse = get_theme_by_id(
-            paper_theme.id,
-            fake_session,
-        )
-        self.assertEqual(texture_theme.background_kind, BackgroundKind.TEXTURE)
-        self.assertEqual(texture_theme.background_asset_ref, "textures/grain.jpeg")
+    def test_texture_kind_is_rejected_on_write(self) -> None:
+        """Create and patch refuse background kind texture."""
+
+        with self.assertRaises(ValidationError):
+            ThemePatchRequest.model_validate({"background_kind": "texture"})
+
+        with self.assertRaises(ValidationError):
+            ThemeCreateRequest.model_validate(
+                {
+                    "name": "Grain",
+                    "background_kind": "texture",
+                    "background_asset_ref": "textures/grain.jpeg",
+                },
+            )
 
     def test_live_color_with_blank_color_is_rejected(self) -> None:
         """A Live color theme cannot clear its color, including by becoming Live."""

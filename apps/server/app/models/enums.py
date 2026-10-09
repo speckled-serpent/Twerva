@@ -117,12 +117,15 @@ class ThemeStatus(enum.StrEnum):
 
 
 class BackgroundKind(enum.StrEnum):
-    """The one background on a Theme. Picture, color, gradient, or texture."""
+    """The one background on a Theme. Picture, color, or gradient.
+
+    Texture is dropped for now. It may return later as a default album
+    of texture images.
+    """
 
     PICTURE = "picture"
     COLOR = "color"
     GRADIENT = "gradient"
-    TEXTURE = "texture"
 
 
 class ThemeElementBand(enum.StrEnum):

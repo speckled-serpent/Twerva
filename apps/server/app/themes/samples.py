@@ -110,10 +110,10 @@ def render_theme_sample(
     """Resolve, measure, place, overlap-check, and draw one frame.
 
     The background fills the frame first: a solid color, a linear
-    gradient, or a picture or texture scaled to cover (no tiling). Each
+    gradient, or a picture scaled to cover (no tiling). Each
     element rectangle is drawn next, skipping the fill when
     ``rectangle_color`` is null, then its text or image. Overlap still
-    produces a PNG. A missing picture, texture, or image file does not
+    produces a PNG. A missing picture or image file does not
     invent a fill.
 
     Args:
@@ -341,7 +341,7 @@ def _draw_background(
     theme: Theme,
     resolved_storage_directory: Path,
 ) -> tuple[ThemeSampleBlockReason, str] | None:
-    """Fill the frame. A missing picture or texture leaves it transparent."""
+    """Fill the frame. A missing picture leaves it transparent."""
 
     if theme.background_kind == BackgroundKind.COLOR:
 
@@ -351,7 +351,7 @@ def _draw_background(
 
         return _draw_gradient_background(canvas, theme.background_gradient)
 
-    if theme.background_kind == BackgroundKind.PICTURE or theme.background_kind == BackgroundKind.TEXTURE:
+    if theme.background_kind == BackgroundKind.PICTURE:
 
         return _draw_asset_background(
             canvas,
@@ -428,7 +428,7 @@ def _draw_asset_background(
     background_asset_ref: str | None,
     resolved_storage_directory: Path,
 ) -> tuple[ThemeSampleBlockReason, str] | None:
-    """Scale a picture or texture to cover the frame. Do not tile."""
+    """Scale a picture to cover the frame. Do not tile."""
 
     if background_asset_ref is None or background_asset_ref.strip() == "":
 

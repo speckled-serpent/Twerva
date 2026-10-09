@@ -253,7 +253,7 @@ styling for carousels. Short video is not implemented. The table reuses
 | Enum | Values |
 |---|---|
 | `theme_status` | `draft`, `live` |
-| `background_kind` | `picture`, `color`, `gradient`, `texture` |
+| `background_kind` | `picture`, `color`, `gradient`. Texture is dropped for now and may return as a default album of texture images. |
 
 | Column | Notes |
 |---|---|
@@ -294,8 +294,8 @@ background columns; omitted fields stay as they are. Zero is allowed.
 A negative spacing value is HTTP 400 and does not write. A Draft may
 save a background kind with that kind's payload still empty. A row
 that is Live after the patch requires the payload for its kind: a
-color hex, a valid gradient, or a non-empty asset ref for `picture`
-and `texture`. Readers may
+color hex, a valid gradient, or a non-empty asset ref for `picture`.
+Readers may
 `GET /api/v1/themes` and `/api/v1/themes/{id}`; writes, including
 `PATCH`, stay admin-only via the existing ops RBAC gate
 (`require_authenticated_ops_operator` plus the reader mutation check).

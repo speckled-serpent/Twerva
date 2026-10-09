@@ -44,7 +44,6 @@ const BACKGROUND_KIND_OPTIONS: { value: BackgroundKind; label: string }[] = [
   { value: "color", label: "Color" },
   { value: "gradient", label: "Gradient" },
   { value: "picture", label: "Picture" },
-  { value: "texture", label: "Texture" },
 ];
 
 /**
@@ -145,27 +144,6 @@ export function ThemeFrameFields({
             });
           }}
         />
-      ) : null}
-      {frameDraft.backgroundKind === "texture" ? (
-        <label>
-          Background asset ref
-          <input
-            value={frameDraft.backgroundAssetRef}
-            onChange={(changeEvent): void => {
-              onDraftChange({
-                ...frameDraft,
-                backgroundAssetRef: changeEvent.target.value,
-              });
-            }}
-            placeholder="backgrounds/paper.png"
-            spellCheck={false}
-          />
-        </label>
-      ) : null}
-      {frameDraft.backgroundKind === "texture" ? (
-        <p className="field-hint">
-          Relative path ending in .svg, .png, .jpg, or .jpeg. No file upload.
-        </p>
       ) : null}
       <label>
         Page margin
@@ -634,6 +612,5 @@ function isBackgroundKind(value: string): value is BackgroundKind {
     value === "picture"
     || value === "color"
     || value === "gradient"
-    || value === "texture"
   );
 }
