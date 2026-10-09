@@ -245,9 +245,11 @@ td {
 
 .slide-preview-thumb {
   display: block;
-  width: 96px;
-  height: 96px;
-  object-fit: cover;
+  width: 84px;
+  height: auto;
+  aspect-ratio: 1080 / 1920;
+  object-fit: contain;
+  background: #fff;
 }
 
 .theme-editor-layout {
@@ -298,6 +300,8 @@ td {
   display: block;
   width: 100%;
   height: auto;
+  aspect-ratio: 1080 / 1920;
+  object-fit: contain;
 }
 
 .sample-preview figcaption {

@@ -33,7 +33,7 @@ class ThemeOverlapTests(unittest.TestCase):
     def test_tall_top_intersecting_middle_is_blocked_without_moving(self) -> None:
         """A top element that runs through middle blocks that instance.
 
-        Placement stays put: top at 96, middle centered at 490. Middle is
+        Placement stays put: top at 96, middle centered at 910. Middle is
         not moved below the top.
         """
 
@@ -42,7 +42,7 @@ class ThemeOverlapTests(unittest.TestCase):
                 element_id=TOP_ID,
                 band=ThemeElementBand.TOP,
                 sort_order=0,
-                content_height=700,
+                content_height=900,
             ),
             LayoutElement(
                 element_id=MIDDLE_ID,
@@ -89,8 +89,8 @@ class ThemeOverlapTests(unittest.TestCase):
         self.assertEqual(_element_y(placed_elements, MIDDLE_ID), middle_y_before)
         self.assertEqual(_element_y(placed_elements, BOTTOM_ID), bottom_y_before)
         self.assertEqual(top_y_before, 96)
-        self.assertEqual(middle_y_before, 490)
-        self.assertEqual(bottom_y_before, 934)
+        self.assertEqual(middle_y_before, 910)
+        self.assertEqual(bottom_y_before, 1774)
 
     def test_edge_touching_pair_is_allowed(self) -> None:
         """Sharing the edge between top and middle is not an overlap."""
@@ -127,7 +127,7 @@ class ThemeOverlapTests(unittest.TestCase):
                 element_id=TOP_ID,
                 band=ThemeElementBand.TOP,
                 sort_order=0,
-                content_height=700,
+                content_height=900,
             ),
             LayoutElement(
                 element_id=MIDDLE_ID,

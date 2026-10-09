@@ -27,6 +27,12 @@ BOTTOM_SECOND_ID: uuid.UUID = uuid.UUID("00000000-0000-4000-8000-000000000022")
 class ThemeLayoutTests(unittest.TestCase):
     """Top from the top, bottom from the bottom, middle centered as a group."""
 
+    def test_frame_is_phone_portrait(self) -> None:
+        """Theme frames are 1080 wide by 1920 tall. Callers share these constants."""
+
+        self.assertEqual(THEME_FRAME_WIDTH_PIXELS, 1080)
+        self.assertEqual(THEME_FRAME_HEIGHT_PIXELS, 1920)
+
     def test_single_top_element(self) -> None:
         """One top element starts at the page margin and spans the content width.
 
@@ -49,7 +55,7 @@ class ThemeLayoutTests(unittest.TestCase):
             [top_element],
         )
         expected_layout: ThemeLayout = ThemeLayout(
-            content_area=ContentArea(x=96, y=96, width=888, height=888),
+            content_area=ContentArea(x=96, y=96, width=888, height=1728),
             rectangles=(
                 LayoutRectangle(
                     element_id=TOP_FIRST_ID,
@@ -92,7 +98,7 @@ class ThemeLayoutTests(unittest.TestCase):
             input_elements,
         )
         expected_layout: ThemeLayout = ThemeLayout(
-            content_area=ContentArea(x=96, y=96, width=888, height=888),
+            content_area=ContentArea(x=96, y=96, width=888, height=1728),
             rectangles=(
                 LayoutRectangle(
                     element_id=TOP_FIRST_ID,
@@ -148,19 +154,19 @@ class ThemeLayoutTests(unittest.TestCase):
             [upper_element, lowest_element],
         )
         expected_layout: ThemeLayout = ThemeLayout(
-            content_area=ContentArea(x=96, y=96, width=888, height=888),
+            content_area=ContentArea(x=96, y=96, width=888, height=1728),
             rectangles=(
                 LayoutRectangle(
                     element_id=BOTTOM_FIRST_ID,
                     x=96,
-                    y=924,
+                    y=1764,
                     width=888,
                     height=60,
                 ),
                 LayoutRectangle(
                     element_id=BOTTOM_SECOND_ID,
                     x=96,
-                    y=824,
+                    y=1664,
                     width=888,
                     height=80,
                 ),
@@ -180,8 +186,8 @@ class ThemeLayoutTests(unittest.TestCase):
         """The middle block is centered, and the odd leftover pixel goes below it.
 
         Heights 28, 38, and 49 plus two gaps of 10 make a block of 135.
-        Content height 888 leaves 753 pixels. Floor division puts 376
-        above the block and 377 below it, so the block top is 472.
+        Content height 1728 leaves 1593 pixels. Floor division puts 796
+        above the block and 797 below it, so the block top is 892.
         That is not the position that would center the first or last element.
         """
 
@@ -214,26 +220,26 @@ class ThemeLayoutTests(unittest.TestCase):
             middle_elements,
         )
         expected_layout: ThemeLayout = ThemeLayout(
-            content_area=ContentArea(x=96, y=96, width=888, height=888),
+            content_area=ContentArea(x=96, y=96, width=888, height=1728),
             rectangles=(
                 LayoutRectangle(
                     element_id=MIDDLE_FIRST_ID,
                     x=96,
-                    y=472,
+                    y=892,
                     width=888,
                     height=28,
                 ),
                 LayoutRectangle(
                     element_id=MIDDLE_SECOND_ID,
                     x=96,
-                    y=510,
+                    y=930,
                     width=888,
                     height=38,
                 ),
                 LayoutRectangle(
                     element_id=MIDDLE_THIRD_ID,
                     x=96,
-                    y=558,
+                    y=978,
                     width=888,
                     height=49,
                 ),
@@ -251,8 +257,8 @@ class ThemeLayoutTests(unittest.TestCase):
         last_only_y: int = content_center - (last_rectangle.height // 2)
 
         self.assertEqual(placed_layout, expected_layout)
-        self.assertEqual(space_above, 376)
-        self.assertEqual(space_below, 377)
+        self.assertEqual(space_above, 796)
+        self.assertEqual(space_below, 797)
         self.assertNotEqual(first_rectangle.y, first_only_y)
         self.assertNotEqual(last_rectangle.y, last_only_y)
         self._assert_layout_uses_ints(placed_layout)
@@ -275,12 +281,12 @@ class ThemeLayoutTests(unittest.TestCase):
             [middle_element],
         )
         expected_layout: ThemeLayout = ThemeLayout(
-            content_area=ContentArea(x=96, y=96, width=888, height=888),
+            content_area=ContentArea(x=96, y=96, width=888, height=1728),
             rectangles=(
                 LayoutRectangle(
                     element_id=MIDDLE_FIRST_ID,
                     x=96,
-                    y=490,
+                    y=910,
                     width=888,
                     height=100,
                 ),
@@ -303,7 +309,7 @@ class ThemeLayoutTests(unittest.TestCase):
             [],
         )
         expected_layout: ThemeLayout = ThemeLayout(
-            content_area=ContentArea(x=100, y=100, width=880, height=880),
+            content_area=ContentArea(x=100, y=100, width=880, height=1720),
             rectangles=(),
         )
 
@@ -314,7 +320,7 @@ class ThemeLayoutTests(unittest.TestCase):
         """A tall top element does not push middle or bottom.
 
         The top rectangle runs from 96 to 796. Middle stays at the group
-        center (490) instead of moving below that top. Bottom stays
+        center (910) instead of moving below that top. Bottom stays
         page-margin up from the frame bottom.
         """
 
@@ -347,7 +353,7 @@ class ThemeLayoutTests(unittest.TestCase):
             elements,
         )
         expected_layout: ThemeLayout = ThemeLayout(
-            content_area=ContentArea(x=96, y=96, width=888, height=888),
+            content_area=ContentArea(x=96, y=96, width=888, height=1728),
             rectangles=(
                 LayoutRectangle(
                     element_id=TOP_FIRST_ID,
@@ -359,14 +365,14 @@ class ThemeLayoutTests(unittest.TestCase):
                 LayoutRectangle(
                     element_id=MIDDLE_FIRST_ID,
                     x=96,
-                    y=490,
+                    y=910,
                     width=888,
                     height=100,
                 ),
                 LayoutRectangle(
                     element_id=BOTTOM_FIRST_ID,
                     x=96,
-                    y=934,
+                    y=1774,
                     width=888,
                     height=50,
                 ),

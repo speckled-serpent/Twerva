@@ -39,6 +39,7 @@ from app.models.theme import (
     DEFAULT_ELEMENT_MARGIN,
     DEFAULT_PAGE_MARGIN,
 )
+from app.themes.layout import THEME_FRAME_HEIGHT_PIXELS, THEME_FRAME_WIDTH_PIXELS
 
 
 PAPER: tuple[int, int, int, int] = (0xF6, 0xF1, 0xE8, 255)
@@ -49,7 +50,7 @@ class ThemeSampleTests(unittest.TestCase):
     """Samples write a preview PNG and leave artifacts, post jobs, and status alone."""
 
     def test_draft_color_preview_writes_png_without_artifact_or_post_job(self) -> None:
-        """A Spotmu draft writes one 1080 preview and no artifact or post job."""
+        """A Spotmu draft writes one 1080×1920 preview and no artifact or post job."""
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
@@ -78,7 +79,7 @@ class ThemeSampleTests(unittest.TestCase):
             self._assert_no_artifact_or_post_job(session)
             preview_path: Path = _preview_path(storage, theme.id, response.preview_id)
             self.assertTrue(preview_path.is_file())
-            self.assertEqual(_image_size(preview_path), (1080, 1080))
+            self.assertEqual(_image_size(preview_path), (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self.assertEqual(_pixel(preview_path, 0, 0), PAPER)
             self.assertTrue(_has_different_pixel(preview_path, PAPER, 96, 96, 500, 220))
             image_response: FileResponse = _get_image(
@@ -133,7 +134,7 @@ class ThemeSampleTests(unittest.TestCase):
             preview_path: Path = _preview_path(storage, theme.id, response.preview_id)
 
             self.assertTrue(preview_path.is_file())
-            self.assertEqual(_image_size(preview_path), (1080, 1080))
+            self.assertEqual(_image_size(preview_path), (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self.assertEqual(_pixel(preview_path, 0, 0), PAPER)
 
     def test_non_spotmu_source_is_400_and_writes_no_file(self) -> None:
@@ -203,8 +204,20 @@ class ThemeSampleTests(unittest.TestCase):
             tuple[float, tuple[int, int], tuple[int, int], tuple[int, int, int, int], tuple[int, int, int, int]],
             ...,
         ] = (
-            (90, (0, 540), (1079, 540), (255, 0, 0, 255), (0, 0, 255, 255)),
-            (0, (540, 1079), (540, 0), (255, 0, 0, 255), (0, 0, 255, 255)),
+            (
+                90,
+                (0, THEME_FRAME_HEIGHT_PIXELS // 2),
+                (THEME_FRAME_WIDTH_PIXELS - 1, THEME_FRAME_HEIGHT_PIXELS // 2),
+                (255, 0, 0, 255),
+                (0, 0, 255, 255),
+            ),
+            (
+                0,
+                (THEME_FRAME_WIDTH_PIXELS // 2, THEME_FRAME_HEIGHT_PIXELS - 1),
+                (THEME_FRAME_WIDTH_PIXELS // 2, 0),
+                (255, 0, 0, 255),
+                (0, 0, 255, 255),
+            ),
         )
 
         for angle_deg, start_pixel, end_pixel, start_color, end_color in cases:
@@ -273,7 +286,14 @@ class ThemeSampleTests(unittest.TestCase):
 
                     self.assertFalse(response.blocked)
                     self.assertEqual(_pixel(preview_path, 0, 0), (255, 0, 0, 255))
-                    self.assertEqual(_pixel(preview_path, 1079, 1079), (255, 0, 0, 255))
+                    self.assertEqual(
+                        _pixel(
+                            preview_path,
+                            THEME_FRAME_WIDTH_PIXELS - 1,
+                            THEME_FRAME_HEIGHT_PIXELS - 1,
+                        ),
+                        (255, 0, 0, 255),
+                    )
 
     def test_image_element_is_drawn_and_clear_rectangle_is_not_filled(self) -> None:
         """A PNG fills its content box. A null rectangle color leaves the background."""

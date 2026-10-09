@@ -15,7 +15,11 @@ import type {
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
-import { ThemeElementEditor } from "./ThemeElementEditor";
+import {
+  ThemeElementEditor,
+  previewElementStateFromElements,
+  type ThemePreviewElementState,
+} from "./ThemeElementEditor";
 import { ThemeLivePreview } from "./ThemeLivePreview";
 import {
   ThemeFrameFields,
@@ -338,6 +342,10 @@ function ThemeListView({
   );
 }
 
+interface ThemePreviewReport extends ThemePreviewElementState {
+  themeId: string;
+}
+
 interface ThemeDetailViewProps {
   selectedTheme: ThemeReadResponse | null;
   loadError: unknown;
@@ -358,10 +366,7 @@ function ThemeDetailView({
 
   const canWrite: boolean = useCanWriteOps();
   const [editedDraft, setEditedDraft] = useState<ThemeFrameDraft | null>(null);
-  const [previewElements, setPreviewElements] = useState<ThemeElementCreateRequest[] | null>(
-    null,
-  );
-  const [previewDraftError, setPreviewDraftError] = useState<string | null>(null);
+  const [previewReport, setPreviewReport] = useState<ThemePreviewReport | null>(null);
   const [editedForKey, setEditedForKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
@@ -376,6 +381,16 @@ function ThemeDetailView({
     editedForKey,
   );
   const visibleSaveMessage: string = saveMessageKey === themeKey ? saveMessage : "";
+  const savedPreview: ThemePreviewElementState | null = selectedTheme === null
+    ? null
+    : previewElementStateFromElements(selectedTheme.elements);
+  const activePreview: ThemePreviewElementState | null = (
+    previewReport !== null
+    && selectedTheme !== null
+    && previewReport.themeId === selectedTheme.id
+  )
+    ? previewReport
+    : savedPreview;
   const fieldsDisabled: boolean = !canWrite || isBusy || isDuplicating;
   const duplicateDisabled: boolean = !canWrite || isBusy || isDuplicating || selectedTheme === null;
 
@@ -517,15 +532,22 @@ function ThemeDetailView({
               elements: ThemeElementCreateRequest[] | null,
               draftError: string | null,
             ): void => {
-              setPreviewElements(elements);
-              setPreviewDraftError(draftError);
+              if (selectedTheme === null) {
+                return;
+              }
+
+              setPreviewReport({
+                themeId: selectedTheme.id,
+                elements,
+                draftError,
+              });
             }}
           />
           </div>
             <ThemeLivePreview
               frameDraft={frameDraft}
-              elements={previewElements}
-              draftError={previewDraftError}
+              elements={activePreview === null ? null : activePreview.elements}
+              draftError={activePreview === null ? null : activePreview.draftError}
             />
           </div>
         </>

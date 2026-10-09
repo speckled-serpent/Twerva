@@ -182,7 +182,7 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 **Storage lock for MVP:** `ARTIFACT_STORAGE_DIR` (default `/opt/twerva/artifacts` on server, local `./data/artifacts` in README). `slides[].asset_ref` = relative path under that dir. Revisit S3 when volume or multi-host needs it.
 
 #### 1.4a — Template spec
-- [x] **1.4a-i** Write `docs/planning/carousel_template_v1.md`: slide roles (`cover`, `heading`, `bullet`, `cta`), canvas size (lock **1080×1080** IG-friendly unless spike says otherwise), typography/color tokens (calm, text-led; cite Spotmu palette lightly or neutrals), CTA rules (`cta_url` = source `canonical_url` or `https://spotmu.com/interest/{slug}`).
+- [x] **1.4a-i** Write `docs/planning/carousel_template_v1.md`: slide roles (`cover`, `heading`, `bullet`, `cta`), canvas size (lock **1080×1920**, the theme frame), typography/color tokens (calm, text-led; cite Spotmu palette lightly or neutrals), CTA rules (`cta_url` = source `canonical_url` or `https://spotmu.com/interest/{slug}`).
 - [x] **1.4a-ii** Caption/hashtag rules: short caption from title/heading + 3–8 generic/safe hashtags; no scraped spam tags.
 - [x] **1.4a-iii** Bullet slide policy: 1 bullet per slide (or max N chars); overflow → extra slides; empty bullets skipped.
 
@@ -360,7 +360,7 @@ Compare options; write a short lock decision; prefer the cheapest reliable path.
 
 **Storage note:** a picture, a texture, and an image element store a **reference** only (`background_asset_ref` / `image_asset_ref`): a relative path, same idea as `slides[].asset_ref`. No new bucket. Sample render may read a file that is already under `ARTIFACT_STORAGE_DIR`. It does not grow an upload pipeline.
 
-**Canvas for this section:** **1080×1080**, the lock in `carousel_template_v1.md`. Do not add a per-theme size column.
+**Canvas for this section:** **1080×1920**. Do not add a per-theme size column.
 
 #### 1.10a — Persist the frame
 
@@ -384,7 +384,7 @@ New Alembic revision after `themes_create`. Do not edit `themes_create`. Native 
 
 #### 1.10d — Layout math
 
-- [x] **1.10d-i** Pure function in `apps/server/app/themes/layout.py`. Input: the 1080×1080 frame, the three spacing ints, and elements that already have a content height, grouped by band and `sort_order`. Output: integer rectangles `{element_id, x, y, width, height}` plus the content area. Content area is the frame inset by `page_margin` on every edge; element `x` is that left edge and element width is that width. Element height = content height + `element_margin` above + `element_margin` below. `element_gap` sits between rectangles in the same band only (not before the first, not after the last, not inside page margin). **Top:** first element’s top is `page_margin` down from the frame top; later top elements stack downward. **Bottom:** the first element is the lowest, its bottom `page_margin` up from the frame bottom; later bottom elements stack upward. **Middle:** one block whose height is the sum of the middle heights plus gap between them; place it so its center is the vertical center of the content area. An odd leftover pixel goes below the block (`top = content_top + floor((content_height - block_height) / 2)`). Do not center only the first or last middle element. An empty band adds no rectangles. Zero elements returns no rectangles and is valid. **Done when:** unit tests cover a single top element, two top elements with gap only between them, two bottom elements stacking upward, three middle elements centered as a group, a one-band theme, and zero elements. **Out of scope:** font measurement, image bytes, overlap policy, PNG files, pushing another band.
+- [x] **1.10d-i** Pure function in `apps/server/app/themes/layout.py`. Input: the 1080×1920 frame, the three spacing ints, and elements that already have a content height, grouped by band and `sort_order`. Output: integer rectangles `{element_id, x, y, width, height}` plus the content area. Content area is the frame inset by `page_margin` on every edge; element `x` is that left edge and element width is that width. Element height = content height + `element_margin` above + `element_margin` below. `element_gap` sits between rectangles in the same band only (not before the first, not after the last, not inside page margin). **Top:** first element’s top is `page_margin` down from the frame top; later top elements stack downward. **Bottom:** the first element is the lowest, its bottom `page_margin` up from the frame bottom; later bottom elements stack upward. **Middle:** one block whose height is the sum of the middle heights plus gap between them; place it so its center is the vertical center of the content area. An odd leftover pixel goes below the block (`top = content_top + floor((content_height - block_height) / 2)`). Do not center only the first or last middle element. An empty band adds no rectangles. Zero elements returns no rectangles and is valid. **Done when:** unit tests cover a single top element, two top elements with gap only between them, two bottom elements stacking upward, three middle elements centered as a group, a one-band theme, and zero elements. **Out of scope:** font measurement, image bytes, overlap policy, PNG files, pushing another band.
 
 #### 1.10e — Measure text and images
 

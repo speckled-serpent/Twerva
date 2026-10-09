@@ -53,13 +53,17 @@ ROLE_LABELS: dict[str, str] = {
     SLIDE_ROLE_CTA: "CONTINUE",
 }
 BODY_FONT_SIZES: dict[str, int] = {
-    SLIDE_ROLE_COVER: 64,
-    SLIDE_ROLE_HEADING: 56,
-    SLIDE_ROLE_BULLET: 48,
-    SLIDE_ROLE_CTA: 44,
+    SLIDE_ROLE_COVER: 112,
+    SLIDE_ROLE_HEADING: 80,
+    SLIDE_ROLE_BULLET: 56,
+    SLIDE_ROLE_CTA: 48,
 }
-LABEL_FONT_SIZE: int = 22
-FOOTER_FONT_SIZE: int = 20
+LABEL_FONT_SIZE: int = 28
+FOOTER_FONT_SIZE: int = 24
+HEADER_RULE_OFFSET_PIXELS: int = 72
+BODY_GAP_BELOW_RULE_PIXELS: int = 80
+BODY_GAP_ABOVE_HAIRLINE_PIXELS: int = 80
+FOOTER_HAIRLINE_GAP_PIXELS: int = 64
 SYSTEM_REGULAR_FONT_PATHS: tuple[str, ...] = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -169,7 +173,7 @@ def render_carousel_slide_png_bytes(
     slide_count: int,
     carousel_template: CarouselTemplate | None = None,
 ) -> bytes:
-    """Draw one 1080×1080 text-led slide and return PNG bytes.
+    """Draw one 1080×1920 text-led slide and return PNG bytes.
 
     Args:
         planned_slide: Role and body copy.
@@ -266,7 +270,7 @@ def _draw_accent_rule(
 ) -> None:
     """Paint an accent bar under the role label."""
 
-    rule_top: int = SAFE_INSET_PIXELS + 48
+    rule_top: int = SAFE_INSET_PIXELS + HEADER_RULE_OFFSET_PIXELS
     rule_bottom: int = rule_top + carousel_template.accent_rule_height_pixels
     rule_right: int = SAFE_INSET_PIXELS + carousel_template.accent_rule_width_pixels
     canvas_draw.rectangle(
@@ -292,7 +296,12 @@ def _draw_body_text(
     )
     line_height: int = _measure_line_height(body_font, canvas_draw)
     block_height: int = line_height * len(wrapped_lines)
-    block_top: int = (CANVAS_HEIGHT_PIXELS - block_height) // 2
+    rule_bottom: int = (
+        SAFE_INSET_PIXELS
+        + HEADER_RULE_OFFSET_PIXELS
+        + carousel_template.accent_rule_height_pixels
+    )
+    block_top: int = _body_block_top(block_height, rule_bottom)
     line_top: int = block_top
 
     for wrapped_line in wrapped_lines:
@@ -320,9 +329,15 @@ def _draw_slide_footer(
     slide_count: int,
     carousel_template: CarouselTemplate,
 ) -> None:
-    """Paint the spotmu.com mark and slide counter."""
+    """Paint a footer hairline, the spotmu.com mark, and the slide counter."""
 
     footer_top: int = CANVAS_HEIGHT_PIXELS - SAFE_INSET_PIXELS
+    hairline_top: int = footer_top - FOOTER_HAIRLINE_GAP_PIXELS
+    hairline_right: int = CANVAS_WIDTH_PIXELS - SAFE_INSET_PIXELS
+    canvas_draw.rectangle(
+        (SAFE_INSET_PIXELS, hairline_top, hairline_right, hairline_top + 2),
+        fill=carousel_template.color_rule,
+    )
     canvas_draw.text(
         (SAFE_INSET_PIXELS, footer_top),
         FOOTER_MARK_TEXT,
@@ -338,6 +353,32 @@ def _draw_slide_footer(
         fill=carousel_template.color_muted,
         font=footer_font,
     )
+
+
+def _body_block_top(block_height: int, rule_bottom: int) -> int:
+    """Center copy in the open field between the header and the footer.
+
+    A short title sits a little above the true middle, so the taller
+    frame reads as margin around the words. A block that fills the field
+    stays under the accent rule and does not cross the footer hairline.
+    """
+
+    field_top: int = rule_bottom + BODY_GAP_BELOW_RULE_PIXELS
+    footer_top: int = CANVAS_HEIGHT_PIXELS - SAFE_INSET_PIXELS
+    field_bottom: int = (
+        footer_top - FOOTER_HAIRLINE_GAP_PIXELS - BODY_GAP_ABOVE_HAIRLINE_PIXELS
+    )
+    available_height: int = field_bottom - field_top
+
+    if block_height >= available_height or available_height <= 0:
+
+        return field_top
+
+    slack_height: int = available_height - block_height
+    geometric_top: int = field_top + (slack_height // 2)
+    optical_lift: int = slack_height // 12
+
+    return geometric_top - optical_lift
 
 
 def plan_carousel_slides(source_fields: CarouselSourceFields) -> list[PlannedSlide]:
@@ -534,7 +575,12 @@ def _wrap_text_to_width(
     maximum_width: int,
     canvas_draw: ImageDraw.ImageDraw,
 ) -> list[str]:
-    """Wrap on spaces so each line fits the content width."""
+    """Wrap on spaces so each line fits the content width.
+
+    A single token wider than the content width breaks after ``/`` or
+    ``-`` when it can, otherwise on a character, so the line stays inside
+    the inset.
+    """
 
     source_lines: list[str] = text.splitlines() or [""]
     wrapped_lines: list[str] = []
@@ -550,6 +596,19 @@ def _wrap_text_to_width(
         current_words: list[str] = []
 
         for word in words:
+            word_width: int = _measure_text_width(word, font, canvas_draw)
+
+            if word_width > maximum_width:
+
+                if current_words:
+                    wrapped_lines.append(" ".join(current_words))
+                    current_words = []
+
+                wrapped_lines.extend(
+                    _split_token_to_width(word, font, maximum_width, canvas_draw),
+                )
+                continue
+
             candidate_line: str = " ".join(current_words + [word])
             candidate_width: int = _measure_text_width(
                 candidate_line,
@@ -572,6 +631,74 @@ def _wrap_text_to_width(
         return [text]
 
     return wrapped_lines
+
+
+def _split_token_to_width(
+    token: str,
+    font: ImageFont.ImageFont,
+    maximum_width: int,
+    canvas_draw: ImageDraw.ImageDraw,
+) -> list[str]:
+    """Break one over-wide token so each piece fits the content width.
+
+    A URL prefers a break after ``/`` or ``-``. Every piece stays inside
+    the inset.
+    """
+
+    remaining_token: str = token
+    token_pieces: list[str] = []
+
+    while remaining_token != "":
+        piece_end: int = _fitting_token_end(
+            remaining_token,
+            font,
+            maximum_width,
+            canvas_draw,
+        )
+        token_pieces.append(remaining_token[:piece_end])
+        remaining_token = remaining_token[piece_end:]
+
+    return token_pieces
+
+
+def _fitting_token_end(
+    token: str,
+    font: ImageFont.ImageFont,
+    maximum_width: int,
+    canvas_draw: ImageDraw.ImageDraw,
+) -> int:
+    """Return how many leading characters of `token` fit on one line."""
+
+    fitting_end: int = 1
+
+    for character_index in range(1, len(token) + 1):
+        prefix_width: int = _measure_text_width(
+            token[:character_index],
+            font,
+            canvas_draw,
+        )
+
+        if prefix_width > maximum_width:
+
+            break
+
+        fitting_end = character_index
+
+    if fitting_end >= len(token):
+
+        return len(token)
+
+    search_end: int = max(fitting_end, 1)
+    preferred_break: int = max(
+        token.rfind("/", 0, search_end),
+        token.rfind("-", 0, search_end),
+    )
+
+    if preferred_break > 0:
+
+        return preferred_break + 1
+
+    return max(fitting_end, 1)
 
 
 def _measure_text_width(
@@ -598,7 +725,10 @@ def _measure_line_height(
         "Hg",
         font=font,
     )
-    line_height: int = (sample_bbox[3] - sample_bbox[1]) + 16
+    glyph_height: int = sample_bbox[3] - sample_bbox[1]
+    font_size: int = int(getattr(font, "size", glyph_height))
+    line_gap: int = max(16, font_size // 4)
+    line_height: int = glyph_height + line_gap
 
     return line_height
 

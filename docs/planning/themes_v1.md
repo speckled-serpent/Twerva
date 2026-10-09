@@ -1,6 +1,6 @@
 # Themes v1
 
-*Last updated: 2026-10-03*
+*Last updated: 2026-10-09*
 *Status: Locked model. Source of truth for how a Theme styles a carousel frame.*
 
 Themes is the styling area. A theme is a named carousel style: background, spacing, and elements. Spotmu is customer zero. Carousel only for now. Short video and other advertisement types are outside this model.
@@ -25,6 +25,8 @@ A theme is **Draft** or **Live**.
 ---
 
 ## Frame
+
+The frame is **1080×1920** pixels, a 9:16 phone portrait. There is no per-theme size.
 
 Each concrete generated frame is one image:
 

@@ -208,7 +208,7 @@ export function ThemeElementEditor({
         theme.elements,
         cardDrafts,
       );
-      const previewKey: string = JSON.stringify(requests);
+      const previewKey: string = `${theme.id}:${JSON.stringify(requests)}`;
 
       if (previewKey === lastPreviewKeyRef.current) {
         return;
@@ -220,7 +220,7 @@ export function ThemeElementEditor({
       const message: string = caughtError instanceof Error
         ? caughtError.message
         : String(caughtError);
-      const previewKey: string = `error:${message}`;
+      const previewKey: string = `${theme.id}:error:${message}`;
 
       if (previewKey === lastPreviewKeyRef.current) {
         return;
@@ -229,7 +229,7 @@ export function ThemeElementEditor({
       lastPreviewKeyRef.current = previewKey;
       previewCallback(null, message);
     }
-  }, [theme.elements, cardDrafts]);
+  }, [theme.id, theme.elements, cardDrafts]);
 
   return (
     <section className="summary-block">
@@ -831,6 +831,45 @@ export function themeElementCreateRequestsInBandOrder(
   );
 
   return requests;
+}
+
+export interface ThemePreviewElementState {
+  elements: ThemeElementCreateRequest[] | null;
+  draftError: string | null;
+}
+
+/**
+ * Build the preview payload for elements that are already on the theme.
+ *
+ * Card drafts are not included. A bad font size returns the message and
+ * no element list, which is the same result the editor effect reports.
+ *
+ * @param elements - Saved or staged elements
+ * @returns Element bodies for one preview, or a client draft error
+ */
+export function previewElementStateFromElements(
+  elements: ThemeElementReadResponse[],
+): ThemePreviewElementState {
+
+  try {
+    const requests: ThemeElementCreateRequest[] = previewRequestsFromElements(elements, {});
+    const previewState: ThemePreviewElementState = {
+      elements: requests,
+      draftError: null,
+    };
+
+    return previewState;
+  } catch (caughtError: unknown) {
+    const message: string = caughtError instanceof Error
+      ? caughtError.message
+      : String(caughtError);
+    const previewState: ThemePreviewElementState = {
+      elements: null,
+      draftError: message,
+    };
+
+    return previewState;
+  }
 }
 
 function previewRequestsFromElements(

@@ -8,7 +8,7 @@ Storage: local `ARTIFACT_STORAGE_DIR` (see §1.4b). S3 stays parked.
 
 Restricted Spotmu templates (no freeform designer): `GET /api/v1/generate/templates`.
 `spotmu_paper_v1` is the default current look. `spotmu_bold_v1` keeps the same
-1080×1080 text-led rules with a darker ground and stronger accent. Generate
+1080×1920 text-led rules with a darker ground and stronger accent. Generate
 and regenerate persist `artifacts.template_id`. Authenticated
 `GET /api/v1/artifacts/{id}/slides/{index}/image` streams the PNG
 (readers may GET). `POST /api/v1/artifacts/{id}/regenerate` inserts a
@@ -20,10 +20,10 @@ and regenerate persist `artifacts.template_id`. Authenticated
 
 | Token | Value |
 |---|---|
-| Width × height | **1080 × 1080** px |
+| Width × height | **1080 × 1920** px (the theme frame in `app.themes.layout`) |
 | Format | PNG |
 | Safe inset | 96 px from each edge |
-| Platform | Instagram-friendly square; TikTok can reuse the same frames |
+| Platform | 9:16 phone portrait, the same frame themes use |
 
 Do not generate video in this template.
 
@@ -62,17 +62,24 @@ No stock photos, no mascot, no decorative illustration.
 | `COLOR_RULE` | `#D6D3D1` | Hairline separator |
 
 Typography: system sans (DejaVu / Liberation when present; Pillow
-default otherwise). Sizes are starting points — wrap and shrink to keep
-copy inside the inset.
+default otherwise). Sizes are starting points — wrap to keep copy inside
+the inset. A token wider than that width, such as a CTA URL, breaks
+after `/` or `-` when it can.
 
 | Face | Size | Use |
 |---|---|---|
-| Label | 22 | Role word (`SPOTMU`, `THE BRIEF`, `NOTE`, `CONTINUE`) |
-| Cover title | 64 | `cover` body |
-| Heading | 56 | `heading` body |
-| Bullet | 48 | `bullet` body |
-| CTA | 44 | CTA prompt |
-| Footer | 20 | `spotmu.com` mark |
+| Label | 28 | Role word (`SPOTMU`, `THE BRIEF`, `NOTE`, `CONTINUE`) |
+| Cover title | 112 | `cover` body |
+| Heading | 80 | `heading` body |
+| Bullet | 56 | `bullet` body |
+| CTA | 48 | CTA prompt |
+| Footer | 24 | `spotmu.com` mark |
+
+Copy is centered in the open field between the accent bar and a hairline
+above `spotmu.com`, lifted a little so a short title reads as centered
+on the tall frame. A block that fills that field stays under the bar and
+stops short of the hairline. The space around the words is the portrait
+margin, not a square layout with empty pixels stacked underneath.
 
 ---
 
