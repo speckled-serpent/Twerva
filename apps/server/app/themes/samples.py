@@ -36,6 +36,7 @@ from app.themes.background import (
     describe_gradient_problem,
     expand_hex_color,
 )
+from app.themes.default_images import resolve_theme_image_path
 from app.themes.elements import ordered_theme_elements
 from app.themes.layout import (
     THEME_FRAME_HEIGHT_PIXELS,
@@ -434,7 +435,7 @@ def _draw_asset_background(
         return (ThemeSampleBlockReason.MISSING_ASSET, BACKGROUND_IMAGE_MISSING_DETAIL)
 
     try:
-        asset_path: Path = resolve_asset_reference_path(
+        asset_path: Path = resolve_theme_image_path(
             background_asset_ref,
             resolved_storage_directory,
         )
@@ -645,7 +646,7 @@ def _draw_image_content(
         return
 
     try:
-        image_path: Path = resolve_asset_reference_path(
+        image_path: Path = resolve_theme_image_path(
             image_asset_ref,
             resolved_storage_directory,
         )

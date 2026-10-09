@@ -426,6 +426,16 @@ export interface ThemePreviewResponse {
   image_png_base64: string;
 }
 
+export interface ThemeImageAlbumResponse {
+  album_id: string;
+  name: string;
+  asset_refs: string[];
+}
+
+export interface ThemeDefaultImagesResponse {
+  albums: ThemeImageAlbumResponse[];
+}
+
 export interface ThemeReadResponse {
   id: string;
   name: string;

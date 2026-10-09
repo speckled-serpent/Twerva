@@ -7,6 +7,7 @@ import type {
   ThemeReadResponse,
   ThemeStatus,
 } from "../api/types";
+import { ThemeAssetAlbumField } from "./ThemeAssetAlbumField";
 import {
   gradientDefaultsIfEmpty,
   gradientProblem,
@@ -132,7 +133,20 @@ export function ThemeFrameFields({
       {frameDraft.backgroundKind === "gradient" ? (
         <ThemeGradientFields frameDraft={frameDraft} onDraftChange={onDraftChange} />
       ) : null}
-      {frameDraft.backgroundKind === "picture" || frameDraft.backgroundKind === "texture" ? (
+      {frameDraft.backgroundKind === "picture" ? (
+        <ThemeAssetAlbumField
+          label="Background image"
+          assetRef={frameDraft.backgroundAssetRef}
+          disabled={disabled}
+          onAssetRefChange={(nextAssetRef: string): void => {
+            onDraftChange({
+              ...frameDraft,
+              backgroundAssetRef: nextAssetRef,
+            });
+          }}
+        />
+      ) : null}
+      {frameDraft.backgroundKind === "texture" ? (
         <label>
           Background asset ref
           <input
@@ -148,7 +162,7 @@ export function ThemeFrameFields({
           />
         </label>
       ) : null}
-      {frameDraft.backgroundKind === "picture" || frameDraft.backgroundKind === "texture" ? (
+      {frameDraft.backgroundKind === "texture" ? (
         <p className="field-hint">
           Relative path ending in .svg, .png, .jpg, or .jpeg. No file upload.
         </p>

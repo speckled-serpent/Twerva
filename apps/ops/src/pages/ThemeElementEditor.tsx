@@ -18,6 +18,7 @@ import type {
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { ThemeAssetAlbumField } from "./ThemeAssetAlbumField";
 import { normalizeHexColor } from "./themeColors";
 
 export interface ThemeElementEditorProps {
@@ -571,23 +572,15 @@ function ElementFields({
           idPrefix={idPrefix}
         />
       ) : (
-        <label>
-          Image asset ref
-          <input
-            value={draft.imageAssetRef}
-            onChange={(changeEvent): void => {
-              onDraftChange({ ...draft, imageAssetRef: changeEvent.target.value });
-            }}
-            placeholder="logos/mark.png"
-            spellCheck={false}
-          />
-        </label>
+        <ThemeAssetAlbumField
+          label="Image"
+          assetRef={draft.imageAssetRef}
+          disabled={false}
+          onAssetRefChange={(nextAssetRef: string): void => {
+            onDraftChange({ ...draft, imageAssetRef: nextAssetRef });
+          }}
+        />
       )}
-      {draft.contentKind === "image" ? (
-        <p className="field-hint">
-          Relative path ending in .svg, .png, .jpg, or .jpeg. No file upload.
-        </p>
-      ) : null}
     </>
   );
 }

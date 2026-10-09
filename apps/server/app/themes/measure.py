@@ -27,10 +27,8 @@ from app.models.enums import (
     ThemeElementBand,
     ThemeElementContentKind,
 )
-from app.storage.artifacts import (
-    ArtifactAssetPathEscapeError,
-    resolve_asset_reference_path,
-)
+from app.storage.artifacts import ArtifactAssetPathEscapeError
+from app.themes.default_images import resolve_theme_image_path
 from app.themes.layout import (
     LayoutElement,
     ThemeLayout,
@@ -751,7 +749,7 @@ def _image_content_height(
     resolved_storage_directory: Path = artifact_storage_directory.resolve()
 
     try:
-        image_path: Path = resolve_asset_reference_path(
+        image_path: Path = resolve_theme_image_path(
             image_asset_ref,
             resolved_storage_directory,
         )
