@@ -27,8 +27,13 @@ export function sampleBlockMessage(sample: ThemeSampleResponse): string {
   }
 
   if (sample.block_reason === "measure_error") {
+    const detailText: string = (sample.detail ?? "").trim();
 
-    return joinBlockMessage("measure error", sample.detail ?? "");
+    if (detailText !== "") {
+      return detailText;
+    }
+
+    return "Blocked: measure error.";
   }
 
   return "Blocked preview.";

@@ -8,7 +8,12 @@ from app.models.enums import BackgroundKind, ThemeStatus
 
 
 HEX_COLOR_PATTERN: re.Pattern[str] = re.compile(r"^#[0-9A-Fa-f]{6}$")
+HEX_DIGIT_PATTERN: re.Pattern[str] = re.compile(r"^[0-9A-Fa-f]+$")
 ASSET_REF_SUFFIXES: tuple[str, ...] = (".svg", ".png", ".jpg", ".jpeg")
+
+DEFAULT_GRADIENT_ANGLE_DEG: int = 180
+DEFAULT_GRADIENT_START_COLOR: str = "#4A4A4A"
+DEFAULT_GRADIENT_END_COLOR: str = "#BDBDBD"
 
 BACKGROUND_KIND_REQUIRED_DETAIL: str = "background_kind is required."
 BACKGROUND_COLOR_DETAIL: str = "background_color must be # plus six hex digits."
@@ -17,6 +22,9 @@ BACKGROUND_GRADIENT_DETAIL: str = (
     '{"angle_deg": <0-360>, "stops": [{"offset": <0-1>, "color": "#rrggbb"}, ...]} '
     "with at least two stops."
 )
+GRADIENT_NEEDS_SECOND_COLOR_DETAIL: str = "Can't draw gradient: add a second color"
+GRADIENT_OFFSET_DETAIL: str = "Stop offsets must be between 0% and 100%"
+GRADIENT_ANGLE_DETAIL: str = "Angle must be 0-360"
 BACKGROUND_ASSET_REF_DETAIL: str = (
     "background_asset_ref must be a relative path with no .. and no scheme, "
     "ending in .svg, .png, .jpg, or .jpeg."
@@ -139,6 +147,9 @@ def resolve_patched_background(
 def normalize_background_color(color_value: str | None) -> str | None:
     """Return a hex color, or null when the client sent a blank string.
 
+    Three or six hex digits are accepted, with or without a leading ``#``.
+    The stored form is uppercase ``#RRGGBB``.
+
     Args:
         color_value: Raw color, or null.
 
@@ -159,10 +170,12 @@ def normalize_background_color(color_value: str | None) -> str | None:
 
         return None
 
-    if HEX_COLOR_PATTERN.fullmatch(stripped_color) is None:
+    expanded_color: str | None = expand_hex_color(stripped_color)
+
+    if expanded_color is None:
         raise ThemeBackgroundError(BACKGROUND_COLOR_DETAIL)
 
-    return stripped_color
+    return expanded_color
 
 
 def normalize_background_gradient(
@@ -187,6 +200,11 @@ def normalize_background_gradient(
 
         return None
 
+    gradient_problem: str | None = describe_gradient_problem(gradient_value)
+
+    if gradient_problem is not None:
+        raise ThemeBackgroundError(gradient_problem)
+
     if not isinstance(gradient_value, dict):
         raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
 
@@ -195,23 +213,13 @@ def normalize_background_gradient(
     if set(gradient_object) != {"angle_deg", "stops"}:
         raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
 
-    angle_deg: object = gradient_object["angle_deg"]
     stops_value: object = gradient_object["stops"]
-
-    if not _is_number(angle_deg):
-        raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
-
-    if isinstance(angle_deg, bool) or angle_deg < 0 or angle_deg > 360:
-        raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
-
-    if not isinstance(stops_value, list) or len(stops_value) < 2:
-        raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
-
     normalized_stops: list[dict[str, object]] = [
-        _normalize_gradient_stop(stop_value) for stop_value in stops_value
+        _normalize_gradient_stop(stop_value, stop_index)
+        for stop_index, stop_value in enumerate(stops_value)
     ]
     normalized_gradient: dict[str, object] = {
-        "angle_deg": angle_deg,
+        "angle_deg": gradient_object["angle_deg"],
         "stops": normalized_stops,
     }
 
@@ -297,32 +305,181 @@ def _kind_after_patch(
     return patched_kind
 
 
-def _normalize_gradient_stop(stop_value: object) -> dict[str, object]:
-    """Return one stop with ``offset`` and ``color`` only."""
+def default_theme_gradient() -> dict[str, object]:
+    """Return the two-stop gradient the editor prefills.
+
+    Angle 180 runs from the top of the frame to the bottom. The first
+    stop is ``#4A4A4A`` at 0% and the second is ``#BDBDBD`` at 100%.
+
+    Returns:
+        The locked gradient object.
+    """
+
+    default_gradient: dict[str, object] = {
+        "angle_deg": DEFAULT_GRADIENT_ANGLE_DEG,
+        "stops": [
+            {"offset": 0, "color": DEFAULT_GRADIENT_START_COLOR},
+            {"offset": 1, "color": DEFAULT_GRADIENT_END_COLOR},
+        ],
+    }
+
+    return default_gradient
+
+
+def expand_hex_color(color_value: str | None) -> str | None:
+    """Return ``#RRGGBB``, or null when the text is blank or not hex.
+
+    A leading ``#`` is optional. Three digits expand (``abc`` becomes
+    ``#AABBCC``). Six digits are uppercased. Anything else is null.
+
+    Args:
+        color_value: Raw color text, or null.
+
+    Returns:
+        Uppercase ``#`` plus six hex digits, or null.
+    """
+
+    if color_value is None:
+
+        return None
+
+    stripped_color: str = color_value.strip()
+
+    if stripped_color == "":
+
+        return None
+
+    hex_body: str = stripped_color[1:] if stripped_color.startswith("#") else stripped_color
+
+    if HEX_DIGIT_PATTERN.fullmatch(hex_body) is None:
+
+        return None
+
+    if len(hex_body) == 3:
+        expanded_body: str = "".join(character * 2 for character in hex_body)
+
+        return f"#{expanded_body.upper()}"
+
+    if len(hex_body) == 6:
+
+        return f"#{hex_body.upper()}"
+
+    return None
+
+
+def describe_gradient_problem(gradient_value: object) -> str | None:
+    """Return the fix for a gradient that cannot be drawn, or null.
+
+    Args:
+        gradient_value: JSON object from the form or a patch.
+
+    Returns:
+        A sentence naming the problem, or null when the gradient can be drawn.
+    """
+
+    if not isinstance(gradient_value, dict):
+
+        return GRADIENT_NEEDS_SECOND_COLOR_DETAIL
+
+    angle_deg: object = gradient_value.get("angle_deg")
+    stops_value: object = gradient_value.get("stops")
+
+    if not _is_number(angle_deg) or angle_deg < 0 or angle_deg > 360:
+
+        return GRADIENT_ANGLE_DETAIL
+
+    if not isinstance(stops_value, list) or len(stops_value) < 2:
+
+        return GRADIENT_NEEDS_SECOND_COLOR_DETAIL
+
+    for stop_index, stop_value in enumerate(stops_value):
+        stop_problem: str | None = _gradient_stop_problem(stop_value, stop_index)
+
+        if stop_problem is not None:
+
+            return stop_problem
+
+    return None
+
+
+def clamp_stop_offset(offsets: list[float], index: int, next_offset: float) -> float:
+    """Keep one stop between its neighbors so the list stays in order.
+
+    Dragging past the next stop stops at that stop. The stops are not
+    reordered, so the row being edited does not jump.
+
+    Args:
+        offsets: Current offsets, already in order, each 0 through 1.
+        index: Stop being moved.
+        next_offset: Requested offset before the neighbor limit.
+
+    Returns:
+        The offset to store, still between 0 and 1.
+    """
+
+    lower_neighbor: float = 0 if index <= 0 else offsets[index - 1]
+    upper_neighbor: float = 1 if index >= len(offsets) - 1 else offsets[index + 1]
+    lower_bound: float = max(0, lower_neighbor)
+    upper_bound: float = min(1, upper_neighbor)
+    clamped_offset: float = min(upper_bound, max(lower_bound, next_offset))
+
+    return clamped_offset
+
+
+def gradient_stop_color_detail(stop_number: int) -> str:
+    """Return the hex error for one stop. ``stop_number`` is 1-based."""
+
+    detail: str = f"Stop {stop_number} color isn't a valid hex color"
+
+    return detail
+
+
+def _gradient_stop_problem(stop_value: object, stop_index: int) -> str | None:
+    """Return the first problem on one stop, or null."""
 
     if not isinstance(stop_value, dict):
-        raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
+
+        return GRADIENT_NEEDS_SECOND_COLOR_DETAIL
+
+    offset_value: object = stop_value.get("offset")
+    color_value: object = stop_value.get("color")
+
+    if not _is_number(offset_value) or offset_value < 0 or offset_value > 1:
+
+        return GRADIENT_OFFSET_DETAIL
+
+    if not isinstance(color_value, str) or expand_hex_color(color_value) is None:
+
+        return gradient_stop_color_detail(stop_index + 1)
+
+    return None
+
+
+def _normalize_gradient_stop(stop_value: object, stop_index: int) -> dict[str, object]:
+    """Return one stop with ``offset`` and an expanded ``color``."""
+
+    stop_problem: str | None = _gradient_stop_problem(stop_value, stop_index)
+
+    if stop_problem is not None:
+        raise ThemeBackgroundError(stop_problem)
+
+    if not isinstance(stop_value, dict):
+        raise ThemeBackgroundError(GRADIENT_NEEDS_SECOND_COLOR_DETAIL)
 
     stop_object: dict[object, object] = stop_value
 
     if set(stop_object) != {"offset", "color"}:
         raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
 
-    offset_value: object = stop_object["offset"]
     color_value: object = stop_object["color"]
+    expanded_color: str | None = expand_hex_color(color_value if isinstance(color_value, str) else None)
 
-    if not _is_number(offset_value) or offset_value < 0 or offset_value > 1:
-        raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
-
-    if not isinstance(color_value, str):
-        raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
-
-    if HEX_COLOR_PATTERN.fullmatch(color_value) is None:
-        raise ThemeBackgroundError(BACKGROUND_GRADIENT_DETAIL)
+    if expanded_color is None:
+        raise ThemeBackgroundError(gradient_stop_color_detail(stop_index + 1))
 
     normalized_stop: dict[str, object] = {
-        "offset": offset_value,
-        "color": color_value,
+        "offset": stop_object["offset"],
+        "color": expanded_color,
     }
 
     return normalized_stop

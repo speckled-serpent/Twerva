@@ -61,9 +61,14 @@ from app.models.theme import (
 from app.themes.background import (
     BACKGROUND_ASSET_REF_DETAIL,
     BACKGROUND_COLOR_DETAIL,
-    BACKGROUND_GRADIENT_DETAIL,
+    GRADIENT_ANGLE_DETAIL,
+    GRADIENT_NEEDS_SECOND_COLOR_DETAIL,
+    GRADIENT_OFFSET_DETAIL,
     LIVE_ASSET_PAYLOAD_DETAIL,
     LIVE_COLOR_PAYLOAD_DETAIL,
+    clamp_stop_offset,
+    expand_hex_color,
+    gradient_stop_color_detail,
 )
 from app.themes.slug import allocate_unique_theme_slug, slugify_theme_name
 
@@ -772,7 +777,7 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
         )
         fake_session: MagicMock = MagicMock()
         fake_session.get.return_value = paper_theme
-        short_hex: ThemePatchRequest = ThemePatchRequest(background_color="#FFF")
+        not_hex: ThemePatchRequest = ThemePatchRequest(background_color="zzzzzz")
         parent_path: ThemePatchRequest = ThemePatchRequest(
             background_asset_ref="../secret.png",
         )
@@ -790,7 +795,7 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
         self._assert_background_rejected(
             paper_theme,
             fake_session,
-            short_hex,
+            not_hex,
             BACKGROUND_COLOR_DETAIL,
         )
         self._assert_background_rejected(
@@ -809,7 +814,7 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
             paper_theme,
             fake_session,
             one_stop,
-            BACKGROUND_GRADIENT_DETAIL,
+            GRADIENT_NEEDS_SECOND_COLOR_DETAIL,
         )
         self.assertEqual(paper_theme.background_kind, BackgroundKind.COLOR)
         self.assertEqual(paper_theme.background_color, DEFAULT_BACKGROUND_COLOR)
@@ -834,6 +839,104 @@ class ThemeBackgroundPatchTests(unittest.TestCase):
         self.assertEqual(empty_gradient.background_kind, BackgroundKind.GRADIENT)
         self.assertIsNone(empty_gradient.background_gradient)
         self.assertEqual(empty_gradient.status, ThemeStatus.DRAFT)
+
+    def test_hex_without_hash_expands_to_rrggbb(self) -> None:
+        """3- and 6-digit hex, with or without #, store as uppercase #RRGGBB."""
+
+        self.assertIsNone(expand_hex_color(""))
+        self.assertIsNone(expand_hex_color("   "))
+        self.assertIsNone(expand_hex_color(None))
+        self.assertIsNone(expand_hex_color("zzzzzz"))
+        self.assertEqual(expand_hex_color("4a4a4a"), "#4A4A4A")
+        self.assertEqual(expand_hex_color("#4a4a4a"), "#4A4A4A")
+        self.assertEqual(expand_hex_color("abc"), "#AABBCC")
+        self.assertEqual(expand_hex_color("#abc"), "#AABBCC")
+        self.assertEqual(expand_hex_color("ABC"), "#AABBCC")
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        patched_theme: ThemeReadResponse = self._patch(
+            paper_theme,
+            fake_session,
+            ThemePatchRequest(background_color="4a4a4a"),
+        )
+
+        self.assertEqual(patched_theme.background_color, "#4A4A4A")
+
+    def test_gradient_patch_names_the_problem(self) -> None:
+        """A bad angle, offset, or stop color is a 400 that says how to fix it."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        bad_angle: ThemePatchRequest = ThemePatchRequest(
+            background_gradient={
+                "angle_deg": 400,
+                "stops": [
+                    {"offset": 0, "color": "#112233"},
+                    {"offset": 1, "color": "#AABBCC"},
+                ],
+            },
+        )
+        bad_offset: ThemePatchRequest = ThemePatchRequest(
+            background_gradient={
+                "angle_deg": 180,
+                "stops": [
+                    {"offset": 0, "color": "#112233"},
+                    {"offset": 1.5, "color": "#AABBCC"},
+                ],
+            },
+        )
+        bad_color: ThemePatchRequest = ThemePatchRequest(
+            background_gradient={
+                "angle_deg": 180,
+                "stops": [
+                    {"offset": 0, "color": "#112233"},
+                    {"offset": 1, "color": "not-a-color"},
+                ],
+            },
+        )
+
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            bad_angle,
+            GRADIENT_ANGLE_DETAIL,
+        )
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            bad_offset,
+            GRADIENT_OFFSET_DETAIL,
+        )
+        self._assert_background_rejected(
+            paper_theme,
+            fake_session,
+            bad_color,
+            gradient_stop_color_detail(2),
+        )
+
+    def test_stop_offsets_clamp_instead_of_crossing(self) -> None:
+        """A stop dragged past its neighbor stops at that neighbor."""
+
+        self.assertEqual(clamp_stop_offset([0, 1], 0, 0.8), 0.8)
+        self.assertEqual(clamp_stop_offset([0, 0.4], 0, 0.9), 0.4)
+        self.assertEqual(clamp_stop_offset([0.2, 1], 1, 0), 0.2)
+        self.assertEqual(clamp_stop_offset([0, 0.5, 1], 1, 0.9), 0.9)
+        self.assertEqual(clamp_stop_offset([0, 0.5, 1], 1, 0.1), 0.1)
 
     def _patch(
         self,

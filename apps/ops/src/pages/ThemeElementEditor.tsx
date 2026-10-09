@@ -18,6 +18,7 @@ import type {
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { normalizeHexColor } from "./themeColors";
 
 export interface ThemeElementEditorProps {
   theme: ThemeReadResponse;
@@ -552,6 +553,12 @@ function ElementFields({
           onChange={(changeEvent): void => {
             onDraftChange({ ...draft, rectangleColor: changeEvent.target.value });
           }}
+          onBlur={(blurEvent): void => {
+            onDraftChange({
+              ...draft,
+              rectangleColor: normalizeHexColor(blurEvent.currentTarget.value),
+            });
+          }}
           placeholder="#AABBCC"
           spellCheck={false}
         />
@@ -651,6 +658,12 @@ function TextElementFields({
           value={draft.fontColor}
           onChange={(changeEvent): void => {
             onDraftChange({ ...draft, fontColor: changeEvent.target.value });
+          }}
+          onBlur={(blurEvent): void => {
+            onDraftChange({
+              ...draft,
+              fontColor: normalizeHexColor(blurEvent.currentTarget.value),
+            });
           }}
           placeholder="#112233"
           spellCheck={false}
@@ -920,7 +933,7 @@ function elementRequestFromDraft(
   const request: ThemeElementCreateRequest = {
     band: draft.band,
     content_kind: draft.contentKind,
-    rectangle_color: draft.rectangleColor,
+    rectangle_color: normalizeHexColor(draft.rectangleColor),
     bold: draft.bold,
     italic: draft.italic,
     underline: draft.underline,
@@ -932,7 +945,7 @@ function elementRequestFromDraft(
     request.text_source = draft.textSource;
     request.font_family = draft.fontFamily.trim();
     request.font_size = parseRequiredFontSize(draft.fontSize);
-    request.font_color = draft.fontColor.trim();
+    request.font_color = normalizeHexColor(draft.fontColor);
     request.alignment = draft.alignment;
     request.image_asset_ref = null;
 

@@ -31,7 +31,11 @@ from app.storage.artifacts import (
     ensure_artifact_storage_directory,
     resolve_asset_reference_path,
 )
-from app.themes.background import HEX_COLOR_PATTERN
+from app.themes.background import (
+    GRADIENT_NEEDS_SECOND_COLOR_DETAIL,
+    describe_gradient_problem,
+    expand_hex_color,
+)
 from app.themes.elements import ordered_theme_elements
 from app.themes.layout import (
     THEME_FRAME_HEIGHT_PIXELS,
@@ -67,7 +71,6 @@ BACKGROUND_IMAGE_ESCAPE_DETAIL: str = (
 BACKGROUND_COLOR_MISSING_DETAIL: str = "Background color is missing."
 BACKGROUND_COLOR_INVALID_DETAIL: str = "Background color is not a hex color."
 BACKGROUND_GRADIENT_MISSING_DETAIL: str = "Background gradient is missing."
-BACKGROUND_GRADIENT_INVALID_DETAIL: str = "Background gradient could not be drawn."
 _OPAQUE_ALPHA: int = 255
 
 
@@ -392,13 +395,19 @@ def _draw_gradient_background(
             BACKGROUND_GRADIENT_MISSING_DETAIL,
         )
 
+    gradient_problem: str | None = describe_gradient_problem(background_gradient)
+
+    if gradient_problem is not None:
+
+        return (ThemeSampleBlockReason.MEASURE_ERROR, gradient_problem)
+
     parsed_gradient: _ParsedGradient | None = _parse_gradient(background_gradient)
 
     if parsed_gradient is None:
 
         return (
             ThemeSampleBlockReason.MEASURE_ERROR,
-            BACKGROUND_GRADIENT_INVALID_DETAIL,
+            GRADIENT_NEEDS_SECOND_COLOR_DETAIL,
         )
 
     frame_width: int = canvas.size[0]
@@ -775,17 +784,15 @@ def _overlap_detail(overlaps: tuple[BandOverlap, ...]) -> str:
 def _parse_hex_color(color_value: str | None) -> tuple[int, int, int] | None:
     """Return RGB for ``#`` plus six hex digits, or null."""
 
-    if color_value is None:
+    expanded_color: str | None = expand_hex_color(color_value)
+
+    if expanded_color is None:
 
         return None
 
-    if HEX_COLOR_PATTERN.fullmatch(color_value) is None:
-
-        return None
-
-    red: int = int(color_value[1:3], 16)
-    green: int = int(color_value[3:5], 16)
-    blue: int = int(color_value[5:7], 16)
+    red: int = int(expanded_color[1:3], 16)
+    green: int = int(expanded_color[3:5], 16)
+    blue: int = int(expanded_color[5:7], 16)
 
     return red, green, blue
 
