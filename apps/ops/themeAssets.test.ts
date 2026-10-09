@@ -5,6 +5,7 @@ import {
   assetRefForAlbumChoice,
   albumForAssetRef,
   chooseAlbumAssetRef,
+  pickDefaultAlbumImage,
   DEFAULT_ALBUM_ID,
   type ThemeImageAlbum,
 } from "./src/pages/themeAssets.ts";
@@ -63,4 +64,12 @@ assert.equal(albumForAssetRef([defaultAlbum], "backgrounds/harbor.png"), null);
 assert.throws(
   (): string => chooseAlbumAssetRef([], null, 0),
   /Album has no images/,
+);
+assert.equal(
+  pickDefaultAlbumImage([defaultAlbum], 0),
+  "theme-defaults/hong-kong-skyline.jpg",
+);
+assert.throws(
+  (): string => pickDefaultAlbumImage([], 0),
+  /Default album has no images/,
 );

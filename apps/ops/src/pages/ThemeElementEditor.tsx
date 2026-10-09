@@ -4,6 +4,7 @@ import {
   createThemeElement,
   deleteThemeElement,
   fetchThemeById,
+  fetchThemeDefaultImages,
   patchThemeElement,
 } from "../api/client";
 import type {
@@ -14,6 +15,7 @@ import type {
   ThemeElementPatchRequest,
   ThemeElementReadResponse,
   ThemeElementTextSource,
+  ThemeDefaultImagesResponse,
   ThemeReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -21,6 +23,7 @@ import { useCanWriteOps } from "../session/OpsSessionContext";
 import { ThemeAssetAlbumField } from "./ThemeAssetAlbumField";
 import { ThemeFontFamilyField } from "./ThemeFontFamilyField";
 import { normalizeHexColor } from "./themeColors";
+import { pickDefaultAlbumImage } from "./themeAssets";
 import { DEFAULT_FONT_FAMILY } from "./themeFonts";
 
 export interface ThemeElementEditorProps {
@@ -133,7 +136,8 @@ export function ThemeElementEditor({
     setStatusMessage("");
 
     try {
-      const createRequest: ThemeElementCreateRequest = elementRequestFromDraft(addDraft);
+      const draftToAdd: ElementDraft = await draftReadyToAdd(addDraft);
+      const createRequest: ThemeElementCreateRequest = elementRequestFromDraft(draftToAdd);
 
       if (isLocal) {
         const createdElement: ThemeElementReadResponse = localElementFromRequest(
@@ -259,6 +263,7 @@ export function ThemeElementEditor({
             draft={addDraft}
             onDraftChange={setAddDraft}
             idPrefix="add-element"
+            showDetails={false}
           />
         </fieldset>
         <div className="button-row">
@@ -459,6 +464,7 @@ function ThemeElementCard({
           draft={draft}
           onDraftChange={setDraft}
           idPrefix={`element-${element.id}`}
+          showDetails={true}
         />
       </fieldset>
       <div className="button-row">
@@ -502,12 +508,14 @@ interface ElementFieldsProps {
   draft: ElementDraft;
   onDraftChange: (nextDraft: ElementDraft) => void;
   idPrefix: string;
+  showDetails: boolean;
 }
 
 function ElementFields({
   draft,
   onDraftChange,
   idPrefix,
+  showDetails,
 }: ElementFieldsProps): ReactElement {
 
   return (
@@ -551,6 +559,25 @@ function ElementFields({
           <option value="image">Image</option>
         </select>
       </label>
+      {showDetails ? (
+        <ElementDetailFields
+          draft={draft}
+          onDraftChange={onDraftChange}
+          idPrefix={idPrefix}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function ElementDetailFields({
+  draft,
+  onDraftChange,
+  idPrefix,
+}: Omit<ElementFieldsProps, "showDetails">): ReactElement {
+
+  return (
+    <>
       <label>
         Rectangle color
         <input
@@ -742,6 +769,23 @@ function TextElementFields({
   );
 }
 
+async function draftReadyToAdd(addDraft: ElementDraft): Promise<ElementDraft> {
+
+  if (addDraft.contentKind === "text") {
+
+    return addDraft;
+  }
+
+  const images: ThemeDefaultImagesResponse = await fetchThemeDefaultImages();
+  const imageAssetRef: string = pickDefaultAlbumImage(images.albums, Math.random());
+  const imageDraft: ElementDraft = {
+    ...addDraft,
+    imageAssetRef,
+  };
+
+  return imageDraft;
+}
+
 function emptyElementDraft(): ElementDraft {
 
   const draft: ElementDraft = {
@@ -752,7 +796,7 @@ function emptyElementDraft(): ElementDraft {
     rectangleRadius: "0",
     textSource: "title",
     fontFamily: DEFAULT_FONT_FAMILY,
-    fontSize: "32",
+    fontSize: "64",
     fontColor: "#112233",
     bold: false,
     italic: false,

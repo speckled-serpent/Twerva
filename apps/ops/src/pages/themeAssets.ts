@@ -120,3 +120,28 @@ export function assetRefAfterShuffle(
 
   return chosenRef;
 }
+
+/**
+ * Pick one concrete path from the Default album for a new image element.
+ *
+ * @param albums - Albums from the default-images API
+ * @param randomUnit - Number in ``[0, 1)``
+ * @returns A stored path from Default
+ */
+export function pickDefaultAlbumImage(
+  albums: readonly ThemeImageAlbum[],
+  randomUnit: number,
+): string {
+
+  const defaultAlbum: ThemeImageAlbum | undefined = albums.find(
+    (album: ThemeImageAlbum): boolean => album.album_id === DEFAULT_ALBUM_ID,
+  );
+
+  if (defaultAlbum === undefined || defaultAlbum.asset_refs.length === 0) {
+    throw new Error("Default album has no images.");
+  }
+
+  const chosenRef: string = chooseAlbumAssetRef(defaultAlbum.asset_refs, null, randomUnit);
+
+  return chosenRef;
+}
