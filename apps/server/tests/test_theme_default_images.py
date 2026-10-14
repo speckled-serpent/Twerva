@@ -150,6 +150,54 @@ class ThemeDefaultImageTests(unittest.TestCase):
             self.assertEqual(missing_response.block_reason, "missing_asset")
             self.assertFalse(image_response.blocked)
 
+    def test_uploaded_album_path_preview_stays_on_that_file(self) -> None:
+        """An album JPEG in the artifact store paints twice from the stored path."""
+
+        album_path: str = "albums/source/unit/lamp.jpg"
+        other_path: str = "albums/source/unit/other.jpg"
+
+        with tempfile.TemporaryDirectory() as storage_directory:
+            storage: Path = Path(storage_directory)
+            _write_solid_jpeg(storage / album_path, (220, 20, 20))
+            _write_solid_jpeg(storage / other_path, (20, 20, 220))
+            source_item = _source_item(SourceType.SPOTMU_INTEREST)
+            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
+            album_request: ThemePreviewRequest = ThemePreviewRequest(
+                source_item_id=source_item.id,
+                background_kind=BackgroundKind.PICTURE,
+                background_asset_ref=album_path,
+            )
+
+            first_response = _preview(album_request, session, storage)
+            second_response = _preview(album_request, session, storage)
+            first_image: Image.Image = _decoded_image(first_response)
+            other_request: ThemePreviewRequest = ThemePreviewRequest(
+                source_item_id=source_item.id,
+                background_kind=BackgroundKind.PICTURE,
+                background_asset_ref=other_path,
+            )
+            other_response = _preview(other_request, session, storage)
+            element_request: ThemePreviewRequest = ThemePreviewRequest(
+                source_item_id=source_item.id,
+                elements=[
+                    ThemeElementCreateRequest(
+                        band=ThemeElementBand.MIDDLE,
+                        content_kind=ThemeElementContentKind.IMAGE,
+                        image_asset_ref=album_path,
+                    ),
+                ],
+            )
+            element_response = _preview(element_request, session, storage)
+            red_pixel: tuple[int, ...] = first_image.getpixel((540, 960))
+
+            self.assertFalse(first_response.blocked)
+            self.assertGreater(red_pixel[0], 180)
+            self.assertLess(red_pixel[2], 80)
+            self.assertEqual(first_response.image_png_base64, second_response.image_png_base64)
+            self.assertNotEqual(first_response.image_png_base64, other_response.image_png_base64)
+            self.assertFalse(element_response.blocked)
+            self.assertEqual(album_request.background_asset_ref, album_path)
+
     def test_default_images_route_is_registered_before_theme_id(self) -> None:
         """GET /default-images must not be captured by GET /{theme_id}."""
 
@@ -166,6 +214,14 @@ class ThemeDefaultImageTests(unittest.TestCase):
             get_paths.index("/themes/default-images"),
             get_paths.index("/themes/{theme_id}"),
         )
+
+
+def _write_solid_jpeg(image_path: Path, color: tuple[int, int, int]) -> None:
+    """Write a small JPEG under the artifact store."""
+
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image: Image.Image = Image.new("RGB", (64, 64), color)
+    image.save(image_path, format="JPEG")
 
 
 if __name__ == "__main__":

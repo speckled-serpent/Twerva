@@ -449,9 +449,9 @@ class UsedPathCollectionTests(unittest.TestCase):
     def test_collect_used_paths_reads_each_store(self) -> None:
         """A path is in use only when one of those stores names it."""
 
-        background_path: str = "theme-defaults/ocean-waves.jpg"
+        background_path: str = "albums/source/unit/lamp.jpg"
         element_path: str = "theme-defaults/seoul-skyline.jpg"
-        slide_path: str = "theme-defaults/utah-dunes.jpg"
+        slide_path: str = "albums/source/unit/other.jpg"
         unused_path: str = "theme-defaults/hong-kong-skyline.jpg"
         candidates: set[str] = {
             background_path,

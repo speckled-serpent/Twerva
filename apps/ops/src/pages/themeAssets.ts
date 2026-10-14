@@ -1,16 +1,121 @@
+import type {
+  SourceReadResponse,
+  UnitFieldReadResponse,
+  UnitImageReadResponse,
+  UnitReadResponse,
+} from "../api/types";
+
 export const DEFAULT_ALBUM_ID: string = "default";
 export const SAVED_ASSET_OPTION: string = "__saved__";
+
+export interface ThemePickerImage {
+  imageId: string;
+  unitId: string;
+  relativePath: string;
+  hasThumbnail: boolean;
+}
+
+export interface ThemePickerUnit {
+  unitId: string;
+  caption: string;
+  images: ThemePickerImage[];
+}
 
 export interface ThemeImageAlbum {
   album_id: string;
   name: string;
+  slug: string;
   asset_refs: string[];
+  units: ThemePickerUnit[];
+}
+
+/**
+ * Caption beside a unit's images. Free text wins. Otherwise the first field.
+ * The caption is not stored on the theme.
+ *
+ * @param freeText - Unit free text
+ * @param firstFieldValue - Value of the first field, or null
+ * @returns Display text, possibly empty
+ */
+export function captionForUnit(freeText: string | null, firstFieldValue: string | null): string {
+
+  const trimmedFreeText: string = (freeText ?? "").trim();
+
+  if (trimmedFreeText !== "") {
+    return trimmedFreeText;
+  }
+
+  const trimmedField: string = (firstFieldValue ?? "").trim();
+
+  return trimmedField;
+}
+
+/**
+ * Albums for the theme picker. Text-only units are omitted.
+ *
+ * @param source - Album detail from `GET /api/v1/sources/{id}`
+ * @returns One album and the image units inside it
+ */
+export function themeAlbumFromSource(source: SourceReadResponse): ThemeImageAlbum {
+
+  const orderedUnits: UnitReadResponse[] = [...source.units].sort(
+    (left: UnitReadResponse, right: UnitReadResponse): number => left.position - right.position,
+  );
+  const pickerUnits: ThemePickerUnit[] = [];
+  const assetRefs: string[] = [];
+
+  for (const unit of orderedUnits) {
+    const orderedImages: UnitImageReadResponse[] = [...unit.images].sort(
+      (left: UnitImageReadResponse, right: UnitImageReadResponse): number => (
+        left.position - right.position
+      ),
+    );
+
+    if (orderedImages.length === 0) {
+      continue;
+    }
+
+    const orderedFields: UnitFieldReadResponse[] = [...unit.fields].sort(
+      (left: UnitFieldReadResponse, right: UnitFieldReadResponse): number => (
+        left.position - right.position
+      ),
+    );
+    const firstFieldValue: string | null = orderedFields[0]?.value ?? null;
+    const pickerImages: ThemePickerImage[] = orderedImages.map((image) => {
+      assetRefs.push(image.relative_path);
+
+      const pickerImage: ThemePickerImage = {
+        imageId: image.id,
+        unitId: unit.id,
+        relativePath: image.relative_path,
+        hasThumbnail: image.thumbnail_path !== null && image.thumbnail_path !== "",
+      };
+
+      return pickerImage;
+    });
+    const pickerUnit: ThemePickerUnit = {
+      unitId: unit.id,
+      caption: captionForUnit(unit.free_text, firstFieldValue),
+      images: pickerImages,
+    };
+    pickerUnits.push(pickerUnit);
+  }
+
+  const album: ThemeImageAlbum = {
+    album_id: source.id,
+    name: source.name,
+    slug: source.slug,
+    asset_refs: assetRefs,
+    units: pickerUnits,
+  };
+
+  return album;
 }
 
 /**
  * Return the album that already contains this stored path.
  *
- * @param albums - Albums from the default-images API
+ * @param albums - Albums loaded from Sources
  * @param assetRef - Concrete path stored on the theme
  * @returns The matching album, or null when the path is outside every album
  */
@@ -24,6 +129,25 @@ export function albumForAssetRef(
   );
 
   return match ?? null;
+}
+
+/**
+ * The seeded Default album, by slug or by the old catalog id.
+ *
+ * @param albums - Albums loaded from Sources
+ * @returns Default, or undefined when it is absent
+ */
+export function findDefaultAlbum(
+  albums: readonly ThemeImageAlbum[],
+): ThemeImageAlbum | undefined {
+
+  const defaultAlbum: ThemeImageAlbum | undefined = albums.find(
+    (album: ThemeImageAlbum): boolean => (
+      album.slug === DEFAULT_ALBUM_ID || album.album_id === DEFAULT_ALBUM_ID
+    ),
+  );
+
+  return defaultAlbum;
 }
 
 /**
@@ -91,7 +215,7 @@ export function assetRefForAlbumChoice(
  *
  * A saved path outside the albums shuffles the Default album.
  *
- * @param albums - Albums from the API
+ * @param albums - Albums from Sources
  * @param selectValue - Current dropdown value
  * @param currentAssetRef - Path currently stored
  * @param randomUnit - Number in ``[0, 1)``
@@ -107,10 +231,7 @@ export function assetRefAfterShuffle(
   const selectedAlbum: ThemeImageAlbum | undefined = selectValue === SAVED_ASSET_OPTION
     ? undefined
     : albums.find((album: ThemeImageAlbum): boolean => album.album_id === selectValue);
-  const defaultAlbum: ThemeImageAlbum | undefined = albums.find(
-    (album: ThemeImageAlbum): boolean => album.album_id === DEFAULT_ALBUM_ID,
-  );
-  const album: ThemeImageAlbum | undefined = selectedAlbum ?? defaultAlbum;
+  const album: ThemeImageAlbum | undefined = selectedAlbum ?? findDefaultAlbum(albums);
 
   if (album === undefined || album.asset_refs.length === 0) {
     return null;
@@ -124,7 +245,7 @@ export function assetRefAfterShuffle(
 /**
  * Pick one concrete path from the Default album for a new image element.
  *
- * @param albums - Albums from the default-images API
+ * @param albums - Albums from Sources
  * @param randomUnit - Number in ``[0, 1)``
  * @returns A stored path from Default
  */
@@ -133,9 +254,7 @@ export function pickDefaultAlbumImage(
   randomUnit: number,
 ): string {
 
-  const defaultAlbum: ThemeImageAlbum | undefined = albums.find(
-    (album: ThemeImageAlbum): boolean => album.album_id === DEFAULT_ALBUM_ID,
-  );
+  const defaultAlbum: ThemeImageAlbum | undefined = findDefaultAlbum(albums);
 
   if (defaultAlbum === undefined || defaultAlbum.asset_refs.length === 0) {
     throw new Error("Default album has no images.");
