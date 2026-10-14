@@ -1,6 +1,6 @@
 # Sources v2
 
-*Last updated: 2026-10-10*
+*Last updated: 2026-10-14*
 *Status: Proposed design. Not locked. **Decided** is Mu's model. **Proposed** is a recommendation he can accept or change.*
 
 Sources are the content Twerva draws from. This slice stores them and lets an operator manage them. Campaigns, instruction sets, and a model can point at a source later. How those pieces combine is in [Later](#later-campaign-combination-rules-and-model).
@@ -232,6 +232,8 @@ Ownership is global, as proposed above. There is no per-source owner.
 
 **MVP**
 
+Build order is the [Phase plan](#phase-plan).
+
 - Sources, units, fields, tags, unit images, and one file per resource
 - Upload and URL import for images. Upload for Markdown and TXT
 - License allowlist on each image. Provenance note on each resource
@@ -270,3 +272,21 @@ The table above already recommends an answer for each of these. They stay open b
 2. The table stores only the image path on the theme. Should the theme also store the unit id, so the coupled text can be found without a search?
 3. The table keeps every source global until a house brand exists. Do you want per-brand sources as soon as the first brand does?
 4. The table lets an admin add units to Default. Should those six packaged photos stay frozen instead?
+
+---
+
+## Phase plan
+
+Build in this order. Each phase ships something a reviewer can test without the later phases. The phases follow the **Proposed** table. Still-open items 1–4 are the forks that would change a phase.
+
+**Phase 1 — Model and Default.** **Migration:** yes. One Alembic revision after `themes_element_rectangle`. Do not edit that revision. Tables `sources`, `units`, `unit_fields`, and `unit_images`, as in the data model. Seed one album, slug `default`, with six image-only units. Each `relative_path` stays `theme-defaults/…`. License and source come from `default_images/LICENSES.md`. Bytes stay in the package. Read API: `GET /api/v1/sources?kind=album` and `GET /api/v1/sources/{id}`. Readers may GET. **Done when:** a clean database migrates; a test reads Default and the six units with those paths and `cc0` or `public_domain`; a theme that already stores one of those paths still renders; no theme row is rewritten. **Out of scope:** ops pages, upload, URL import, thumbnails, resources, the theme picker, write and delete routes.
+
+**Phase 2 — Albums and units in ops.** **Migration:** no. Write API for albums and units: create, rename, edit free text, fields, tags, and the license, source, alt, and note on an image that already exists. Reject an empty unit, a license outside the allowlist, a blank image source, and `licensed` with no note. Delete of an image, unit, or album is 409 while a theme or artifact stores that path. Ops: Sources, an Albums tab, a units grid, and a unit editor. The grid shows the packaged JPEG for a `theme-defaults/` path, streamed with the existing package resolver. Admin writes. Reader reads. **Done when:** an admin creates an album and a text-only unit with a field and a tag, reloads, and sees them; deleting a Default image whose path a theme stores returns 409 and the row remains; a reader cannot save. **Out of scope:** new image bytes, URL import, generated thumbnails, the Resources tab, replacing the hard-coded theme album list.
+
+**Phase 3 — Image intake.** **Migration:** no. `thumbnail_path` is already on `unit_images`. Disk storage behind `save`, `open`, and `delete`, prefix `albums/<source_id>/<unit_id>/<image_id>.<ext>` under `ARTIFACT_STORAGE_DIR`. Multipart upload and URL import. The server downloads a URL once. SVG, PNG, or JPEG, 8 MB. The same license gate as Phase 2; a failure writes nothing. Thumbnail JPEG, longest edge 480. SVG has no thumbnail. The unit editor gains upload and import. The grid uses the thumbnail when one exists. **Done when:** an admin uploads a JPEG and imports a PNG from a URL, both appear with license and source, a file over 8 MB or a missing license note is 400 and leaves no row, and a theme path from Phase 1 still resolves. **Out of scope:** S3, WebP, resources, pointing the theme picker at the new albums.
+
+**Phase 4 — Resources.** **Migration:** yes. Table `resource_files`, as in the data model. Upload `.md` or `.txt`, stored as-is, 2 MB, with a required provenance note. Replacing the file is a new upload. Ops: a Resources tab, the note, and the file as text. Delete is allowed, because nothing points at a resource yet. **Done when:** an admin uploads a Markdown file and a note, reloads, and the bytes match; a `.txt` works; a PDF or a blank note is 400; a reader can open the text and cannot upload. **Out of scope:** PDF conversion, auto-synthesis, tags on a resource, campaign links, image changes.
+
+**Phase 5 — Theme pickers.** **Migration:** no. Themes keep `background_asset_ref` and `image_asset_ref`. The picture and image controls list albums, then units that have an image, then those images. Text-only units stay off the picker. A caption from free text or the first field is display only. Pick and Shuffle store one concrete path. Samples, live preview, and generate read that path. An unknown path stays "Saved image". This replaces the hard-coded Default catalog. **Done when:** an admin picks one Default image and one uploaded image, reloads, and both stored paths are those files; Shuffle writes a different path once and a second sample uses the saved path; a reader sees the list and cannot upload. **Out of scope:** a unit id on the theme, generate-time random, copying unit text onto the frame, resources in the picker.
+
+**Later.** **Migration:** none in this plan. Not part of the v2 build. Campaign combination rules and the model, as in [Later: campaign combination rules and model](#later-campaign-combination-rules-and-model): a unit's text with its images, or a resource plus an image-only album chosen by tags. Also S3 as another storage implementation, brand or campaign ownership, texture as an album of image-only units, PDF and multi-input synthesis, and WebP once a theme asset ref allows it. **Done when:** a later doc, after Mu answers the still-open list. **Out of scope:** the whole of this phase, for v2.
