@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import Select, select
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.lookups import fetch_content_source_by_id_or_raise
 from app.api.v1.schemas import (
+    ResourceFileReadResponse,
     SourceListItemResponse,
     SourceReadResponse,
     UnitFieldReadResponse,
@@ -114,6 +116,7 @@ def serialize_content_source(source: ContentSource) -> SourceReadResponse:
         created_at=source.created_at,
         updated_at=source.updated_at,
         units=unit_responses,
+        resource=_serialize_resource_file(source),
     )
 
     return source_read_response
@@ -201,6 +204,53 @@ def _serialize_field(field: UnitField) -> UnitFieldReadResponse:
     return field_response
 
 
+def _serialize_resource_file(source: ContentSource) -> ResourceFileReadResponse | None:
+    """Return the resource file and a safe rendering, or null for an album."""
+
+    from app.models.content_source import ResourceFile
+    from app.models.enums import ResourceFileMediaType
+    from app.sources.resource_markdown import render_markdown_document
+    from app.sources.resource_store import (
+        LocalResourceFileStore,
+        configured_resource_file_store,
+    )
+    from app.storage.artifacts import ArtifactAssetPathEscapeError
+
+    resource_file: ResourceFile | None = source.resource_file
+
+    if resource_file is None:
+
+        return None
+
+    file_store: LocalResourceFileStore = configured_resource_file_store()
+    body_text: str = ""
+
+    try:
+        stored_path: Path = file_store.open(resource_file.relative_path)
+
+        if stored_path.is_file():
+            body_text = stored_path.read_bytes().decode("utf-8")
+    except (ArtifactAssetPathEscapeError, UnicodeDecodeError, OSError):
+        body_text = ""
+
+    rendered_html: str | None = None
+
+    if resource_file.media_type == ResourceFileMediaType.MARKDOWN and body_text != "":
+        rendered_html = render_markdown_document(body_text)
+
+    resource_response: ResourceFileReadResponse = ResourceFileReadResponse(
+        relative_path=resource_file.relative_path,
+        media_type=resource_file.media_type,
+        byte_size=resource_file.byte_size,
+        original_filename=resource_file.original_filename,
+        provenance=resource_file.provenance,
+        body=body_text,
+        rendered_html=rendered_html,
+    )
+
+    return resource_response
+
+
 def serialize_image(image: UnitImage) -> UnitImageReadResponse:
     """Return one image, including license and the concrete path."""
 
@@ -224,8 +274,10 @@ def serialize_image(image: UnitImage) -> UnitImageReadResponse:
 
 
 from app.api.v1.source_intake import register_source_intake_routes
+from app.api.v1.source_resources import register_source_resource_routes
 from app.api.v1.source_writes import register_source_write_routes
 
 
 register_source_write_routes(sources_router)
+register_source_resource_routes(sources_router)
 register_source_intake_routes(sources_router)

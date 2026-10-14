@@ -123,10 +123,17 @@ Postgres data volume.
 
 Album image intake uses the same directory. The API creates
 `albums/<source_id>/<unit_id>/` on upload. No new env var and no
-migration. The service user must be able to create directories and
-files inside `/opt/twerva/artifacts`. URL import needs outbound
-http(s), which Spotmu ingest already uses. Do not publish this
-directory.
+migration for images. The service user must be able to create
+directories and files inside `/opt/twerva/artifacts`. URL import needs
+outbound http(s), which Spotmu ingest already uses. Do not publish
+this directory.
+
+Resource files use the same directory at `resources/<source_id>/body.md`
+or `body.txt`. That needs the Alembic revision `sources_resource_files`
+(`alembic upgrade head` from `apps/server`). No new env var. The same
+user must be able to create `resources/` inside the artifact directory.
+`python-multipart` is already required for uploads. Restart
+`twerva-api` after the migration.
 
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then

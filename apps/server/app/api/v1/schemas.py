@@ -16,6 +16,7 @@ from app.models.enums import (
     ContentSourceKind,
     OpsUserRole,
     Platform,
+    ResourceFileMediaType,
     PostJobStatus,
     SourceType,
     SteerActionType,
@@ -888,8 +889,20 @@ class SourceListItemResponse(BaseModel):
     updated_at: datetime
 
 
+class ResourceFileReadResponse(BaseModel):
+    """The file on a resource, plus a safe Markdown rendering when it is Markdown."""
+
+    relative_path: str
+    media_type: ResourceFileMediaType
+    byte_size: int
+    original_filename: str
+    provenance: str
+    body: str
+    rendered_html: str | None
+
+
 class SourceReadResponse(BaseModel):
-    """One source and its units, ordered by position."""
+    """One source and its units, or one resource and its file."""
 
     id: uuid.UUID
     kind: ContentSourceKind
@@ -898,10 +911,14 @@ class SourceReadResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     units: list[UnitReadResponse]
+    resource: ResourceFileReadResponse | None = None
 
 
 class SourceCreateRequest(BaseModel):
-    """Body for `POST /api/v1/sources`. Phase 2 accepts albums only."""
+    """JSON body for `POST /api/v1/sources`. Albums only.
+
+    A resource is `POST /api/v1/sources/resource` with the file.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -910,11 +927,12 @@ class SourceCreateRequest(BaseModel):
 
 
 class SourcePatchRequest(BaseModel):
-    """Body for `PATCH /api/v1/sources/{id}`. Renames the album."""
+    """Rename a source. A resource can also update its provenance note."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
+    provenance: str | None = None
 
 
 class UnitFieldWrite(BaseModel):

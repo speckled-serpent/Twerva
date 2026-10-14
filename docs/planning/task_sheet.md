@@ -444,7 +444,7 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 #### Phase 4 — Resources
 
-- [ ] **S4** Migration yes. Table `resource_files`. Upload `.md` or `.txt`, stored as-is, 2 MB, with a required provenance note. Replacing the file is a new upload. Ops: a Resources tab, the note, and the file as text. Delete is allowed, because nothing points at a resource yet. **Done when:** an admin uploads a Markdown file and a note, reloads, and the bytes match; a `.txt` works; a PDF or a blank note is 400; a reader can open the text and cannot upload. **Out of scope:** PDF conversion, auto-synthesis, tags on a resource, campaign links, image changes.
+- [x] **S4** Migration yes. Table `resource_files`. Upload `.md` or `.txt`, stored as-is, 2 MB, with a required provenance note. Replacing the file is a new upload. Ops: a Resources tab, the note, and the file as text. Delete is allowed, because nothing points at a resource yet. **Done when:** an admin uploads a Markdown file and a note, reloads, and the bytes match; a `.txt` works; a PDF or a blank note is 400; a reader can open the text and cannot upload. **Out of scope:** PDF conversion, auto-synthesis, tags on a resource, campaign links, image changes.
 
 #### Phase 5 — Theme pickers
 
@@ -554,9 +554,9 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 ## Suggested next coding slice
 
-**Sources v2, phase 4 (S4).** Source of truth:
-[`docs/planning/sources_v2.md`](sources_v2.md). **S1**, **S2**, and **S3** are done.
-Do not start the theme picker until S4 is `[x]`.
+**Sources v2, phase 5 (S5).** Source of truth:
+[`docs/planning/sources_v2.md`](sources_v2.md). **S1** through **S4** are done.
+The theme picker is the remaining sources slice.
 Do not start product Phase 2. Posts that ship stay on `carousel_template_v1`
 until a later slice binds a Live theme into `POST /api/v1/generate/carousel`.
 

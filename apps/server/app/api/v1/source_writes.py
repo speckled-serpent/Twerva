@@ -33,6 +33,7 @@ from app.sources.editing import (
     BLANK_NAME_DETAIL,
     EMPTY_UNIT_DETAIL,
     IMAGE_IN_USE_DETAIL,
+    RESOURCE_FILE_REQUIRED_DETAIL,
     RESOURCE_NOT_IN_SLICE_DETAIL,
     UNIT_IN_USE_DETAIL,
     allocate_unique_source_slug,
@@ -130,7 +131,7 @@ def create_content_source(
     if source_create_request.kind != ContentSourceKind.ALBUM:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=RESOURCE_NOT_IN_SLICE_DETAIL,
+            detail=RESOURCE_FILE_REQUIRED_DETAIL,
         )
 
     album_name: str = _require_name(source_create_request.name)
@@ -166,14 +167,22 @@ def patch_content_source(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> SourceReadResponse:
-    """Rename an album. The slug stays so existing links keep working."""
+    """Rename a source. A resource can also update its provenance note."""
 
     _ = current_ops_operator
     found_source: ContentSource = fetch_content_source_by_id_or_raise(
         source_id,
         our_database_session,
     )
-    found_source.name = _require_name(source_patch_request.name)
+    updated_name: str = _require_name(source_patch_request.name)
+    updated_provenance: str | None = _provenance_for_patch(
+        found_source,
+        source_patch_request.provenance,
+    )
+    found_source.name = updated_name
+
+    if updated_provenance is not None and found_source.resource_file is not None:
+        found_source.resource_file.provenance = updated_provenance
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail=SOURCE_SLUG_CONFLICT_DETAIL,
@@ -203,12 +212,18 @@ def delete_content_source(
         ALBUM_IN_USE_DETAIL,
     )
     stored_files: list[tuple[str, str | None]] = _stored_files_on_source(found_source)
+    resource_path: str | None = None
+
+    if found_source.resource_file is not None:
+        resource_path = found_source.resource_file.relative_path
+
     our_database_session.delete(found_source)
     commit_database_session_or_raise_conflict(
         our_database_session,
-        conflict_detail="Album could not be deleted.",
+        conflict_detail="Source could not be deleted.",
     )
     _discard_stored_files(stored_files)
+    _discard_resource_file(resource_path)
 
 
 def create_unit(
@@ -594,6 +609,60 @@ def _fetch_image_or_raise(
         )
 
     return found_image
+
+
+def _provenance_for_patch(
+    found_source: ContentSource,
+    provenance: str | None,
+) -> str | None:
+    """Return a cleaned note, or null when the patch does not change it.
+
+    A blank note and a note on an album are 400. Nothing is assigned yet.
+    """
+
+    if provenance is None:
+
+        return None
+
+    from app.sources.resource_files import (
+        BLANK_PROVENANCE_DETAIL,
+        ResourceFileError,
+        require_provenance,
+    )
+
+    if found_source.kind != ContentSourceKind.RESOURCE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provenance is only edited on a resource.",
+        )
+
+    if found_source.resource_file is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This resource has no file.",
+        )
+
+    try:
+        cleaned_provenance: str = require_provenance(provenance)
+    except ResourceFileError as provenance_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=provenance_error.detail or BLANK_PROVENANCE_DETAIL,
+        ) from provenance_error
+
+    return cleaned_provenance
+
+
+def _discard_resource_file(relative_path: str | None) -> None:
+    """Delete a resource file after the row commit. Other paths stay."""
+
+    if relative_path is None:
+
+        return
+
+    from app.sources.resource_store import configured_resource_file_store
+
+    configured_resource_file_store().delete(relative_path)
 
 
 def _discard_stored_files(stored_files: list[tuple[str, str | None]]) -> None:

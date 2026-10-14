@@ -794,6 +794,23 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(create_source_response.status_code, 403)
         self.assertIn("read-only", create_source_response.json()["detail"].lower())
 
+        create_resource_response = self.test_client.post(
+            "/api/v1/sources/resource",
+            data={"name": "Blocked notes", "provenance": "https://example.com/notes"},
+            files=[("file", ("notes.md", b"# Notes\n", "text/markdown"))],
+        )
+
+        self.assertEqual(create_resource_response.status_code, 403)
+        self.assertIn("read-only", create_resource_response.json()["detail"].lower())
+
+        replace_resource_response = self.test_client.put(
+            f"/api/v1/sources/{uuid.uuid4()}/resource",
+            files=[("file", ("notes.txt", b"plain\n", "text/plain"))],
+        )
+
+        self.assertEqual(replace_resource_response.status_code, 403)
+        self.assertIn("read-only", replace_resource_response.json()["detail"].lower())
+
         upload_image_response = self.test_client.post(
             f"/api/v1/sources/{uuid.uuid4()}/units/{uuid.uuid4()}/images",
             data={"license": "cc0", "source": "https://example.com/photo"},

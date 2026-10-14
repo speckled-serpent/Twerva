@@ -165,14 +165,17 @@ class ThemeElementAlignment(enum.StrEnum):
 
 
 class ContentSourceKind(enum.StrEnum):
-    """Whether a content source is an album of units or a resource file.
-
-    Phase 1 stores albums only. ``resource`` is reserved so the enum
-    does not need a rewrite when resource files land.
-    """
+    """Whether a content source is an album of units or a resource file."""
 
     ALBUM = "album"
     RESOURCE = "resource"
+
+
+class ResourceFileMediaType(enum.StrEnum):
+    """Stored type of one resource file. The bytes are the upload."""
+
+    MARKDOWN = "markdown"
+    PLAIN = "plain"
 
 
 class UnitImageMediaType(enum.StrEnum):
@@ -313,4 +316,8 @@ UNIT_IMAGE_LICENSE_ENUM: Enum = as_postgres_enum(
 UNIT_IMAGE_INTAKE_ENUM: Enum = as_postgres_enum(
     UnitImageIntake,
     "unit_image_intake",
+)
+RESOURCE_FILE_MEDIA_TYPE_ENUM: Enum = as_postgres_enum(
+    ResourceFileMediaType,
+    "resource_file_media_type",
 )

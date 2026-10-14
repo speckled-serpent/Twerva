@@ -520,6 +520,8 @@ export interface OpsUserResetPasswordRequest {
 
 export type ContentSourceKind = "album" | "resource";
 
+export type ResourceFileMediaType = "markdown" | "plain";
+
 export type UnitImageLicense = "cc0" | "public_domain" | "owned" | "licensed";
 
 export type UnitImageMediaType = "svg" | "png" | "jpeg";
@@ -568,6 +570,16 @@ export interface SourceListItemResponse {
   updated_at: string;
 }
 
+export interface ResourceFileReadResponse {
+  relative_path: string;
+  media_type: ResourceFileMediaType;
+  byte_size: number;
+  original_filename: string;
+  provenance: string;
+  body: string;
+  rendered_html: string | null;
+}
+
 export interface SourceReadResponse {
   id: string;
   kind: ContentSourceKind;
@@ -576,6 +588,7 @@ export interface SourceReadResponse {
   created_at: string;
   updated_at: string;
   units: UnitReadResponse[];
+  resource: ResourceFileReadResponse | null;
 }
 
 export interface SourceCreateRequest {
@@ -585,6 +598,7 @@ export interface SourceCreateRequest {
 
 export interface SourcePatchRequest {
   name: string;
+  provenance?: string | null;
 }
 
 export interface UnitFieldWrite {
