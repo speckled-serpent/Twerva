@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
 import {
-  createResource,
   deleteSource,
   renameSource,
   replaceResourceFile,
@@ -57,7 +56,6 @@ interface ResourceListViewProps {
   loadError: unknown;
   statusMessage: string;
   onOpenResource: (sourceId: string) => void;
-  onResourceCreated: (createdSource: SourceReadResponse) => void;
   onResourceDeleted: (resourceName: string) => void;
 }
 
@@ -67,51 +65,12 @@ export function ResourceListView({
   loadError,
   statusMessage,
   onOpenResource,
-  onResourceCreated,
   onResourceDeleted,
 }: ResourceListViewProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
-  const [resourceName, setResourceName] = useState<string>("");
-  const [provenance, setProvenance] = useState<string>("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<unknown>(null);
   const [pendingDelete, setPendingDelete] = useState<SourceListItemResponse | null>(null);
-
-  const handleCreate = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
-    submitEvent.preventDefault();
-
-    if (!canWrite || selectedFile === null) {
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    try {
-      const createdSource: SourceReadResponse = await createResource(
-        resourceName,
-        provenance,
-        selectedFile,
-      );
-      setResourceName("");
-      setProvenance("");
-      setSelectedFile(null);
-      onResourceCreated(createdSource);
-    } catch (caughtError: unknown) {
-      setSaveError(caughtError);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const createDisabled: boolean = (
-    isSaving
-    || resourceName.trim() === ""
-    || provenance.trim() === ""
-    || selectedFile === null
-  );
 
   return (
     <section>
@@ -121,6 +80,7 @@ export function ResourceListView({
           <h1>Sources</h1>
           <p className="lede">
             Resources. Each one is a Markdown or TXT file and a provenance note.
+            Create lives on Create Source.
           </p>
         </div>
       </div>
@@ -128,54 +88,8 @@ export function ResourceListView({
       <ErrorBanner error={loadError} />
       <ErrorBanner error={saveError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
-      {canWrite ? (
-        <form
-          className="stack-form"
-          onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-            void handleCreate(submitEvent);
-          }}
-        >
-          <label>
-            Name
-            <input
-              id="create-resource-name"
-              value={resourceName}
-              onChange={(changeEvent): void => {
-                setResourceName(changeEvent.target.value);
-              }}
-            />
-          </label>
-          <label>
-            Provenance
-            <textarea
-              id="create-resource-provenance"
-              rows={3}
-              value={provenance}
-              onChange={(changeEvent): void => {
-                setProvenance(changeEvent.target.value);
-              }}
-            />
-          </label>
-          <label>
-            File
-            <input
-              id="create-resource-file"
-              type="file"
-              accept=".md,.txt,text/markdown,text/plain"
-              onChange={(changeEvent): void => {
-                const fileList: FileList | null = changeEvent.target.files;
-                setSelectedFile(fileList === null || fileList.length === 0 ? null : fileList[0]);
-              }}
-            />
-          </label>
-          <p>Markdown (.md) or plain text (.txt). 2 MB. The file is stored as uploaded.</p>
-          <button id="create-resource-submit" type="submit" disabled={createDisabled}>
-            {isSaving ? "Uploading…" : "Create resource"}
-          </button>
-        </form>
-      ) : null}
       {loadError !== null ? null : resources.length === 0 ? (
-        <p>No resources yet.</p>
+        <p>No resources yet. Use Create Source to add one.</p>
       ) : (
         <table>
           <thead>

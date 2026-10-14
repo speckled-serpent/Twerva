@@ -10,6 +10,7 @@ import type {
   CampaignReadResponse,
   HealthReadResponse,
   OpsUserReadResponse,
+  SourceReadResponse,
   ThemeReadResponse,
 } from "./api/types";
 import { NavBar, type OpsPageId } from "./components/NavBar";
@@ -19,11 +20,12 @@ import { CampaignsPage } from "./pages/CampaignsPage";
 import { campaignStatusLabel } from "./pages/campaignDisplay";
 import { LoginPage } from "./pages/LoginPage";
 import { NewCampaignPage } from "./pages/NewCampaignPage";
+import { NewSourcePage } from "./pages/NewSourcePage";
 import { NewThemePage } from "./pages/NewThemePage";
 import { QueuePage } from "./pages/QueuePage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SchedulePage } from "./pages/SchedulePage";
-import { SourcesPage } from "./pages/SourcesPage";
+import { SourcesPage, type SourcesOpenRequest } from "./pages/SourcesPage";
 import { ThemesPage } from "./pages/ThemesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { OpsSessionContext, isAdminOpsRole } from "./session/OpsSessionContext";
@@ -45,6 +47,7 @@ export function App(): ReactElement {
   const [openedCampaignId, setOpenedCampaignId] = useState<string | null>(null);
   const [campaignStatusMessage, setCampaignStatusMessage] = useState<string>("");
   const [themeStatusMessage, setThemeStatusMessage] = useState<string>("");
+  const [sourceOpenRequest, setSourceOpenRequest] = useState<SourcesOpenRequest | null>(null);
   const [healthLabel, setHealthLabel] = useState<string>("API: checking…");
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -175,6 +178,10 @@ export function App(): ReactElement {
             if (pageId === "campaigns") {
               setOpenedCampaignId(null);
             }
+
+            if (pageId !== "sources") {
+              setSourceOpenRequest(null);
+            }
           }}
           healthLabel={healthLabel}
           signedInUsername={signedInOperator.username}
@@ -190,9 +197,11 @@ export function App(): ReactElement {
             openedCampaignId,
             campaignStatusMessage,
             themeStatusMessage,
+            sourceOpenRequest,
             setOpenedCampaignId,
             setCampaignStatusMessage,
             setThemeStatusMessage,
+            setSourceOpenRequest,
             setActivePageId,
           )}
         </main>
@@ -206,9 +215,11 @@ function renderActivePage(
   openedCampaignId: string | null,
   campaignStatusMessage: string,
   themeStatusMessage: string,
+  sourceOpenRequest: SourcesOpenRequest | null,
   onOpenedCampaignIdChange: (campaignId: string | null) => void,
   onCampaignStatusMessageChange: (statusMessage: string) => void,
   onThemeStatusMessageChange: (statusMessage: string) => void,
+  onSourceOpenRequestChange: (openRequest: SourcesOpenRequest | null) => void,
   onNavigate: (pageId: OpsPageId) => void,
 ): ReactElement {
 
@@ -246,7 +257,28 @@ function renderActivePage(
   }
 
   if (activePageId === "sources") {
-    return <SourcesPage />;
+    return (
+      <SourcesPage openRequest={sourceOpenRequest} />
+    );
+  }
+
+  if (activePageId === "new-source") {
+    return (
+      <NewSourcePage
+        onCreated={(createdSource: SourceReadResponse): void => {
+          const kindLabel: string = createdSource.kind === "album" ? "album" : "resource";
+          onSourceOpenRequestChange({
+            sourceId: createdSource.id,
+            kind: createdSource.kind,
+            statusMessage: `Created ${kindLabel} ${createdSource.name}.`,
+          });
+          onNavigate("sources");
+        }}
+        onCancel={(): void => {
+          onNavigate("sources");
+        }}
+      />
+    );
   }
 
   if (activePageId === "new-theme") {
