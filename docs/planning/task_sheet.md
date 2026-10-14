@@ -436,7 +436,7 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 #### Phase 2 — Albums and units in ops
 
-- [ ] **S2** No migration. Write API for albums and units: create, rename, edit free text, fields, tags, and the license, source, alt, and note on an image that already exists. Reject an empty unit, a license outside the allowlist, a blank image source, and `licensed` with no note. Delete of an image, unit, or album is 409 while a theme or artifact stores that path. Ops: Sources, an Albums tab, a units grid, and a unit editor. The grid shows the packaged JPEG for a `theme-defaults/` path, streamed with the existing package resolver. Admin writes. Reader reads. **Done when:** an admin creates an album and a text-only unit with a field and a tag, reloads, and sees them; deleting a Default image whose path a theme stores returns 409 and the row remains; a reader cannot save. **Out of scope:** new image bytes, URL import, generated thumbnails, the Resources tab, replacing the hard-coded theme album list.
+- [x] **S2** No migration. Write API for albums and units: create, rename, edit free text, fields, tags, and the license, source, alt, and note on an image that already exists. Reject an empty unit, a license outside the allowlist, a blank image source, and `licensed` with no note. Delete of an image, unit, or album is 409 while a theme or artifact stores that path. Ops: Sources, an Albums tab, a units grid, and a unit editor. The grid shows the packaged JPEG for a `theme-defaults/` path, streamed with the existing package resolver. Admin writes. Reader reads. **Done when:** an admin creates an album and a text-only unit with a field and a tag, reloads, and sees them; deleting a Default image whose path a theme stores returns 409 and the row remains; a reader cannot save. **Out of scope:** new image bytes, URL import, generated thumbnails, the Resources tab, replacing the hard-coded theme album list.
 
 #### Phase 3 — Image intake
 
@@ -554,9 +554,9 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 ## Suggested next coding slice
 
-**Sources v2, phase 2 (S2).** Source of truth:
-[`docs/planning/sources_v2.md`](sources_v2.md). **S1** is done.
-Do not start image intake, resources, or the theme picker until S2 is `[x]`.
+**Sources v2, phase 3 (S3).** Source of truth:
+[`docs/planning/sources_v2.md`](sources_v2.md). **S1** and **S2** are done.
+Do not start resources or the theme picker until S3 is `[x]`.
 Do not start product Phase 2. Posts that ship stay on `carousel_template_v1`
 until a later slice binds a Live theme into `POST /api/v1/generate/carousel`.
 

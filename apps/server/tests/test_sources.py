@@ -111,7 +111,7 @@ class DefaultAlbumSeedTests(unittest.TestCase):
 
 
 class ContentSourceReadApiTests(unittest.TestCase):
-    """GET list and GET one source. No write routes."""
+    """GET list and GET one source. Writes live beside these reads."""
 
     def test_get_default_returns_six_licensed_image_only_units(self) -> None:
         """Detail includes each path, license, and empty text, fields, and tags."""
@@ -179,18 +179,34 @@ class ContentSourceReadApiTests(unittest.TestCase):
         fake_session.add.assert_not_called()
         fake_session.commit.assert_not_called()
 
-    def test_sources_routes_are_get_only(self) -> None:
-        """Phase 1 does not register create, update, or delete."""
+    def test_source_routes_cover_reads_and_album_writes(self) -> None:
+        """List and detail stay readable. Album and unit writes are registered."""
 
         methods_by_path: dict[str, set[str]] = {}
 
         for route in sources_router.routes:
             path: str = getattr(route, "path", "")
             methods: set[str] = set(getattr(route, "methods", set()) or set())
-            methods_by_path[path] = methods
+            methods_by_path.setdefault(path, set()).update(methods)
 
-        self.assertEqual(methods_by_path["/sources"], {"GET"})
-        self.assertEqual(methods_by_path["/sources/{source_id}"], {"GET"})
+        self.assertTrue({"GET", "POST"}.issubset(methods_by_path["/sources"]))
+        self.assertTrue(
+            {"GET", "PATCH", "DELETE"}.issubset(methods_by_path["/sources/{source_id}"]),
+        )
+        self.assertIn("POST", methods_by_path["/sources/{source_id}/units"])
+        self.assertTrue(
+            {"PATCH", "DELETE"}.issubset(
+                methods_by_path["/sources/{source_id}/units/{unit_id}"],
+            ),
+        )
+        image_path: str = (
+            "/sources/{source_id}/units/{unit_id}/images/{image_id}"
+        )
+        self.assertTrue(
+            {"PATCH", "DELETE"}.issubset(methods_by_path[image_path]),
+        )
+        self.assertIn("GET", methods_by_path[f"{image_path}/file"])
+        self.assertNotIn("POST", methods_by_path[image_path])
 
 
 class ThemeDefaultsRenderingUnchangedTests(unittest.TestCase):

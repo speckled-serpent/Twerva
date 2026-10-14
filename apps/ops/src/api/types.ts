@@ -517,3 +517,90 @@ export interface OpsUserRolePatchRequest {
 export interface OpsUserResetPasswordRequest {
   new_password: string;
 }
+
+export type ContentSourceKind = "album" | "resource";
+
+export type UnitImageLicense = "cc0" | "public_domain" | "owned" | "licensed";
+
+export type UnitImageMediaType = "svg" | "png" | "jpeg";
+
+export type UnitImageIntake = "upload" | "url";
+
+export interface UnitFieldReadResponse {
+  id: string;
+  position: number;
+  label: string;
+  value: string;
+}
+
+export interface UnitImageReadResponse {
+  id: string;
+  position: number;
+  relative_path: string;
+  media_type: UnitImageMediaType;
+  byte_size: number;
+  width: number | null;
+  height: number | null;
+  alt_text: string | null;
+  license: UnitImageLicense;
+  source: string;
+  license_note: string;
+  intake: UnitImageIntake;
+  thumbnail_path: string | null;
+}
+
+export interface UnitReadResponse {
+  id: string;
+  position: number;
+  free_text: string | null;
+  tags: string[];
+  fields: UnitFieldReadResponse[];
+  images: UnitImageReadResponse[];
+}
+
+export interface SourceListItemResponse {
+  id: string;
+  kind: ContentSourceKind;
+  name: string;
+  slug: string;
+  unit_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SourceReadResponse {
+  id: string;
+  kind: ContentSourceKind;
+  name: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+  units: UnitReadResponse[];
+}
+
+export interface SourceCreateRequest {
+  name: string;
+  kind: ContentSourceKind;
+}
+
+export interface SourcePatchRequest {
+  name: string;
+}
+
+export interface UnitFieldWrite {
+  label: string;
+  value: string;
+}
+
+export interface UnitWriteRequest {
+  free_text: string | null;
+  tags: string[];
+  fields: UnitFieldWrite[];
+}
+
+export interface UnitImageMetadataPatch {
+  alt_text: string | null;
+  license: UnitImageLicense;
+  source: string;
+  license_note: string;
+}

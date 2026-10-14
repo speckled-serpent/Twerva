@@ -1,4 +1,4 @@
-"""Read content sources. Phase 1 has no create, update, or delete routes."""
+"""Read content sources, and register album and unit writes."""
 
 from __future__ import annotations
 
@@ -104,7 +104,7 @@ def serialize_content_source(source: ContentSource) -> SourceReadResponse:
     """Return one source with units, fields, and images in position order."""
 
     unit_responses: list[UnitReadResponse] = [
-        _serialize_unit(unit) for unit in _units_in_position_order(source)
+        serialize_unit(unit) for unit in _units_in_position_order(source)
     ]
     source_read_response: SourceReadResponse = SourceReadResponse(
         id=source.id,
@@ -135,14 +135,14 @@ def _unit_position(unit: Unit) -> int:
     return position
 
 
-def _serialize_unit(unit: Unit) -> UnitReadResponse:
+def serialize_unit(unit: Unit) -> UnitReadResponse:
     """Return one unit with fields and images in position order."""
 
     field_responses: list[UnitFieldReadResponse] = [
         _serialize_field(field) for field in _fields_in_position_order(unit)
     ]
     image_responses: list[UnitImageReadResponse] = [
-        _serialize_image(image) for image in _images_in_position_order(unit)
+        serialize_image(image) for image in _images_in_position_order(unit)
     ]
     unit_response: UnitReadResponse = UnitReadResponse(
         id=unit.id,
@@ -201,7 +201,7 @@ def _serialize_field(field: UnitField) -> UnitFieldReadResponse:
     return field_response
 
 
-def _serialize_image(image: UnitImage) -> UnitImageReadResponse:
+def serialize_image(image: UnitImage) -> UnitImageReadResponse:
     """Return one image, including license and the concrete path."""
 
     image_response: UnitImageReadResponse = UnitImageReadResponse(
@@ -221,3 +221,9 @@ def _serialize_image(image: UnitImage) -> UnitImageReadResponse:
     )
 
     return image_response
+
+
+from app.api.v1.source_writes import register_source_write_routes
+
+
+register_source_write_routes(sources_router)

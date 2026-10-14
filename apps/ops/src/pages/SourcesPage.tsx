@@ -1,0 +1,1142 @@
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
+
+import {
+  createAlbum,
+  createSourceUnit,
+  deleteSource,
+  deleteSourceUnit,
+  deleteUnitImage,
+  fetchSourceById,
+  listAlbums,
+  patchSourceUnit,
+  patchUnitImageMetadata,
+  renameSource,
+  unitImageFileUrl,
+} from "../api/client";
+import type {
+  SourceListItemResponse,
+  SourceReadResponse,
+  UnitFieldWrite,
+  UnitImageLicense,
+  UnitImageReadResponse,
+  UnitReadResponse,
+  UnitWriteRequest,
+} from "../api/types";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { useCanWriteOps } from "../session/OpsSessionContext";
+
+const LICENSE_OPTIONS: UnitImageLicense[] = [
+  "cc0",
+  "public_domain",
+  "owned",
+  "licensed",
+];
+
+interface FieldDraft {
+  label: string;
+  value: string;
+}
+
+/**
+ * Sources: the albums list, one album's units, and a unit editor.
+ * Upload and URL import are not on this page.
+ *
+ * @returns The Sources page
+ */
+export function SourcesPage(): ReactElement {
+
+  const [albums, setAlbums] = useState<SourceListItemResponse[]>([]);
+  const [openedSourceId, setOpenedSourceId] = useState<string | null>(null);
+  const [openedUnitId, setOpenedUnitId] = useState<string | null>(null);
+  const [isCreatingUnit, setIsCreatingUnit] = useState<boolean>(false);
+  const [selectedSource, setSelectedSource] = useState<SourceReadResponse | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [reloadToken, setReloadToken] = useState<number>(0);
+  const [heldUnit, setHeldUnit] = useState<UnitReadResponse | null>(null);
+
+  useEffect((): (() => void) => {
+    let isCancelled: boolean = false;
+
+    const loadAlbums = async (): Promise<void> => {
+
+      try {
+        const loadedAlbums: SourceListItemResponse[] = await listAlbums();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setAlbums(loadedAlbums);
+        setLoadError(null);
+      } catch (caughtError: unknown) {
+        if (isCancelled) {
+          return;
+        }
+
+        setLoadError(caughtError);
+      }
+    };
+
+    void loadAlbums();
+
+    return (): void => {
+      isCancelled = true;
+    };
+  }, [reloadToken]);
+
+  useEffect((): (() => void) => {
+    let isCancelled: boolean = false;
+
+    if (openedSourceId === null) {
+      setSelectedSource(null);
+
+      return (): void => {
+        isCancelled = true;
+      };
+    }
+
+    const loadSource = async (): Promise<void> => {
+
+      try {
+        const loadedSource: SourceReadResponse = await fetchSourceById(openedSourceId);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setSelectedSource(loadedSource);
+        setLoadError(null);
+      } catch (caughtError: unknown) {
+        if (isCancelled) {
+          return;
+        }
+
+        setSelectedSource(null);
+        setLoadError(caughtError);
+      }
+    };
+
+    void loadSource();
+
+    return (): void => {
+      isCancelled = true;
+    };
+  }, [openedSourceId, reloadToken]);
+
+  const requestReload = (): void => {
+    setReloadToken((currentToken: number): number => currentToken + 1);
+  };
+
+  if (openedSourceId !== null && (openedUnitId !== null || isCreatingUnit)) {
+    const loadedUnit: UnitReadResponse | null = findUnit(selectedSource, openedUnitId);
+    const openedUnit: UnitReadResponse | null = isCreatingUnit
+      ? null
+      : heldUnit !== null && heldUnit.id === openedUnitId
+        ? heldUnit
+        : loadedUnit;
+
+    return (
+      <UnitEditorView
+        source={selectedSource}
+        unit={openedUnit}
+        loadError={loadError}
+        statusMessage={statusMessage}
+        onBack={(): void => {
+          setOpenedUnitId(null);
+          setIsCreatingUnit(false);
+          setHeldUnit(null);
+          setStatusMessage("");
+        }}
+        onSaved={(savedUnit: UnitReadResponse, message: string): void => {
+          setStatusMessage(message);
+          setHeldUnit(savedUnit);
+          setIsCreatingUnit(false);
+          setOpenedUnitId(savedUnit.id);
+          requestReload();
+        }}
+        onImagesChanged={(message: string): void => {
+          setStatusMessage(message);
+          setHeldUnit(null);
+          requestReload();
+        }}
+        onUnitDeleted={(): void => {
+          setOpenedUnitId(null);
+          setIsCreatingUnit(false);
+          setHeldUnit(null);
+          setStatusMessage("Deleted the unit.");
+          requestReload();
+        }}
+      />
+    );
+  }
+
+  if (openedSourceId !== null) {
+    return (
+      <AlbumView
+        source={selectedSource}
+        loadError={loadError}
+        statusMessage={statusMessage}
+        onBack={(): void => {
+          setOpenedSourceId(null);
+          setStatusMessage("");
+        }}
+        onOpenUnit={(unitId: string): void => {
+          setHeldUnit(null);
+          setOpenedUnitId(unitId);
+          setIsCreatingUnit(false);
+          setStatusMessage("");
+        }}
+        onCreateUnit={(): void => {
+          setHeldUnit(null);
+          setOpenedUnitId(null);
+          setIsCreatingUnit(true);
+          setStatusMessage("");
+        }}
+        onSourceChanged={(message: string): void => {
+          setStatusMessage(message);
+          requestReload();
+        }}
+        onSourceDeleted={(): void => {
+          setOpenedSourceId(null);
+          setStatusMessage("Deleted the album.");
+          requestReload();
+        }}
+      />
+    );
+  }
+
+  return (
+    <AlbumListView
+      albums={albums}
+      loadError={loadError}
+      statusMessage={statusMessage}
+      onOpenAlbum={(sourceId: string): void => {
+        setOpenedSourceId(sourceId);
+        setStatusMessage("");
+      }}
+      onAlbumCreated={(createdSource: SourceReadResponse): void => {
+        setStatusMessage(`Created album ${createdSource.name}.`);
+        setOpenedSourceId(createdSource.id);
+        requestReload();
+      }}
+      onAlbumDeleted={(albumName: string): void => {
+        setStatusMessage(`Deleted album ${albumName}.`);
+        requestReload();
+      }}
+    />
+  );
+}
+
+interface AlbumListViewProps {
+  albums: SourceListItemResponse[];
+  loadError: unknown;
+  statusMessage: string;
+  onOpenAlbum: (sourceId: string) => void;
+  onAlbumCreated: (createdSource: SourceReadResponse) => void;
+  onAlbumDeleted: (albumName: string) => void;
+}
+
+function AlbumListView({
+  albums,
+  loadError,
+  statusMessage,
+  onOpenAlbum,
+  onAlbumCreated,
+  onAlbumDeleted,
+}: AlbumListViewProps): ReactElement {
+
+  const canWrite: boolean = useCanWriteOps();
+  const [albumName, setAlbumName] = useState<string>("");
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const [pendingDelete, setPendingDelete] = useState<SourceListItemResponse | null>(null);
+
+  const handleCreate = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
+    submitEvent.preventDefault();
+
+    if (!canWrite) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const createdSource: SourceReadResponse = await createAlbum({
+        name: albumName,
+        kind: "album",
+      });
+      setAlbumName("");
+      onAlbumCreated(createdSource);
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="page-header-row">
+        <div>
+          <h1>Sources</h1>
+          <p className="lede">
+            Albums. Open one to see its units. New image files are not added here.
+          </p>
+        </div>
+      </div>
+      <ReadOnlyNotice />
+      <ErrorBanner error={loadError} />
+      <ErrorBanner error={saveError} />
+      {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
+      {canWrite ? (
+        <form
+          className="stack-form"
+          onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+            void handleCreate(submitEvent);
+          }}
+        >
+          <label>
+            New album name
+            <input
+              id="create-album-name"
+              value={albumName}
+              onChange={(changeEvent): void => {
+                setAlbumName(changeEvent.target.value);
+              }}
+            />
+          </label>
+          <div className="button-row">
+            <button id="create-album-submit" type="submit" disabled={isSaving || albumName.trim() === ""}>
+              {isSaving ? "Creating…" : "Create album"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+      {loadError !== null ? null : albums.length === 0 ? (
+        <p>No albums yet.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Units</th>
+              <th>Open</th>
+              <th>Delete</th>
+            </tr>
+          </thead>
+          <tbody>
+            {albums.map((album: SourceListItemResponse): ReactElement => (
+              <tr key={album.id}>
+                <td>{album.name}</td>
+                <td>{album.unit_count}</td>
+                <td>
+                  <button
+                    type="button"
+                    onClick={(): void => {
+                      onOpenAlbum(album.id);
+                    }}
+                  >
+                    Open
+                  </button>
+                </td>
+                <td>
+                  {canWrite ? (
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={(): void => {
+                        setPendingDelete(album);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {pendingDelete === null ? null : (
+        <DeleteConfirmDialog
+          headingId="delete-album-heading"
+          title={`Delete ${pendingDelete.name}?`}
+          body="This removes the album and its units. Delete is blocked while a theme or an artifact still stores one of its images, and the album stays."
+          confirmLabel="Delete album"
+          onCancel={(): void => {
+            setPendingDelete(null);
+          }}
+          onConfirm={async (): Promise<void> => {
+            await deleteSource(pendingDelete.id);
+            const deletedName: string = pendingDelete.name;
+            setPendingDelete(null);
+            onAlbumDeleted(deletedName);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+interface AlbumViewProps {
+  source: SourceReadResponse | null;
+  loadError: unknown;
+  statusMessage: string;
+  onBack: () => void;
+  onOpenUnit: (unitId: string) => void;
+  onCreateUnit: () => void;
+  onSourceChanged: (message: string) => void;
+  onSourceDeleted: () => void;
+}
+
+function AlbumView({
+  source,
+  loadError,
+  statusMessage,
+  onBack,
+  onOpenUnit,
+  onCreateUnit,
+  onSourceChanged,
+  onSourceDeleted,
+}: AlbumViewProps): ReactElement {
+
+  const canWrite: boolean = useCanWriteOps();
+  const [albumName, setAlbumName] = useState<string>(source?.name ?? "");
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [pendingDelete, setPendingDelete] = useState<boolean>(false);
+  const [pendingUnitDelete, setPendingUnitDelete] = useState<UnitReadResponse | null>(null);
+
+  useEffect((): void => {
+    setAlbumName(source?.name ?? "");
+  }, [source]);
+
+  const handleRename = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
+    submitEvent.preventDefault();
+
+    if (!canWrite || source === null) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const renamedSource: SourceReadResponse = await renameSource(source.id, {
+        name: albumName,
+      });
+      onSourceChanged(`Renamed album to ${renamedSource.name}.`);
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <section>
+      <div className="page-header-row">
+        <div>
+          <h1>{source === null ? "Album" : source.name}</h1>
+          <p className="lede">
+            Units in this album. A card shows the first image, or the text when there is none.
+          </p>
+        </div>
+        <button type="button" onClick={onBack}>
+          Back to albums
+        </button>
+      </div>
+      <ReadOnlyNotice />
+      <ErrorBanner error={loadError} />
+      <ErrorBanner error={saveError} />
+      {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
+      {source === null ? (
+        <p>Loading album…</p>
+      ) : (
+        <>
+          {canWrite ? (
+            <form
+              className="stack-form"
+              onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+                void handleRename(submitEvent);
+              }}
+            >
+              <label>
+                Album name
+                <input
+                  id="rename-album-name"
+                  value={albumName}
+                  onChange={(changeEvent): void => {
+                    setAlbumName(changeEvent.target.value);
+                  }}
+                />
+              </label>
+              <div className="button-row">
+                <button type="submit" disabled={isSaving || albumName.trim() === ""}>
+                  {isSaving ? "Saving…" : "Rename album"}
+                </button>
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={(): void => {
+                    setPendingDelete(true);
+                  }}
+                >
+                  Delete album
+                </button>
+                <button id="add-unit" type="button" onClick={onCreateUnit}>
+                  Add unit
+                </button>
+              </div>
+            </form>
+          ) : null}
+          {source.units.length === 0 ? (
+            <p>No units yet.</p>
+          ) : (
+            <ul className="unit-grid">
+              {source.units.map((unit: UnitReadResponse): ReactElement => (
+                <li key={unit.id}>
+                  <button
+                    type="button"
+                    className="unit-card"
+                    onClick={(): void => {
+                      onOpenUnit(unit.id);
+                    }}
+                  >
+                    <UnitCardBody sourceId={source.id} unit={unit} />
+                  </button>
+                  {canWrite ? (
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={(): void => {
+                        setPendingUnitDelete(unit);
+                      }}
+                    >
+                      Delete unit
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      {pendingDelete && source !== null ? (
+        <DeleteConfirmDialog
+          headingId="delete-open-album-heading"
+          title={`Delete ${source.name}?`}
+          body="This removes the album and its units. Delete is blocked while a theme or an artifact still stores one of its images, and the album stays."
+          confirmLabel="Delete album"
+          onCancel={(): void => {
+            setPendingDelete(false);
+          }}
+          onConfirm={async (): Promise<void> => {
+            await deleteSource(source.id);
+            setPendingDelete(false);
+            onSourceDeleted();
+          }}
+        />
+      ) : null}
+      {pendingUnitDelete !== null && source !== null ? (
+        <DeleteConfirmDialog
+          headingId="delete-unit-heading"
+          title="Delete this unit?"
+          body="Delete is blocked while a theme or an artifact still stores one of its images, and the unit stays."
+          confirmLabel="Delete unit"
+          onCancel={(): void => {
+            setPendingUnitDelete(null);
+          }}
+          onConfirm={async (): Promise<void> => {
+            await deleteSourceUnit(source.id, pendingUnitDelete.id);
+            setPendingUnitDelete(null);
+            onSourceChanged("Deleted the unit.");
+          }}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+interface UnitCardBodyProps {
+  sourceId: string;
+  unit: UnitReadResponse;
+}
+
+function UnitCardBody({ sourceId, unit }: UnitCardBodyProps): ReactElement {
+
+  const firstImage: UnitImageReadResponse | undefined = unit.images[0];
+  const excerpt: string = unitExcerpt(unit);
+  const tagLine: string = unit.tags.join(", ");
+
+  return (
+    <>
+      {firstImage === undefined ? (
+        <p className="unit-card-excerpt">{excerpt}</p>
+      ) : (
+        <img
+          src={unitImageFileUrl(sourceId, unit.id, firstImage.id)}
+          alt={firstImage.alt_text ?? excerpt}
+        />
+      )}
+      {firstImage === undefined ? null : <p className="unit-card-excerpt">{excerpt}</p>}
+      {tagLine === "" ? null : <p className="unit-card-tags">{tagLine}</p>}
+    </>
+  );
+}
+
+interface UnitEditorViewProps {
+  source: SourceReadResponse | null;
+  unit: UnitReadResponse | null;
+  loadError: unknown;
+  statusMessage: string;
+  onBack: () => void;
+  onSaved: (savedUnit: UnitReadResponse, message: string) => void;
+  onImagesChanged: (message: string) => void;
+  onUnitDeleted: () => void;
+}
+
+function UnitEditorView({
+  source,
+  unit,
+  loadError,
+  statusMessage,
+  onBack,
+  onSaved,
+  onImagesChanged,
+  onUnitDeleted,
+}: UnitEditorViewProps): ReactElement {
+
+  const canWrite: boolean = useCanWriteOps();
+  const [freeText, setFreeText] = useState<string>(unit?.free_text ?? "");
+  const [tagsText, setTagsText] = useState<string>(unit === null ? "" : unit.tags.join(", "));
+  const [fieldDrafts, setFieldDrafts] = useState<FieldDraft[]>(fieldDraftsFromUnit(unit));
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [pendingDelete, setPendingDelete] = useState<boolean>(false);
+
+  useEffect((): void => {
+    setFreeText(unit?.free_text ?? "");
+    setTagsText(unit === null ? "" : unit.tags.join(", "));
+    setFieldDrafts(fieldDraftsFromUnit(unit));
+  }, [unit?.id]);
+
+  const handleSave = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
+    submitEvent.preventDefault();
+
+    if (!canWrite || source === null) {
+      return;
+    }
+
+    const unitWriteRequest: UnitWriteRequest = {
+      free_text: freeText,
+      tags: tagsFromText(tagsText),
+      fields: fieldsFromDrafts(fieldDrafts),
+    };
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const savedUnit: UnitReadResponse = unit === null
+        ? await createSourceUnit(source.id, unitWriteRequest)
+        : await patchSourceUnit(source.id, unit.id, unitWriteRequest);
+      const message: string = unit === null ? "Created the unit." : "Saved the unit.";
+      onSaved(savedUnit, message);
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const pageTitle: string = unit === null ? "New unit" : "Unit";
+
+  return (
+    <section>
+      <div className="page-header-row">
+        <div>
+          <h1>{pageTitle}</h1>
+          <p className="lede">
+            {source === null ? "Album" : source.name}
+            . Text, labeled fields, tags, and license on images that already exist.
+          </p>
+        </div>
+        <button type="button" onClick={onBack}>
+          Back to units
+        </button>
+      </div>
+      <ReadOnlyNotice />
+      <ErrorBanner error={loadError} />
+      <ErrorBanner error={saveError} />
+      {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
+      {source === null ? (
+        <p>Loading album…</p>
+      ) : unit === null && !canWrite ? (
+        <p>This unit is not available.</p>
+      ) : (
+        <>
+          {unit === null ? null : unit.images.map((image: UnitImageReadResponse): ReactElement => (
+            <ImageMetadataEditor
+              key={image.id}
+              sourceId={source.id}
+              unitId={unit.id}
+              image={image}
+              canWrite={canWrite}
+              onChanged={(message: string): void => {
+                onImagesChanged(message);
+              }}
+            />
+          ))}
+          <form
+            className="stack-form"
+            onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+              void handleSave(submitEvent);
+            }}
+          >
+            <label>
+              Free text
+              <textarea
+                id="unit-free-text"
+                rows={4}
+                value={freeText}
+                disabled={!canWrite}
+                onChange={(changeEvent): void => {
+                  setFreeText(changeEvent.target.value);
+                }}
+              />
+            </label>
+            <fieldset>
+              <legend>Labeled fields</legend>
+              {fieldDrafts.map((fieldDraft: FieldDraft, fieldIndex: number): ReactElement => (
+                <div className="field-row" key={fieldIndex}>
+                  <label>
+                    Label
+                    <input
+                      aria-label={`Field ${fieldIndex + 1} label`}
+                      value={fieldDraft.label}
+                      disabled={!canWrite}
+                      onChange={(changeEvent): void => {
+                        setFieldDrafts(replaceFieldDraft(fieldDrafts, fieldIndex, {
+                          label: changeEvent.target.value,
+                          value: fieldDraft.value,
+                        }));
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Value
+                    <input
+                      aria-label={`Field ${fieldIndex + 1} value`}
+                      value={fieldDraft.value}
+                      disabled={!canWrite}
+                      onChange={(changeEvent): void => {
+                        setFieldDrafts(replaceFieldDraft(fieldDrafts, fieldIndex, {
+                          label: fieldDraft.label,
+                          value: changeEvent.target.value,
+                        }));
+                      }}
+                    />
+                  </label>
+                  {canWrite ? (
+                    <button
+                      type="button"
+                      onClick={(): void => {
+                        setFieldDrafts(removeFieldDraft(fieldDrafts, fieldIndex));
+                      }}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+              {canWrite ? (
+                <button
+                  id="add-field"
+                  type="button"
+                  onClick={(): void => {
+                    setFieldDrafts([...fieldDrafts, { label: "", value: "" }]);
+                  }}
+                >
+                  Add field
+                </button>
+              ) : null}
+            </fieldset>
+            <label>
+              Tags
+              <input
+                id="unit-tags"
+                value={tagsText}
+                disabled={!canWrite}
+                onChange={(changeEvent): void => {
+                  setTagsText(changeEvent.target.value);
+                }}
+              />
+            </label>
+            <p>Separate tags with commas. A unit needs an image, free text, or a field.</p>
+            {canWrite ? (
+              <div className="button-row">
+                <button id="save-unit" type="submit" disabled={isSaving}>
+                  {isSaving ? "Saving…" : "Save unit"}
+                </button>
+                {unit === null ? null : (
+                  <button
+                    type="button"
+                    className="danger"
+                    onClick={(): void => {
+                      setPendingDelete(true);
+                    }}
+                  >
+                    Delete unit
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </form>
+        </>
+      )}
+      {pendingDelete && source !== null && unit !== null ? (
+        <DeleteConfirmDialog
+          headingId="delete-editor-unit-heading"
+          title="Delete this unit?"
+          body="Delete is blocked while a theme or an artifact still stores one of its images, and the unit stays."
+          confirmLabel="Delete unit"
+          onCancel={(): void => {
+            setPendingDelete(false);
+          }}
+          onConfirm={async (): Promise<void> => {
+            await deleteSourceUnit(source.id, unit.id);
+            setPendingDelete(false);
+            onUnitDeleted();
+          }}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+interface ImageMetadataEditorProps {
+  sourceId: string;
+  unitId: string;
+  image: UnitImageReadResponse;
+  canWrite: boolean;
+  onChanged: (message: string) => void;
+}
+
+function ImageMetadataEditor({
+  sourceId,
+  unitId,
+  image,
+  canWrite,
+  onChanged,
+}: ImageMetadataEditorProps): ReactElement {
+
+  const [altText, setAltText] = useState<string>(image.alt_text ?? "");
+  const [imageLicense, setImageLicense] = useState<UnitImageLicense>(image.license);
+  const [imageSource, setImageSource] = useState<string>(image.source);
+  const [licenseNote, setLicenseNote] = useState<string>(image.license_note);
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [pendingDelete, setPendingDelete] = useState<boolean>(false);
+
+  useEffect((): void => {
+    setAltText(image.alt_text ?? "");
+    setImageLicense(image.license);
+    setImageSource(image.source);
+    setLicenseNote(image.license_note);
+  }, [image]);
+
+  const handleSave = async (): Promise<void> => {
+
+    if (!canWrite) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await patchUnitImageMetadata(sourceId, unitId, image.id, {
+        alt_text: altText,
+        license: imageLicense,
+        source: imageSource,
+        license_note: licenseNote,
+      });
+      onChanged("Saved image details.");
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="image-editor">
+      <img
+        src={unitImageFileUrl(sourceId, unitId, image.id)}
+        alt={image.alt_text ?? image.relative_path}
+      />
+      <div className="stack-form">
+        <p className="mono">{image.relative_path}</p>
+        <ErrorBanner error={saveError} />
+        <label>
+          License
+          <select
+            id={`image-license-${image.id}`}
+            value={imageLicense}
+            disabled={!canWrite}
+            onChange={(changeEvent): void => {
+              setImageLicense(changeEvent.target.value as UnitImageLicense);
+            }}
+          >
+            {LICENSE_OPTIONS.map((licenseOption: UnitImageLicense): ReactElement => (
+              <option key={licenseOption} value={licenseOption}>
+                {licenseOption}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Source
+          <input
+            value={imageSource}
+            disabled={!canWrite}
+            onChange={(changeEvent): void => {
+              setImageSource(changeEvent.target.value);
+            }}
+          />
+        </label>
+        <label>
+          Alt text
+          <input
+            value={altText}
+            disabled={!canWrite}
+            onChange={(changeEvent): void => {
+              setAltText(changeEvent.target.value);
+            }}
+          />
+        </label>
+        <label>
+          License note
+          <input
+            value={licenseNote}
+            disabled={!canWrite}
+            onChange={(changeEvent): void => {
+              setLicenseNote(changeEvent.target.value);
+            }}
+          />
+        </label>
+        <p>A licensed image needs a note. Other licenses store an empty note.</p>
+        {canWrite ? (
+          <div className="button-row">
+            <button type="button" disabled={isSaving} onClick={(): void => {
+              void handleSave();
+            }}>
+              {isSaving ? "Saving…" : "Save image"}
+            </button>
+            <button
+              type="button"
+              className="danger"
+              onClick={(): void => {
+                setPendingDelete(true);
+              }}
+            >
+              Delete image
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {pendingDelete ? (
+        <DeleteConfirmDialog
+          headingId={`delete-image-${image.id}`}
+          title="Delete this image?"
+          body="Delete is blocked while a theme or an artifact stores this image, and the row stays. A unit also has to keep an image, free text, or a field."
+          confirmLabel="Delete image"
+          onCancel={(): void => {
+            setPendingDelete(false);
+          }}
+          onConfirm={async (): Promise<void> => {
+            await deleteUnitImage(sourceId, unitId, image.id);
+            setPendingDelete(false);
+            onChanged("Deleted the image.");
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+interface DeleteConfirmDialogProps {
+  headingId: string;
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}
+
+function DeleteConfirmDialog({
+  headingId,
+  title,
+  body,
+  confirmLabel,
+  onCancel,
+  onConfirm,
+}: DeleteConfirmDialogProps): ReactElement {
+
+  const [deleteError, setDeleteError] = useState<unknown>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+
+  const handleConfirm = async (): Promise<void> => {
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await onConfirm();
+    } catch (caughtError: unknown) {
+      setDeleteError(caughtError);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div
+      className="confirm-backdrop"
+      onClick={(): void => {
+        if (!isDeleting) {
+          onCancel();
+        }
+      }}
+    >
+      <div
+        className="confirm-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={headingId}
+        onClick={(clickEvent): void => {
+          clickEvent.stopPropagation();
+        }}
+      >
+        <h2 id={headingId}>{title}</h2>
+        <p>{body}</p>
+        <ErrorBanner error={deleteError} />
+        <div className="button-row">
+          <button
+            type="button"
+            className="danger"
+            disabled={isDeleting}
+            onClick={(): void => {
+              void handleConfirm();
+            }}
+          >
+            {isDeleting ? "Deleting…" : confirmLabel}
+          </button>
+          <button type="button" disabled={isDeleting} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function findUnit(
+  source: SourceReadResponse | null,
+  unitId: string | null,
+): UnitReadResponse | null {
+
+  if (source === null || unitId === null) {
+    return null;
+  }
+
+  const foundUnit: UnitReadResponse | undefined = source.units.find(
+    (unit: UnitReadResponse): boolean => unit.id === unitId,
+  );
+
+  return foundUnit ?? null;
+}
+
+function unitExcerpt(unit: UnitReadResponse): string {
+
+  if (unit.free_text !== null && unit.free_text.trim() !== "") {
+    return unit.free_text;
+  }
+
+  const firstField: UnitFieldWrite | undefined = unit.fields[0];
+
+  if (firstField !== undefined) {
+    return `${firstField.label}: ${firstField.value}`;
+  }
+
+  const firstImage: UnitImageReadResponse | undefined = unit.images[0];
+
+  if (firstImage !== undefined) {
+    return firstImage.relative_path;
+  }
+
+  return "Empty unit";
+}
+
+function fieldDraftsFromUnit(unit: UnitReadResponse | null): FieldDraft[] {
+
+  if (unit === null) {
+    return [];
+  }
+
+  const drafts: FieldDraft[] = unit.fields.map((field: UnitFieldWrite): FieldDraft => {
+    return { label: field.label, value: field.value };
+  });
+
+  return drafts;
+}
+
+function tagsFromText(tagsText: string): string[] {
+
+  const tags: string[] = tagsText
+    .split(",")
+    .map((rawTag: string): string => rawTag.trim())
+    .filter((tag: string): boolean => tag !== "");
+
+  return tags;
+}
+
+function fieldsFromDrafts(fieldDrafts: FieldDraft[]): UnitFieldWrite[] {
+
+  const fields: UnitFieldWrite[] = fieldDrafts.map((fieldDraft: FieldDraft): UnitFieldWrite => {
+    return { label: fieldDraft.label, value: fieldDraft.value };
+  });
+
+  return fields;
+}
+
+function replaceFieldDraft(
+  fieldDrafts: FieldDraft[],
+  fieldIndex: number,
+  nextDraft: FieldDraft,
+): FieldDraft[] {
+
+  const nextDrafts: FieldDraft[] = fieldDrafts.map(
+    (fieldDraft: FieldDraft, index: number): FieldDraft => {
+      if (index === fieldIndex) {
+        return nextDraft;
+      }
+
+      return fieldDraft;
+    },
+  );
+
+  return nextDrafts;
+}
+
+function removeFieldDraft(fieldDrafts: FieldDraft[], fieldIndex: number): FieldDraft[] {
+
+  const nextDrafts: FieldDraft[] = fieldDrafts.filter(
+    (_fieldDraft: FieldDraft, index: number): boolean => index !== fieldIndex,
+  );
+
+  return nextDrafts;
+}
