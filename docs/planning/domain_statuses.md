@@ -352,3 +352,23 @@ Check `ck_theme_elements_content`:
 - `image_asset_ref`, when set, is a relative path with no `..` and no
   scheme, suffix `.svg`, `.png`, `.jpg`, or `.jpeg` (same rule as
   `background_asset_ref`).
+
+## Content sources (`sources`)
+
+Alembic `sources_default_album` (parent `themes_element_rectangle`).
+An album is a source with `kind = album` and has units. `resource` is
+reserved. Phase 1 seeds one album, slug `default`, and does not update
+`themes`.
+
+| Enum | Values |
+|---|---|
+| `content_source_kind` | `album`, `resource` |
+| `unit_image_media_type` | `svg`, `png`, `jpeg` |
+| `unit_image_license` | `cc0`, `public_domain`, `owned`, `licensed` |
+| `unit_image_intake` | `upload`, `url` |
+
+`units.tags` is a text array, default empty. `unit_images.license_note`
+is empty unless `license` is `licensed`, in which case it is required.
+`relative_path` is unique. SVG rows have null width, height, and
+thumbnail. `GET /api/v1/sources` and `GET /api/v1/sources/{id}` are
+read-only. Readers may call them.

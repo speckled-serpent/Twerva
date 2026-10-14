@@ -20,6 +20,7 @@ THEMES_STATUS_REVISION_ID: str = "themes_status"
 THEMES_SPACING_REVISION_ID: str = "themes_spacing"
 THEMES_DROP_TEXTURE_REVISION_ID: str = "themes_drop_texture"
 THEMES_ELEMENT_RECTANGLE_REVISION_ID: str = "themes_element_rectangle"
+SOURCES_DEFAULT_ALBUM_REVISION_ID: str = "sources_default_album"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -54,6 +55,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
+                f"{SOURCES_DEFAULT_ALBUM_REVISION_ID}.py",
                 f"{THEME_ELEMENTS_REVISION_ID}.py",
                 f"{THEMES_BACKGROUND_REVISION_ID}.py",
                 f"{THEMES_CREATE_REVISION_ID}.py",
@@ -438,6 +440,43 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("rectangle_radius >= 0 AND rectangle_radius <= 10000", revision_source)
         self.assertIn('op.drop_column("theme_elements", "rectangle_opacity")', revision_source)
         self.assertIn('op.drop_column("theme_elements", "rectangle_radius")', revision_source)
+
+    def test_sources_default_album_follows_element_rectangle(self) -> None:
+        """Content sources follow the rectangle revision and do not touch themes."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{SOURCES_DEFAULT_ALBUM_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            SOURCES_DEFAULT_ALBUM_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            THEMES_ELEMENT_RECTANGLE_REVISION_ID,
+        )
+        self.assertIn("CREATE TYPE content_source_kind AS ENUM", revision_source)
+        self.assertIn("('album', 'resource')", revision_source)
+        self.assertIn(
+            "('cc0', 'public_domain', 'owned', 'licensed')",
+            revision_source,
+        )
+        self.assertIn('op.create_table(\n        "sources"', revision_source)
+        self.assertIn('op.create_table(\n        "units"', revision_source)
+        self.assertIn('op.create_table(\n        "unit_fields"', revision_source)
+        self.assertIn('op.create_table(\n        "unit_images"', revision_source)
+        self.assertIn('"tags"', revision_source)
+        self.assertIn("default_unit_seeds", revision_source)
+        self.assertIn("ON CONFLICT (slug) DO NOTHING", revision_source)
+        self.assertNotIn("UPDATE themes", revision_source)
+        self.assertNotIn("background_asset_ref", revision_source)
+        self.assertIn("DROP TYPE content_source_kind", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

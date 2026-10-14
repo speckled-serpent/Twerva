@@ -17,6 +17,8 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/brands/{brand_id}",
         "/api/v1/source-items",
         "/api/v1/source-items/{source_item_id}",
+        "/api/v1/sources",
+        "/api/v1/sources/{source_id}",
         "/api/v1/campaigns",
         "/api/v1/campaigns/{campaign_id}",
         "/api/v1/campaigns/{campaign_id}/start",
