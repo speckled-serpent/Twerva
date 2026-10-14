@@ -448,7 +448,7 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 #### Phase 5 — Theme pickers
 
-- [ ] **S5** No migration. Themes keep `background_asset_ref` and `image_asset_ref`. The picture and image controls list albums, then units that have an image, then those images. Text-only units stay off the picker. A caption from free text or the first field is display only. Pick and Shuffle store one concrete path. Samples, live preview, and generate read that path. An unknown path stays "Saved image". This replaces the hard-coded Default catalog. **Done when:** an admin picks one Default image and one uploaded image, reloads, and both stored paths are those files; Shuffle writes a different path once and a second sample uses the saved path; a reader sees the list and cannot upload. **Out of scope:** a unit id on the theme, generate-time random, copying unit text onto the frame, resources in the picker.
+- [x] **S5** No migration. Themes keep `background_asset_ref` and `image_asset_ref`. The picture and image controls list albums, then units that have an image, then those images. Text-only units stay off the picker. A caption from free text or the first field is display only. Pick and Shuffle store one concrete path. Samples, live preview, and generate read that path. An unknown path stays "Saved image". This replaces the hard-coded Default catalog. **Done when:** an admin picks one Default image and one uploaded image, reloads, and both stored paths are those files; Shuffle writes a different path once and a second sample uses the saved path; a reader sees the list and cannot upload. **Out of scope:** a unit id on the theme, generate-time random, copying unit text onto the frame, resources in the picker.
 
 **Later (not a leaf):** campaign combination rules and the model, S3, brand or campaign ownership, a texture album, PDF synthesis, and WebP. See the Later section in `sources_v2.md`.
 
@@ -554,9 +554,8 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 ## Suggested next coding slice
 
-**Sources v2, phase 5 (S5).** Source of truth:
-[`docs/planning/sources_v2.md`](sources_v2.md). **S1** through **S4** are done.
-The theme picker is the remaining sources slice.
-Do not start product Phase 2. Posts that ship stay on `carousel_template_v1`
-until a later slice binds a Live theme into `POST /api/v1/generate/carousel`.
+**Sources v2 is done (S1–S5).** Do not start product Phase 2. Posts that
+ship stay on `carousel_template_v1` until a later slice binds a Live theme
+into `POST /api/v1/generate/carousel`. The next open leaf on this sheet
+is **1.10i-i**.
 

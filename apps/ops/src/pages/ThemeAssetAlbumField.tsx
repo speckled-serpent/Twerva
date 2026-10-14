@@ -1,17 +1,26 @@
 import { useEffect, useState, type ReactElement } from "react";
 
-import { fetchThemeDefaultImages } from "../api/client";
-import type { ThemeDefaultImagesResponse } from "../api/types";
 import {
-  DEFAULT_ALBUM_ID,
+  fetchSourceById,
+  listAlbums,
+  unitImageFileUrl,
+  unitImageThumbnailUrl,
+} from "../api/client";
+import type { SourceListItemResponse, SourceReadResponse } from "../api/types";
+import {
   SAVED_ASSET_OPTION,
   albumForAssetRef,
   assetRefAfterShuffle,
   assetRefForAlbumChoice,
+  findDefaultAlbum,
+  themeAlbumFromSource,
   type ThemeImageAlbum,
+  type ThemePickerImage,
+  type ThemePickerUnit,
 } from "./themeAssets";
 
 export interface ThemeAssetAlbumFieldProps {
+  idPrefix: string;
   label: string;
   assetRef: string;
   onAssetRefChange: (nextAssetRef: string) => void;
@@ -21,18 +30,27 @@ export interface ThemeAssetAlbumFieldProps {
 let albumsPromise: Promise<ThemeImageAlbum[]> | null = null;
 
 /**
- * Load bundled albums once. A failed request can be tried again.
+ * Load every album once. A failed request can be tried again.
  *
- * @returns Albums from `GET /api/v1/themes/default-images`
+ * @returns Albums from Sources, with text-only units omitted
  */
-function loadThemeImageAlbums(): Promise<ThemeImageAlbum[]> {
+export function loadThemePickerAlbums(): Promise<ThemeImageAlbum[]> {
 
   if (albumsPromise !== null) {
     return albumsPromise;
   }
 
-  const pendingAlbums: Promise<ThemeImageAlbum[]> = fetchThemeDefaultImages()
-    .then((response: ThemeDefaultImagesResponse): ThemeImageAlbum[] => response.albums)
+  const pendingAlbums: Promise<ThemeImageAlbum[]> = listAlbums()
+    .then(async (listedAlbums: SourceListItemResponse[]): Promise<ThemeImageAlbum[]> => {
+      const details: SourceReadResponse[] = await Promise.all(
+        listedAlbums.map((listedAlbum: SourceListItemResponse): Promise<SourceReadResponse> => (
+          fetchSourceById(listedAlbum.id)
+        )),
+      );
+      const pickerAlbums: ThemeImageAlbum[] = details.map(themeAlbumFromSource);
+
+      return pickerAlbums;
+    })
     .catch((caughtError: unknown): never => {
       albumsPromise = null;
 
@@ -44,16 +62,17 @@ function loadThemeImageAlbums(): Promise<ThemeImageAlbum[]> {
 }
 
 /**
- * Album dropdown for a picture background or an image element.
+ * Album, then thumbnails, for a picture background or an image element.
  *
- * Default is the only album today. Choosing it stores one concrete path
- * and does not draw again until Shuffle. A path outside the albums stays
- * selected as "Saved image" until the operator replaces it.
+ * Choosing a thumbnail stores that file's path. Shuffle stores a different
+ * path from the same album once. A path outside every album stays
+ * "Saved image" until the operator replaces it. There is no upload here.
  *
- * @param props - Label, stored path, change handler, and disabled flag
+ * @param props - Ids, label, stored path, change handler, and disabled flag
  * @returns The album control
  */
 export function ThemeAssetAlbumField({
+  idPrefix,
   label,
   assetRef,
   onAssetRefChange,
@@ -62,20 +81,25 @@ export function ThemeAssetAlbumField({
 
   const [albums, setAlbums] = useState<ThemeImageAlbum[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [emptyBrowseId, setEmptyBrowseId] = useState<string | null>(null);
   const matchedAlbum: ThemeImageAlbum | null = albumForAssetRef(albums, assetRef);
-  const selectValue: string = matchedAlbum !== null
-    ? matchedAlbum.album_id
-    : assetRef.trim() === ""
-      ? DEFAULT_ALBUM_ID
-      : SAVED_ASSET_OPTION;
-  const albumOptions: ThemeImageAlbum[] = albums.length > 0
-    ? albums
-    : [{ album_id: DEFAULT_ALBUM_ID, name: "Default", asset_refs: [] }];
+  const defaultAlbum: ThemeImageAlbum | undefined = findDefaultAlbum(albums);
+  const selectValue: string = emptyBrowseId
+    ?? matchedAlbum?.album_id
+    ?? (assetRef.trim() === ""
+      ? (defaultAlbum?.album_id ?? albums[0]?.album_id ?? "")
+      : SAVED_ASSET_OPTION);
+  const browsedAlbum: ThemeImageAlbum | undefined = albums.find(
+    (album: ThemeImageAlbum): boolean => album.album_id === selectValue,
+  );
+  const shuffleAlbum: ThemeImageAlbum | undefined = selectValue === SAVED_ASSET_OPTION
+    ? defaultAlbum
+    : browsedAlbum;
 
   useEffect((): (() => void) => {
     let isCancelled: boolean = false;
 
-    loadThemeImageAlbums()
+    loadThemePickerAlbums()
       .then((loadedAlbums: ThemeImageAlbum[]): void => {
         if (!isCancelled) {
           setAlbums(loadedAlbums);
@@ -86,7 +110,7 @@ export function ThemeAssetAlbumField({
         if (!isCancelled) {
           const message: string = caughtError instanceof Error
             ? caughtError.message
-            : "Couldn't load default images.";
+            : "Couldn't load albums.";
           setLoadError(message);
         }
       });
@@ -101,19 +125,15 @@ export function ThemeAssetAlbumField({
       return;
     }
 
-    const defaultAlbum: ThemeImageAlbum | undefined = albums.find(
-      (album: ThemeImageAlbum): boolean => album.album_id === DEFAULT_ALBUM_ID,
-    );
-
     if (defaultAlbum === undefined || defaultAlbum.asset_refs.length === 0) {
       return;
     }
 
     const chosenRef: string = assetRefForAlbumChoice(defaultAlbum, "", Math.random());
     onAssetRefChange(chosenRef);
-  }, [albums, assetRef, onAssetRefChange]);
+  }, [albums, assetRef, defaultAlbum, onAssetRefChange]);
 
-  const hint: string = assetHint(assetRef, matchedAlbum !== null);
+  const hint: string = assetHint(assetRef, matchedAlbum !== null, browsedAlbum);
 
   return (
     <>
@@ -121,8 +141,9 @@ export function ThemeAssetAlbumField({
         <label>
           {label}
           <select
+            id={`${idPrefix}-album`}
             value={selectValue}
-            disabled={disabled}
+            disabled={disabled || albums.length === 0}
             onChange={(changeEvent): void => {
               const nextAlbumId: string = changeEvent.target.value;
 
@@ -138,13 +159,20 @@ export function ThemeAssetAlbumField({
                 return;
               }
 
+              if (nextAlbum.asset_refs.length === 0) {
+                setEmptyBrowseId(nextAlbum.album_id);
+
+                return;
+              }
+
+              setEmptyBrowseId(null);
               onAssetRefChange(assetRefForAlbumChoice(nextAlbum, assetRef, Math.random()));
             }}
           >
             {selectValue === SAVED_ASSET_OPTION ? (
               <option value={SAVED_ASSET_OPTION}>Saved image</option>
             ) : null}
-            {albumOptions.map((album: ThemeImageAlbum): ReactElement => (
+            {albums.map((album: ThemeImageAlbum): ReactElement => (
               <option key={album.album_id} value={album.album_id}>
                 {album.name}
               </option>
@@ -152,9 +180,10 @@ export function ThemeAssetAlbumField({
           </select>
         </label>
         <button
+          id={`${idPrefix}-shuffle`}
           type="button"
           className="asset-shuffle-button"
-          disabled={disabled || albums.length === 0}
+          disabled={disabled || shuffleAlbum === undefined || shuffleAlbum.asset_refs.length < 1}
           onClick={(): void => {
             const nextRef: string | null = assetRefAfterShuffle(
               albums,
@@ -164,6 +193,7 @@ export function ThemeAssetAlbumField({
             );
 
             if (nextRef !== null) {
+              setEmptyBrowseId(null);
               onAssetRefChange(nextRef);
             }
           }}
@@ -173,24 +203,73 @@ export function ThemeAssetAlbumField({
       </div>
       {loadError !== null ? <p className="field-hint">{loadError}</p> : null}
       {loadError === null && albums.length === 0 ? (
-        <p className="field-hint">Loading default images.</p>
+        <p className="field-hint">Loading albums.</p>
       ) : null}
-      {albums.length > 0 ? <p className="field-hint">{hint}</p> : null}
+      {browsedAlbum !== undefined && browsedAlbum.units.length === 0 ? (
+        <p className="field-hint">This album has no images.</p>
+      ) : null}
+      {browsedAlbum !== undefined && browsedAlbum.units.length > 0 ? (
+        <div className="asset-picker" id={`${idPrefix}-images`}>
+          {browsedAlbum.units.map((unit: ThemePickerUnit): ReactElement => (
+            <div key={unit.unitId} className="asset-picker-unit">
+              {unit.caption !== "" ? (
+                <p className="asset-picker-caption">{unit.caption}</p>
+              ) : null}
+              <div className="asset-picker-thumbs">
+                {unit.images.map((image: ThemePickerImage): ReactElement => (
+                  <button
+                    key={image.imageId}
+                    type="button"
+                    className={image.relativePath === assetRef ? "asset-thumb is-selected" : "asset-thumb"}
+                    data-asset-ref={image.relativePath}
+                    disabled={disabled}
+                    onClick={(): void => {
+                      setEmptyBrowseId(null);
+                      onAssetRefChange(image.relativePath);
+                    }}
+                  >
+                    <img
+                      src={displayUrl(browsedAlbum.album_id, image)}
+                      alt={unit.caption === "" ? image.relativePath : unit.caption}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {albums.length > 0 ? <p className="field-hint" id={`${idPrefix}-hint`}>{hint}</p> : null}
     </>
   );
 }
 
-function assetHint(assetRef: string, inAlbum: boolean): string {
+function displayUrl(sourceId: string, image: ThemePickerImage): string {
+
+  if (image.hasThumbnail) {
+    return unitImageThumbnailUrl(sourceId, image.unitId, image.imageId);
+  }
+
+  return unitImageFileUrl(sourceId, image.unitId, image.imageId);
+}
+
+function assetHint(
+  assetRef: string,
+  inAlbum: boolean,
+  browsedAlbum: ThemeImageAlbum | undefined,
+): string {
 
   const trimmedRef: string = assetRef.trim();
 
   if (trimmedRef === "") {
-    return "Default picks one bundled image and keeps that file.";
+    return "Choosing an album stores one image from it.";
   }
 
   if (inAlbum) {
-    return `Stored as ${trimmedRef}. Shuffle picks a different default image.`;
+    const albumName: string = browsedAlbum?.name ?? "this album";
+
+    return `Stored as ${trimmedRef}. Shuffle picks a different image in ${albumName}.`;
   }
 
-  return `Stored as ${trimmedRef}. This file is outside the albums. Choosing Default replaces it.`;
+  return `Stored as ${trimmedRef}. This file is outside the albums. Choosing an album replaces it.`;
 }

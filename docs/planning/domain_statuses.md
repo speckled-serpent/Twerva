@@ -379,8 +379,13 @@ metadata, upload SVG/PNG/JPEG (8 MB), and import one http(s) URL.
 New bytes go under `ARTIFACT_STORAGE_DIR` at
 `albums/<source_id>/<unit_id>/<image_id>.<ext>`. A failure writes no
 row and no file. Delete of an image, unit, or album is 409 while a
-theme or artifact stores that path. The theme picker still uses the
-hard-coded Default list. Admins may also create a resource by uploading
+theme or artifact stores that path, including an uploaded
+`albums/…` path and a packaged `theme-defaults/…` path. The theme
+picture and image controls list those albums, then units that have an
+image, then the images. Pick and Shuffle store one concrete path.
+Samples and live preview read that path from the package for
+`theme-defaults/` and from `ARTIFACT_STORAGE_DIR` otherwise.
+Admins may also create a resource by uploading
 a Markdown or TXT file (2 MB) with a provenance note, replace that
 file, edit the note, and delete the resource. The bytes stay at
 `resources/<source_id>/body.md` or `body.txt` under `ARTIFACT_STORAGE_DIR`.

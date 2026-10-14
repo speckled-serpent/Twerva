@@ -4,7 +4,6 @@ import {
   createThemeElement,
   deleteThemeElement,
   fetchThemeById,
-  fetchThemeDefaultImages,
   patchThemeElement,
 } from "../api/client";
 import type {
@@ -15,15 +14,14 @@ import type {
   ThemeElementPatchRequest,
   ThemeElementReadResponse,
   ThemeElementTextSource,
-  ThemeDefaultImagesResponse,
   ThemeReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { useCanWriteOps } from "../session/OpsSessionContext";
-import { ThemeAssetAlbumField } from "./ThemeAssetAlbumField";
+import { ThemeAssetAlbumField, loadThemePickerAlbums } from "./ThemeAssetAlbumField";
 import { ThemeFontFamilyField } from "./ThemeFontFamilyField";
 import { normalizeHexColor } from "./themeColors";
-import { pickDefaultAlbumImage } from "./themeAssets";
+import { pickDefaultAlbumImage, type ThemeImageAlbum } from "./themeAssets";
 import { DEFAULT_FONT_FAMILY } from "./themeFonts";
 
 export interface ThemeElementEditorProps {
@@ -246,7 +244,7 @@ export function ThemeElementEditor({
       <h2>Elements</h2>
       <p className="field-hint">
         Full-width rows in Top, Middle, or Bottom. A blank rectangle color is clear.
-        Image paths are typed, not uploaded.
+        Pick an image from an album. This form does not upload a file.
       </p>
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
@@ -605,6 +603,7 @@ function ElementDetailFields({
         />
       ) : (
         <ThemeAssetAlbumField
+          idPrefix={`${idPrefix}-image`}
           label="Image"
           assetRef={draft.imageAssetRef}
           disabled={false}
@@ -776,8 +775,8 @@ async function draftReadyToAdd(addDraft: ElementDraft): Promise<ElementDraft> {
     return addDraft;
   }
 
-  const images: ThemeDefaultImagesResponse = await fetchThemeDefaultImages();
-  const imageAssetRef: string = pickDefaultAlbumImage(images.albums, Math.random());
+  const albums: ThemeImageAlbum[] = await loadThemePickerAlbums();
+  const imageAssetRef: string = pickDefaultAlbumImage(albums, Math.random());
   const imageDraft: ElementDraft = {
     ...addDraft,
     imageAssetRef,

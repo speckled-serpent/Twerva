@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 
+import type { SourceReadResponse } from "./src/api/types.ts";
 import {
   assetRefAfterShuffle,
   assetRefForAlbumChoice,
   albumForAssetRef,
+  captionForUnit,
   chooseAlbumAssetRef,
   pickDefaultAlbumImage,
+  themeAlbumFromSource,
   DEFAULT_ALBUM_ID,
   type ThemeImageAlbum,
 } from "./src/pages/themeAssets.ts";
@@ -13,11 +16,13 @@ import {
 const defaultAlbum: ThemeImageAlbum = {
   album_id: DEFAULT_ALBUM_ID,
   name: "Default",
+  slug: "default",
   asset_refs: [
     "theme-defaults/hong-kong-skyline.jpg",
     "theme-defaults/ocean-waves.jpg",
     "theme-defaults/utah-dunes.jpg",
   ],
+  units: [],
 };
 
 assert.equal(
@@ -73,3 +78,66 @@ assert.throws(
   (): string => pickDefaultAlbumImage([], 0),
   /Default album has no images/,
 );
+
+const storedAfterShuffle: string | null = shuffledRef;
+assert.equal(
+  assetRefForAlbumChoice(defaultAlbum, storedAfterShuffle ?? "", 0.4),
+  storedAfterShuffle,
+);
+
+assert.equal(captionForUnit("  Brass lamp  ", "ignored"), "Brass lamp");
+assert.equal(captionForUnit("  ", "First field"), "First field");
+assert.equal(captionForUnit(null, null), "");
+
+const uploadedAlbum: SourceReadResponse = {
+  id: "album-1",
+  kind: "album",
+  name: "Lamps",
+  slug: "lamps",
+  created_at: "2026-10-14T00:00:00Z",
+  updated_at: "2026-10-14T00:00:00Z",
+  resource: null,
+  units: [
+    {
+      id: "text-unit",
+      position: 0,
+      free_text: "Notes only",
+      tags: [],
+      fields: [],
+      images: [],
+    },
+    {
+      id: "lamp-unit",
+      position: 2,
+      free_text: null,
+      tags: ["brass"],
+      fields: [
+        { id: "field-1", position: 1, label: "Finish", value: "  Brass lamp  " },
+        { id: "field-0", position: 0, label: "Name", value: "Desk lamp" },
+      ],
+      images: [
+        {
+          id: "image-1",
+          position: 0,
+          relative_path: "albums/album-1/lamp-unit/image-1.jpg",
+          media_type: "jpeg",
+          byte_size: 12,
+          width: 8,
+          height: 8,
+          alt_text: null,
+          license: "owned",
+          source: "bench",
+          license_note: "",
+          intake: "upload",
+          thumbnail_path: "albums/album-1/lamp-unit/image-1-thumb.jpg",
+        },
+      ],
+    },
+  ],
+};
+const lamps: ThemeImageAlbum = themeAlbumFromSource(uploadedAlbum);
+assert.equal(lamps.units.length, 1);
+assert.equal(lamps.units[0]?.caption, "Desk lamp");
+assert.equal(lamps.asset_refs[0], "albums/album-1/lamp-unit/image-1.jpg");
+assert.equal(lamps.units[0]?.images[0]?.hasThumbnail, true);
+assert.equal(albumForAssetRef([lamps], "albums/album-1/lamp-unit/image-1.jpg")?.album_id, "album-1");

@@ -134,6 +134,7 @@ export function ThemeFrameFields({
       ) : null}
       {frameDraft.backgroundKind === "picture" ? (
         <ThemeAssetAlbumField
+          idPrefix="background-image"
           label="Background image"
           assetRef={frameDraft.backgroundAssetRef}
           disabled={disabled}

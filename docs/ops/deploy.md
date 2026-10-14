@@ -135,6 +135,13 @@ user must be able to create `resources/` inside the artifact directory.
 `python-multipart` is already required for uploads. Restart
 `twerva-api` after the migration.
 
+Theme picture and image pickers read albums that are already in the
+database. No new Alembic revision and no new env var. `theme-defaults/`
+still comes from the package. An uploaded album file is read from
+`ARTIFACT_STORAGE_DIR` by theme preview and theme samples. Restart
+`twerva-api` and the ops console after sync. `POST /api/v1/generate/carousel`
+stays on the text template.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.
