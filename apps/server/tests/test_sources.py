@@ -206,7 +206,16 @@ class ContentSourceReadApiTests(unittest.TestCase):
             {"PATCH", "DELETE"}.issubset(methods_by_path[image_path]),
         )
         self.assertIn("GET", methods_by_path[f"{image_path}/file"])
+        self.assertIn("GET", methods_by_path[f"{image_path}/thumbnail"])
         self.assertNotIn("POST", methods_by_path[image_path])
+        self.assertIn(
+            "POST",
+            methods_by_path["/sources/{source_id}/units/{unit_id}/images"],
+        )
+        self.assertIn(
+            "POST",
+            methods_by_path["/sources/{source_id}/units/{unit_id}/images/import"],
+        )
 
 
 class ThemeDefaultsRenderingUnchangedTests(unittest.TestCase):

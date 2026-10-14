@@ -22,6 +22,8 @@ import type {
   ThemeReadResponse,
   ThemeSampleRequest,
   ThemeSampleResponse,
+  UnitImageImportRequest,
+  UnitImageLicense,
   UnitImageMetadataPatch,
   UnitImageReadResponse,
   UnitReadResponse,
@@ -292,6 +294,47 @@ export async function deleteUnitImage(
   );
 }
 
+export async function uploadUnitImages(
+  sourceId: string,
+  unitId: string,
+  files: File[],
+  imageLicense: UnitImageLicense,
+  source: string,
+  altText: string,
+  licenseNote: string,
+): Promise<UnitImageReadResponse[]> {
+
+  const formData: FormData = new FormData();
+
+  for (const file of files) {
+    formData.append("files", file);
+  }
+
+  formData.append("license", imageLicense);
+  formData.append("source", source);
+  formData.append("alt_text", altText);
+  formData.append("license_note", licenseNote);
+
+  return requestForm<UnitImageReadResponse[]>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units/${unitId}/images`,
+    formData,
+  );
+}
+
+export async function importUnitImage(
+  sourceId: string,
+  unitId: string,
+  imageImportRequest: UnitImageImportRequest,
+): Promise<UnitImageReadResponse> {
+
+  return requestJson<UnitImageReadResponse>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units/${unitId}/images/import`,
+    imageImportRequest,
+  );
+}
+
 /**
  * Same-origin URL for an image that already exists. The session cookie
  * is sent with the request. This is not an upload.
@@ -311,6 +354,47 @@ export function unitImageFileUrl(
     `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}/file`;
 
   return `${resolveApiBaseUrl()}${requestPath}`;
+}
+
+/**
+ * Thumbnail URL when the row has one. SVG and packaged defaults do not.
+ *
+ * @param sourceId - Album UUID
+ * @param unitId - Unit UUID
+ * @param imageId - Image UUID
+ * @returns Path the grid can use as an img src
+ */
+export function unitImageThumbnailUrl(
+  sourceId: string,
+  unitId: string,
+  imageId: string,
+): string {
+
+  const requestPath: string =
+    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}/thumbnail`;
+
+  return `${resolveApiBaseUrl()}${requestPath}`;
+}
+
+/**
+ * Prefer the thumbnail. Fall back to the original file.
+ *
+ * @param sourceId - Album UUID
+ * @param unitId - Unit UUID
+ * @param image - Image row
+ * @returns img src for the grid or editor
+ */
+export function unitImageDisplayUrl(
+  sourceId: string,
+  unitId: string,
+  image: UnitImageReadResponse,
+): string {
+
+  if (image.thumbnail_path !== null && image.thumbnail_path !== "") {
+    return unitImageThumbnailUrl(sourceId, unitId, image.id);
+  }
+
+  return unitImageFileUrl(sourceId, unitId, image.id);
 }
 
 export async function listThemes(): Promise<ThemeReadResponse[]> {
@@ -733,6 +817,21 @@ export async function fetchClusterAgentSummaryMarkdown(clusterId: string): Promi
   return requestText("GET", `/api/v1/clusters/${clusterId}/agent-summary?format=markdown`);
 }
 
+async function requestForm<ResponseBody>(
+  method: string,
+  path: string,
+  formData: FormData,
+): Promise<ResponseBody> {
+
+  const response: Response = await sendApiRequest(method, path, undefined, formData);
+
+  await throwIfResponseFailed(response, path);
+
+  const parsedJson: unknown = await response.json();
+
+  return parsedJson as ResponseBody;
+}
+
 async function requestJson<ResponseBody>(
   method: string,
   path: string,
@@ -767,6 +866,7 @@ async function sendApiRequest(
   method: string,
   path: string,
   body?: unknown,
+  formData?: FormData,
 ): Promise<Response> {
 
   const apiBaseUrl: string = resolveApiBaseUrl();
@@ -778,7 +878,9 @@ async function sendApiRequest(
     credentials: "include",
   };
 
-  if (body !== undefined) {
+  if (formData !== undefined) {
+    fetchInit.body = formData;
+  } else if (body !== undefined) {
     requestHeaders["Content-Type"] = "application/json";
     fetchInit.body = JSON.stringify(body);
   }

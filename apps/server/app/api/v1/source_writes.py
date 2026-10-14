@@ -24,17 +24,15 @@ from app.api.v1.schemas import (
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
-from app.models.enums import ContentSourceKind, UnitImageLicense, UnitImageMediaType
+from app.models.enums import ContentSourceKind, UnitImageMediaType
 from app.models.ops_user import OpsUser
 from app.settings import get_settings
 from app.sources.editing import (
     ALBUM_IN_USE_DETAIL,
     BLANK_FIELD_DETAIL,
-    BLANK_IMAGE_SOURCE_DETAIL,
     BLANK_NAME_DETAIL,
     EMPTY_UNIT_DETAIL,
     IMAGE_IN_USE_DETAIL,
-    LICENSE_NOTE_DETAIL,
     RESOURCE_NOT_IN_SLICE_DETAIL,
     UNIT_IN_USE_DETAIL,
     allocate_unique_source_slug,
@@ -42,6 +40,7 @@ from app.sources.editing import (
     new_row_id,
     normalize_field_writes,
     normalize_free_text,
+    normalize_image_metadata,
     normalize_tags,
     slugify_source_name,
     stored_paths_in_use,
@@ -203,11 +202,13 @@ def delete_content_source(
         _image_paths_on_source(found_source),
         ALBUM_IN_USE_DETAIL,
     )
+    stored_files: list[tuple[str, str | None]] = _stored_files_on_source(found_source)
     our_database_session.delete(found_source)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Album could not be deleted.",
     )
+    _discard_stored_files(stored_files)
 
 
 def create_unit(
@@ -297,11 +298,13 @@ def delete_unit(
         _image_paths_on_unit(found_unit),
         UNIT_IN_USE_DETAIL,
     )
+    stored_files: list[tuple[str, str | None]] = _stored_files_on_unit(found_unit)
     our_database_session.delete(found_unit)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Unit could not be deleted.",
     )
+    _discard_stored_files(stored_files)
 
 
 def patch_unit_image_metadata(
@@ -365,11 +368,15 @@ def delete_unit_image(
         len(list(found_unit.fields)),
         remaining_images,
     )
+    stored_files: list[tuple[str, str | None]] = [
+        (found_image.relative_path, found_image.thumbnail_path),
+    ]
     our_database_session.delete(found_image)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Image could not be deleted.",
     )
+    _discard_stored_files(stored_files)
 
 
 def get_unit_image_file(
@@ -474,30 +481,18 @@ def _parsed_image_metadata(
 ) -> tuple[str, str, str | None]:
     """Return source, license note, and alt. Invalid license writes nothing."""
 
-    image_source: str = image_patch_request.source.strip()
-
-    if image_source == "":
+    try:
+        image_source, license_note, alt_text = normalize_image_metadata(
+            image_patch_request.license,
+            image_patch_request.source,
+            image_patch_request.license_note,
+            image_patch_request.alt_text,
+        )
+    except ValueError as metadata_error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=BLANK_IMAGE_SOURCE_DETAIL,
-        )
-
-    license_note: str = image_patch_request.license_note.strip()
-
-    if image_patch_request.license == UnitImageLicense.LICENSED and license_note == "":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=LICENSE_NOTE_DETAIL,
-        )
-
-    if image_patch_request.license != UnitImageLicense.LICENSED:
-        license_note = ""
-
-    alt_text: str | None = None
-
-    if image_patch_request.alt_text is not None:
-        stripped_alt: str = image_patch_request.alt_text.strip()
-        alt_text = None if stripped_alt == "" else stripped_alt
+            detail=str(metadata_error),
+        ) from metadata_error
 
     return image_source, license_note, alt_text
 
@@ -599,6 +594,41 @@ def _fetch_image_or_raise(
         )
 
     return found_image
+
+
+def _discard_stored_files(stored_files: list[tuple[str, str | None]]) -> None:
+    """Delete album bytes after the row commit. Package files stay."""
+
+    from app.sources.image_store import LocalAlbumImageStore, configured_album_image_store
+
+    image_store: LocalAlbumImageStore = configured_album_image_store()
+
+    for relative_path, thumbnail_path in stored_files:
+        image_store.delete(relative_path)
+
+        if thumbnail_path is not None:
+            image_store.delete(thumbnail_path)
+
+
+def _stored_files_on_unit(unit: Unit) -> list[tuple[str, str | None]]:
+    """Return original and thumbnail paths for one unit."""
+
+    stored_files: list[tuple[str, str | None]] = [
+        (image.relative_path, image.thumbnail_path) for image in unit.images
+    ]
+
+    return stored_files
+
+
+def _stored_files_on_source(source: ContentSource) -> list[tuple[str, str | None]]:
+    """Return original and thumbnail paths for every image in an album."""
+
+    stored_files: list[tuple[str, str | None]] = []
+
+    for unit in source.units:
+        stored_files.extend(_stored_files_on_unit(unit))
+
+    return stored_files
 
 
 def _image_paths_on_unit(unit: Unit) -> set[str]:

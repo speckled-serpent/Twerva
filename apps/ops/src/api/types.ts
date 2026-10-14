@@ -604,3 +604,11 @@ export interface UnitImageMetadataPatch {
   source: string;
   license_note: string;
 }
+
+export interface UnitImageImportRequest {
+  url: string;
+  alt_text: string | null;
+  license: UnitImageLicense;
+  source: string;
+  license_note: string;
+}

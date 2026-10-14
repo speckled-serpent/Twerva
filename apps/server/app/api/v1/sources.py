@@ -223,7 +223,9 @@ def serialize_image(image: UnitImage) -> UnitImageReadResponse:
     return image_response
 
 
+from app.api.v1.source_intake import register_source_intake_routes
 from app.api.v1.source_writes import register_source_write_routes
 
 
 register_source_write_routes(sources_router)
+register_source_intake_routes(sources_router)

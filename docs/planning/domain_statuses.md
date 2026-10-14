@@ -370,8 +370,12 @@ reserved. Phase 1 seeds one album, slug `default`, and does not update
 `units.tags` is a text array, default empty. `unit_images.license_note`
 is empty unless `license` is `licensed`, in which case it is required.
 `relative_path` is unique. SVG rows have null width, height, and
-thumbnail. Readers may GET a source and stream an existing image file.
-Admins may create, rename, and delete albums and units, edit free text,
-fields, and tags, and edit license metadata on an image that already
-exists. Delete of an image, unit, or album is 409 while a theme or
-artifact stores that path. Upload and URL import are not registered.
+thumbnail. Readers may GET a source, the original file, and a
+thumbnail when one exists. Admins may create, rename, and delete
+albums and units, edit free text, fields, and tags, edit license
+metadata, upload SVG/PNG/JPEG (8 MB), and import one http(s) URL.
+New bytes go under `ARTIFACT_STORAGE_DIR` at
+`albums/<source_id>/<unit_id>/<image_id>.<ext>`. A failure writes no
+row and no file. Delete of an image, unit, or album is 409 while a
+theme or artifact stores that path. The theme picker still uses the
+hard-coded Default list.

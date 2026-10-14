@@ -945,3 +945,15 @@ class UnitImageMetadataPatch(BaseModel):
     license: UnitImageLicense
     source: str
     license_note: str = ""
+
+
+class UnitImageImportRequest(BaseModel):
+    """One URL to download, plus the same license fields as an upload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str
+    alt_text: str | None = None
+    license: UnitImageLicense
+    source: str
+    license_note: str = ""
