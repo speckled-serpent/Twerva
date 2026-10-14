@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
 import {
-  createAlbum,
   createSourceUnit,
   deleteSource,
   deleteSourceUnit,
@@ -42,21 +41,36 @@ interface FieldDraft {
   value: string;
 }
 
+export interface SourcesOpenRequest {
+  sourceId: string;
+  kind: "album" | "resource";
+  statusMessage: string;
+}
+
+export interface SourcesPageProps {
+  openRequest: SourcesOpenRequest | null;
+}
+
 /**
  * Sources: albums of units, and resource files beside them.
  *
+ * @param props - Optional open request from Create Source
  * @returns The Sources page
  */
-export function SourcesPage(): ReactElement {
+export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
 
-  const [sourceTab, setSourceTab] = useState<SourceTab>("albums");
+  const [sourceTab, setSourceTab] = useState<SourceTab>(
+    openRequest?.kind === "resource" ? "resources" : "albums",
+  );
   const [listedSources, setListedSources] = useState<SourceListItemResponse[]>([]);
-  const [openedSourceId, setOpenedSourceId] = useState<string | null>(null);
+  const [openedSourceId, setOpenedSourceId] = useState<string | null>(
+    openRequest?.sourceId ?? null,
+  );
   const [openedUnitId, setOpenedUnitId] = useState<string | null>(null);
   const [isCreatingUnit, setIsCreatingUnit] = useState<boolean>(false);
   const [selectedSource, setSelectedSource] = useState<SourceReadResponse | null>(null);
   const [loadError, setLoadError] = useState<unknown>(null);
-  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [statusMessage, setStatusMessage] = useState<string>(openRequest?.statusMessage ?? "");
   const [reloadToken, setReloadToken] = useState<number>(0);
   const [heldUnit, setHeldUnit] = useState<UnitReadResponse | null>(null);
 
@@ -130,6 +144,19 @@ export function SourcesPage(): ReactElement {
       isCancelled = true;
     };
   }, [openedSourceId, reloadToken]);
+
+  useEffect((): void => {
+    if (openRequest === null) {
+      return;
+    }
+
+    setSourceTab(openRequest.kind === "resource" ? "resources" : "albums");
+    setOpenedSourceId(openRequest.sourceId);
+    setOpenedUnitId(null);
+    setIsCreatingUnit(false);
+    setHeldUnit(null);
+    setStatusMessage(openRequest.statusMessage);
+  }, [openRequest]);
 
   const requestReload = (): void => {
     setReloadToken((currentToken: number): number => currentToken + 1);
@@ -258,11 +285,6 @@ export function SourcesPage(): ReactElement {
           setOpenedSourceId(sourceId);
           setStatusMessage("");
         }}
-        onResourceCreated={(createdSource: SourceReadResponse): void => {
-          setStatusMessage(`Created resource ${createdSource.name}.`);
-          setOpenedSourceId(createdSource.id);
-          requestReload();
-        }}
         onResourceDeleted={(resourceName: string): void => {
           setStatusMessage(`Deleted resource ${resourceName}.`);
           requestReload();
@@ -281,11 +303,6 @@ export function SourcesPage(): ReactElement {
         setOpenedSourceId(sourceId);
         setStatusMessage("");
       }}
-      onAlbumCreated={(createdSource: SourceReadResponse): void => {
-        setStatusMessage(`Created album ${createdSource.name}.`);
-        setOpenedSourceId(createdSource.id);
-        requestReload();
-      }}
       onAlbumDeleted={(albumName: string): void => {
         setStatusMessage(`Deleted album ${albumName}.`);
         requestReload();
@@ -300,7 +317,6 @@ interface AlbumListViewProps {
   loadError: unknown;
   statusMessage: string;
   onOpenAlbum: (sourceId: string) => void;
-  onAlbumCreated: (createdSource: SourceReadResponse) => void;
   onAlbumDeleted: (albumName: string) => void;
 }
 
@@ -310,39 +326,11 @@ function AlbumListView({
   loadError,
   statusMessage,
   onOpenAlbum,
-  onAlbumCreated,
   onAlbumDeleted,
 }: AlbumListViewProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
-  const [albumName, setAlbumName] = useState<string>("");
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [saveError, setSaveError] = useState<unknown>(null);
   const [pendingDelete, setPendingDelete] = useState<SourceListItemResponse | null>(null);
-
-  const handleCreate = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
-    submitEvent.preventDefault();
-
-    if (!canWrite) {
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    try {
-      const createdSource: SourceReadResponse = await createAlbum({
-        name: albumName,
-        kind: "album",
-      });
-      setAlbumName("");
-      onAlbumCreated(createdSource);
-    } catch (caughtError: unknown) {
-      setSaveError(caughtError);
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   return (
     <section>
@@ -352,39 +340,15 @@ function AlbumListView({
           <h1>Sources</h1>
           <p className="lede">
             Albums of units. Open one to edit text, images, and tags.
+            Create lives on Create Source.
           </p>
         </div>
       </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
-      <ErrorBanner error={saveError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
-      {canWrite ? (
-        <form
-          className="stack-form"
-          onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-            void handleCreate(submitEvent);
-          }}
-        >
-          <label>
-            New album name
-            <input
-              id="create-album-name"
-              value={albumName}
-              onChange={(changeEvent): void => {
-                setAlbumName(changeEvent.target.value);
-              }}
-            />
-          </label>
-          <div className="button-row">
-            <button id="create-album-submit" type="submit" disabled={isSaving || albumName.trim() === ""}>
-              {isSaving ? "Creating…" : "Create album"}
-            </button>
-          </div>
-        </form>
-      ) : null}
       {loadError !== null ? null : albums.length === 0 ? (
-        <p>No albums yet.</p>
+        <p>No albums yet. Use Create Source to add one.</p>
       ) : (
         <table>
           <thead>

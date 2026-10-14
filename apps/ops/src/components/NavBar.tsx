@@ -8,6 +8,7 @@ export type OpsPageId =
   | "themes"
   | "new-theme"
   | "sources"
+  | "new-source"
   | "queue"
   | "schedule"
   | "accounts"
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { pageId: "themes", label: "Themes" },
   { pageId: "new-theme", label: "Create Theme" },
   { pageId: "sources", label: "Sources" },
+  { pageId: "new-source", label: "Create Source" },
   { pageId: "queue", label: "Queue" },
   { pageId: "schedule", label: "Schedule" },
   { pageId: "accounts", label: "Accounts" },
