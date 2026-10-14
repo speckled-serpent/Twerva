@@ -11,7 +11,9 @@ import {
   patchSourceUnit,
   patchUnitImageMetadata,
   renameSource,
-  unitImageFileUrl,
+  importUnitImage,
+  unitImageDisplayUrl,
+  uploadUnitImages,
 } from "../api/client";
 import type {
   SourceListItemResponse,
@@ -578,7 +580,7 @@ function UnitCardBody({ sourceId, unit }: UnitCardBodyProps): ReactElement {
         <p className="unit-card-excerpt">{excerpt}</p>
       ) : (
         <img
-          src={unitImageFileUrl(sourceId, unit.id, firstImage.id)}
+          src={unitImageDisplayUrl(sourceId, unit.id, firstImage)}
           alt={firstImage.alt_text ?? excerpt}
         />
       )}
@@ -662,7 +664,8 @@ function UnitEditorView({
           <h1>{pageTitle}</h1>
           <p className="lede">
             {source === null ? "Album" : source.name}
-            . Text, labeled fields, tags, and license on images that already exist.
+            . Text, labeled fields, tags, and images. Upload or import adds a file;
+            the license is saved with it.
           </p>
         </div>
         <button type="button" onClick={onBack}>
@@ -679,6 +682,15 @@ function UnitEditorView({
         <p>This unit is not available.</p>
       ) : (
         <>
+          {unit === null || !canWrite ? null : (
+            <ImageIntakeForm
+              sourceId={source.id}
+              unitId={unit.id}
+              onChanged={(message: string): void => {
+                onImagesChanged(message);
+              }}
+            />
+          )}
           {unit === null ? null : unit.images.map((image: UnitImageReadResponse): ReactElement => (
             <ImageMetadataEditor
               key={image.id}
@@ -818,6 +830,250 @@ function UnitEditorView({
   );
 }
 
+interface ImageIntakeFormProps {
+  sourceId: string;
+  unitId: string;
+  onChanged: (message: string) => void;
+}
+
+function ImageIntakeForm({
+  sourceId,
+  unitId,
+  onChanged,
+}: ImageIntakeFormProps): ReactElement {
+
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadLicense, setUploadLicense] = useState<UnitImageLicense>("cc0");
+  const [uploadSource, setUploadSource] = useState<string>("");
+  const [uploadNote, setUploadNote] = useState<string>("");
+  const [uploadAlt, setUploadAlt] = useState<string>("");
+  const [uploadError, setUploadError] = useState<unknown>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [importUrl, setImportUrl] = useState<string>("");
+  const [importLicense, setImportLicense] = useState<UnitImageLicense>("cc0");
+  const [importSource, setImportSource] = useState<string>("");
+  const [importNote, setImportNote] = useState<string>("");
+  const [importError, setImportError] = useState<unknown>(null);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+
+  const handleUpload = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
+    submitEvent.preventDefault();
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      await uploadUnitImages(
+        sourceId,
+        unitId,
+        selectedFiles,
+        uploadLicense,
+        uploadSource,
+        uploadAlt,
+        uploadNote,
+      );
+      setSelectedFiles([]);
+      onChanged(selectedFiles.length === 1 ? "Uploaded the image." : "Uploaded the images.");
+    } catch (caughtError: unknown) {
+      setUploadError(caughtError);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleImport = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
+    submitEvent.preventDefault();
+    setIsImporting(true);
+    setImportError(null);
+
+    const provenance: string = importSource.trim() === "" ? importUrl.trim() : importSource.trim();
+
+    try {
+      await importUnitImage(sourceId, unitId, {
+        url: importUrl.trim(),
+        license: importLicense,
+        source: provenance,
+        alt_text: null,
+        license_note: importNote,
+      });
+      setImportUrl("");
+      onChanged("Imported the image.");
+    } catch (caughtError: unknown) {
+      setImportError(caughtError);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <>
+      <form
+        className="stack-form"
+        onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+          void handleUpload(submitEvent);
+        }}
+      >
+        <fieldset>
+          <legend>Upload images</legend>
+          <label>
+            Files
+            <input
+              id="unit-image-files"
+              type="file"
+              accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
+              multiple
+              onChange={(changeEvent): void => {
+                const fileList: FileList | null = changeEvent.target.files;
+                const nextFiles: File[] = fileList === null ? [] : [...fileList];
+                setSelectedFiles(nextFiles);
+              }}
+            />
+          </label>
+          <p>SVG, PNG, or JPEG. 8 MB each. One license and source apply to every file.</p>
+          <LicenseFields
+            licenseId="unit-image-license"
+            sourceId="unit-image-source"
+            noteId="unit-image-note"
+            imageLicense={uploadLicense}
+            imageSource={uploadSource}
+            licenseNote={uploadNote}
+            onLicenseChange={setUploadLicense}
+            onSourceChange={setUploadSource}
+            onNoteChange={setUploadNote}
+          />
+          <label>
+            Alt text
+            <input
+              value={uploadAlt}
+              onChange={(changeEvent): void => {
+                setUploadAlt(changeEvent.target.value);
+              }}
+            />
+          </label>
+          <ErrorBanner error={uploadError} />
+          <button
+            id="upload-images"
+            type="submit"
+            disabled={isUploading || selectedFiles.length === 0 || uploadSource.trim() === ""}
+          >
+            {isUploading ? "Uploading…" : "Upload"}
+          </button>
+        </fieldset>
+      </form>
+      <form
+        className="stack-form"
+        onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+          void handleImport(submitEvent);
+        }}
+      >
+        <fieldset>
+          <legend>Import from a URL</legend>
+          <label>
+            Image URL
+            <input
+              id="import-image-url"
+              value={importUrl}
+              onChange={(changeEvent): void => {
+                const nextUrl: string = changeEvent.target.value;
+                setImportUrl(nextUrl);
+
+                if (importSource.trim() === "" || importSource === importUrl) {
+                  setImportSource(nextUrl);
+                }
+              }}
+            />
+          </label>
+          <p>The server downloads the file once. Source records the provenance, and defaults to that URL.</p>
+          <LicenseFields
+            licenseId="import-image-license"
+            sourceId="import-image-source"
+            noteId="import-image-note"
+            imageLicense={importLicense}
+            imageSource={importSource}
+            licenseNote={importNote}
+            onLicenseChange={setImportLicense}
+            onSourceChange={setImportSource}
+            onNoteChange={setImportNote}
+          />
+          <ErrorBanner error={importError} />
+          <button
+            id="import-image-submit"
+            type="submit"
+            disabled={isImporting || importUrl.trim() === ""}
+          >
+            {isImporting ? "Importing…" : "Import"}
+          </button>
+        </fieldset>
+      </form>
+    </>
+  );
+}
+
+interface LicenseFieldsProps {
+  licenseId: string;
+  sourceId: string;
+  noteId: string;
+  imageLicense: UnitImageLicense;
+  imageSource: string;
+  licenseNote: string;
+  onLicenseChange: (imageLicense: UnitImageLicense) => void;
+  onSourceChange: (imageSource: string) => void;
+  onNoteChange: (licenseNote: string) => void;
+}
+
+function LicenseFields({
+  licenseId,
+  sourceId,
+  noteId,
+  imageLicense,
+  imageSource,
+  licenseNote,
+  onLicenseChange,
+  onSourceChange,
+  onNoteChange,
+}: LicenseFieldsProps): ReactElement {
+
+  return (
+    <>
+      <label>
+        License
+        <select
+          id={licenseId}
+          value={imageLicense}
+          onChange={(changeEvent): void => {
+            onLicenseChange(changeEvent.target.value as UnitImageLicense);
+          }}
+        >
+          {LICENSE_OPTIONS.map((licenseOption: UnitImageLicense): ReactElement => (
+            <option key={licenseOption} value={licenseOption}>
+              {licenseOption}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Source
+        <input
+          id={sourceId}
+          value={imageSource}
+          onChange={(changeEvent): void => {
+            onSourceChange(changeEvent.target.value);
+          }}
+        />
+      </label>
+      <label>
+        License note
+        <input
+          id={noteId}
+          value={licenseNote}
+          onChange={(changeEvent): void => {
+            onNoteChange(changeEvent.target.value);
+          }}
+        />
+      </label>
+    </>
+  );
+}
+
 interface ImageMetadataEditorProps {
   sourceId: string;
   unitId: string;
@@ -876,7 +1132,7 @@ function ImageMetadataEditor({
   return (
     <div className="image-editor">
       <img
-        src={unitImageFileUrl(sourceId, unitId, image.id)}
+        src={unitImageDisplayUrl(sourceId, unitId, image)}
         alt={image.alt_text ?? image.relative_path}
       />
       <div className="stack-form">

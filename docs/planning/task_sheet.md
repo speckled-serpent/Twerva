@@ -440,7 +440,7 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 #### Phase 3 — Image intake
 
-- [ ] **S3** No migration. Disk storage behind `save`, `open`, and `delete`, prefix `albums/<source_id>/<unit_id>/<image_id>.<ext>` under `ARTIFACT_STORAGE_DIR`. Multipart upload and URL import. The server downloads a URL once. SVG, PNG, or JPEG, 8 MB. The same license gate as Phase 2; a failure writes nothing. Thumbnail JPEG, longest edge 480. SVG has no thumbnail. The unit editor gains upload and import. The grid uses the thumbnail when one exists. **Done when:** an admin uploads a JPEG and imports a PNG from a URL, both appear with license and source, a file over 8 MB or a missing license note is 400 and leaves no row, and a theme path from Phase 1 still resolves. **Out of scope:** S3, WebP, resources, pointing the theme picker at the new albums.
+- [x] **S3** No migration. Disk storage behind `save`, `open`, and `delete`, prefix `albums/<source_id>/<unit_id>/<image_id>.<ext>` under `ARTIFACT_STORAGE_DIR`. Multipart upload and URL import. The server downloads a URL once. SVG, PNG, or JPEG, 8 MB. The same license gate as Phase 2; a failure writes nothing. Thumbnail JPEG, longest edge 480. SVG has no thumbnail. The unit editor gains upload and import. The grid uses the thumbnail when one exists. **Done when:** an admin uploads a JPEG and imports a PNG from a URL, both appear with license and source, a file over 8 MB or a missing license note is 400 and leaves no row, and a theme path from Phase 1 still resolves. **Out of scope:** S3, WebP, resources, pointing the theme picker at the new albums.
 
 #### Phase 4 — Resources
 
@@ -554,9 +554,9 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 ## Suggested next coding slice
 
-**Sources v2, phase 3 (S3).** Source of truth:
-[`docs/planning/sources_v2.md`](sources_v2.md). **S1** and **S2** are done.
-Do not start resources or the theme picker until S3 is `[x]`.
+**Sources v2, phase 4 (S4).** Source of truth:
+[`docs/planning/sources_v2.md`](sources_v2.md). **S1**, **S2**, and **S3** are done.
+Do not start the theme picker until S4 is `[x]`.
 Do not start product Phase 2. Posts that ship stay on `carousel_template_v1`
 until a later slice binds a Live theme into `POST /api/v1/generate/carousel`.
 

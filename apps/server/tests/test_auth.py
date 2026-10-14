@@ -794,6 +794,27 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(create_source_response.status_code, 403)
         self.assertIn("read-only", create_source_response.json()["detail"].lower())
 
+        upload_image_response = self.test_client.post(
+            f"/api/v1/sources/{uuid.uuid4()}/units/{uuid.uuid4()}/images",
+            data={"license": "cc0", "source": "https://example.com/photo"},
+            files=[("files", ("photo.jpg", b"not-an-image", "image/jpeg"))],
+        )
+
+        self.assertEqual(upload_image_response.status_code, 403)
+        self.assertIn("read-only", upload_image_response.json()["detail"].lower())
+
+        import_image_response = self.test_client.post(
+            f"/api/v1/sources/{uuid.uuid4()}/units/{uuid.uuid4()}/images/import",
+            json={
+                "url": "https://example.com/plate.png",
+                "license": "cc0",
+                "source": "https://example.com/plate.png",
+            },
+        )
+
+        self.assertEqual(import_image_response.status_code, 403)
+        self.assertIn("read-only", import_image_response.json()["detail"].lower())
+
         sample_response = self.test_client.post(
             f"/api/v1/themes/{uuid.uuid4()}/samples",
             json={"source_item_id": str(uuid.uuid4())},

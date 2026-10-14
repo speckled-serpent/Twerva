@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.artifact import Artifact
+from app.models.enums import UnitImageLicense
 from app.models.theme import Theme
 from app.models.theme_element import ThemeElement
 
@@ -171,6 +172,49 @@ def unit_has_content(
         return True
 
     return False
+
+
+def normalize_image_metadata(
+    image_license: UnitImageLicense,
+    source: str,
+    license_note: str,
+    alt_text: str | None,
+) -> tuple[str, str, str | None]:
+    """Return source, license note, and alt. Invalid license writes nothing.
+
+    Args:
+        image_license: Allowlisted license.
+        source: Provenance. A URL or a short note.
+        license_note: Required when the license is ``licensed``.
+        alt_text: Optional description. Blank becomes null.
+
+    Returns:
+        Stripped source, note, and alt.
+
+    Raises:
+        ValueError: Source is blank, or ``licensed`` has no note.
+    """
+
+    image_source: str = source.strip()
+
+    if image_source == "":
+        raise ValueError(BLANK_IMAGE_SOURCE_DETAIL)
+
+    cleaned_note: str = license_note.strip()
+
+    if image_license == UnitImageLicense.LICENSED and cleaned_note == "":
+        raise ValueError(LICENSE_NOTE_DETAIL)
+
+    if image_license != UnitImageLicense.LICENSED:
+        cleaned_note = ""
+
+    cleaned_alt: str | None = None
+
+    if alt_text is not None:
+        stripped_alt: str = alt_text.strip()
+        cleaned_alt = None if stripped_alt == "" else stripped_alt
+
+    return image_source, cleaned_note, cleaned_alt
 
 
 def normalize_free_text(free_text: str | None) -> str | None:

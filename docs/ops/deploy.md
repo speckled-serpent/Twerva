@@ -121,6 +121,13 @@ Match ownership to whichever user runs `twerva-api` if that is not
 a new PNG folder (history on purpose). Watch free space next to the
 Postgres data volume.
 
+Album image intake uses the same directory. The API creates
+`albums/<source_id>/<unit_id>/` on upload. No new env var and no
+migration. The service user must be able to create directories and
+files inside `/opt/twerva/artifacts`. URL import needs outbound
+http(s), which Spotmu ingest already uses. Do not publish this
+directory.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.
