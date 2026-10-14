@@ -626,3 +626,12 @@ export interface UnitImageImportRequest {
   source: string;
   license_note: string;
 }
+
+export interface UnitImageCreatePayload {
+  kind: "file" | "url";
+  file: File | null;
+  url: string | null;
+  license: UnitImageLicense;
+  source: string;
+  license_note: string;
+}

@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 import {
   createSourceUnit,
+  createUnitWithImages,
   deleteSource,
   deleteSourceUnit,
   deleteUnitImage,
@@ -19,6 +20,7 @@ import type {
   SourceListItemResponse,
   SourceReadResponse,
   UnitFieldWrite,
+  UnitImageCreatePayload,
   UnitImageLicense,
   UnitImageReadResponse,
   UnitReadResponse,
@@ -26,6 +28,12 @@ import type {
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ResourceDetailView, ResourceListView, SourceTabBar, type SourceTab } from "./ResourceViews";
+import {
+  NewUnitImages,
+  releaseUnitImageDraft,
+  type UnitImageDraft,
+} from "./UnitImageDrafts";
+import { firstUnitImageDraftError } from "./unitImageDraft";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 
@@ -649,6 +657,18 @@ function UnitEditorView({
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
+  const [imageDrafts, setImageDrafts] = useState<UnitImageDraft[]>([]);
+  const [showImageErrors, setShowImageErrors] = useState<boolean>(false);
+  const imageDraftsRef = useRef<UnitImageDraft[]>(imageDrafts);
+  imageDraftsRef.current = imageDrafts;
+
+  useEffect((): (() => void) => {
+    return (): void => {
+      for (const draft of imageDraftsRef.current) {
+        releaseUnitImageDraft(draft);
+      }
+    };
+  }, []);
 
   useEffect((): void => {
     setFreeText(unit?.free_text ?? "");
@@ -656,10 +676,29 @@ function UnitEditorView({
     setFieldDrafts(fieldDraftsFromUnit(unit));
   }, [unit?.id]);
 
+  useEffect((): void => {
+    const imagesSection: HTMLElement | null = document.getElementById("unit-images");
+
+    if (imagesSection !== null) {
+      imagesSection.scrollIntoView({ block: "start" });
+    }
+  }, [unit?.id]);
+
   const handleSave = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
     submitEvent.preventDefault();
 
     if (!canWrite || source === null) {
+      return;
+    }
+
+    const imageError: string | null = unit === null
+      ? firstUnitImageDraftError(imageDrafts)
+      : null;
+
+    if (imageError !== null) {
+      setShowImageErrors(true);
+      setSaveError(new Error(imageError));
+
       return;
     }
 
@@ -671,12 +710,36 @@ function UnitEditorView({
 
     setIsSaving(true);
     setSaveError(null);
+    setShowImageErrors(false);
 
     try {
-      const savedUnit: UnitReadResponse = unit === null
-        ? await createSourceUnit(source.id, unitWriteRequest)
-        : await patchSourceUnit(source.id, unit.id, unitWriteRequest);
+      const imagePayloads: UnitImageCreatePayload[] = imageDrafts.map(
+        (draft: UnitImageDraft): UnitImageCreatePayload => ({
+          kind: draft.kind,
+          file: draft.file,
+          url: draft.url,
+          license: draft.imageLicense,
+          source: draft.imageSource,
+          license_note: draft.licenseNote,
+        }),
+      );
+      let savedUnit: UnitReadResponse;
+
+      if (unit === null && imagePayloads.length > 0) {
+        savedUnit = await createUnitWithImages(source.id, unitWriteRequest, imagePayloads);
+      } else if (unit === null) {
+        savedUnit = await createSourceUnit(source.id, unitWriteRequest);
+      } else {
+        savedUnit = await patchSourceUnit(source.id, unit.id, unitWriteRequest);
+      }
+
       const message: string = unit === null ? "Created the unit." : "Saved the unit.";
+
+      for (const draft of imageDrafts) {
+        releaseUnitImageDraft(draft);
+      }
+
+      setImageDrafts([]);
       onSaved(savedUnit, message);
     } catch (caughtError: unknown) {
       setSaveError(caughtError);
@@ -686,6 +749,9 @@ function UnitEditorView({
   };
 
   const pageTitle: string = unit === null ? "New unit" : "Unit";
+  const pageLede: string = unit === null
+    ? "Add images, free text, or a labeled field. Images can be the whole unit."
+    : "Images are listed first. Upload or import adds a file; the license is saved with it.";
 
   return (
     <section>
@@ -694,8 +760,7 @@ function UnitEditorView({
           <h1>{pageTitle}</h1>
           <p className="lede">
             {source === null ? "Album" : source.name}
-            . Text, labeled fields, tags, and images. Upload or import adds a file;
-            the license is saved with it.
+            . {pageLede}
           </p>
         </div>
         <button type="button" onClick={onBack}>
@@ -712,33 +777,49 @@ function UnitEditorView({
         <p>This unit is not available.</p>
       ) : (
         <>
-          {unit === null || !canWrite ? null : (
-            <ImageIntakeForm
-              sourceId={source.id}
-              unitId={unit.id}
-              onChanged={(message: string): void => {
-                onImagesChanged(message);
-              }}
-            />
+          {unit === null ? null : (
+            <section id="unit-images" className="unit-images">
+              <h2>Images</h2>
+              <p className="field-hint">
+                Each image shows its thumbnail, license, source, and note.
+              </p>
+              {unit.images.length === 0 ? <p>No images on this unit yet.</p> : null}
+              {unit.images.map((image: UnitImageReadResponse): ReactElement => (
+                <ImageMetadataEditor
+                  key={image.id}
+                  sourceId={source.id}
+                  unitId={unit.id}
+                  image={image}
+                  canWrite={canWrite}
+                  onChanged={(message: string): void => {
+                    onImagesChanged(message);
+                  }}
+                />
+              ))}
+              {canWrite ? (
+                <ImageIntakeForm
+                  sourceId={source.id}
+                  unitId={unit.id}
+                  onChanged={(message: string): void => {
+                    onImagesChanged(message);
+                  }}
+                />
+              ) : null}
+            </section>
           )}
-          {unit === null ? null : unit.images.map((image: UnitImageReadResponse): ReactElement => (
-            <ImageMetadataEditor
-              key={image.id}
-              sourceId={source.id}
-              unitId={unit.id}
-              image={image}
-              canWrite={canWrite}
-              onChanged={(message: string): void => {
-                onImagesChanged(message);
-              }}
-            />
-          ))}
           <form
             className="stack-form"
             onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
               void handleSave(submitEvent);
             }}
           >
+            {unit === null ? (
+              <NewUnitImages
+                drafts={imageDrafts}
+                showFieldErrors={showImageErrors}
+                onDraftsChange={setImageDrafts}
+              />
+            ) : null}
             <label>
               Free text
               <textarea
@@ -873,6 +954,7 @@ function ImageIntakeForm({
 }: ImageIntakeFormProps): ReactElement {
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [uploadLicense, setUploadLicense] = useState<UnitImageLicense>("cc0");
   const [uploadSource, setUploadSource] = useState<string>("");
   const [uploadNote, setUploadNote] = useState<string>("");
@@ -885,6 +967,17 @@ function ImageIntakeForm({
   const [importNote, setImportNote] = useState<string>("");
   const [importError, setImportError] = useState<unknown>(null);
   const [isImporting, setIsImporting] = useState<boolean>(false);
+
+  useEffect((): (() => void) => {
+    const nextUrls: string[] = selectedFiles.map((file: File): string => URL.createObjectURL(file));
+    setPreviewUrls(nextUrls);
+
+    return (): void => {
+      for (const previewUrl of nextUrls) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [selectedFiles]);
 
   const handleUpload = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
     submitEvent.preventDefault();
@@ -958,7 +1051,18 @@ function ImageIntakeForm({
               }}
             />
           </label>
-          <p>SVG, PNG, or JPEG. 8 MB each. One license and source apply to every file.</p>
+          <p>SVG, PNG, or JPEG. 8 MB each. One license and source apply to every file in this upload.</p>
+          {previewUrls.length === 0 ? null : (
+            <div id="unit-image-preview" className="pending-thumbs">
+              {previewUrls.map((previewUrl: string, previewIndex: number): ReactElement => (
+                <img
+                  key={previewUrl}
+                  src={previewUrl}
+                  alt={selectedFiles[previewIndex]?.name ?? "Selected image"}
+                />
+              ))}
+            </div>
+          )}
           <LicenseFields
             licenseId="unit-image-license"
             sourceId="unit-image-source"

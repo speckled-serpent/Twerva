@@ -7,16 +7,33 @@ failure leaves no row and no file.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.api.v1.lookups import fetch_content_source_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
-from app.api.v1.schemas import UnitImageImportRequest, UnitImageReadResponse
-from app.api.v1.source_writes import _fetch_image_or_raise, _fetch_unit_or_raise
+from app.api.v1.schemas import (
+    UnitImageCreateItem,
+    UnitImageImportRequest,
+    UnitImageReadResponse,
+    UnitReadResponse,
+    UnitWithImagesCreateRequest,
+    UnitWriteRequest,
+)
+from app.api.v1.source_writes import (
+    _fetch_image_or_raise,
+    _fetch_unit_or_raise,
+    _next_unit_position,
+    _parsed_unit_write,
+    _replace_fields,
+    _require_unit_content,
+)
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitImage
@@ -41,11 +58,21 @@ from app.storage.artifacts import ArtifactAssetPathEscapeError
 MAX_FILES_PER_UPLOAD: int = 20
 TOO_MANY_FILES_DETAIL: str = "Upload at most 20 images at a time."
 NO_FILES_DETAIL: str = "Choose at least one image."
+CHOOSE_IMAGE_FILE_DETAIL: str = "Choose an image file."
+ENTER_IMAGE_URL_DETAIL: str = "Enter an image URL."
+INVALID_UNIT_IMAGE_DETAIL: str = "Image details are not valid."
 
 
 def register_source_intake_routes(sources_router: APIRouter) -> None:
     """Attach upload, URL import, and thumbnail streaming."""
 
+    sources_router.add_api_route(
+        "/{source_id}/units/with-images",
+        create_unit_with_images_upload,
+        methods=["POST"],
+        response_model=UnitReadResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
     sources_router.add_api_route(
         "/{source_id}/units/{unit_id}/images",
         upload_unit_images,
@@ -135,6 +162,340 @@ def import_unit_image(
     )
 
     return created_images[0]
+
+
+@dataclass(frozen=True)
+class UnitImageAttachment:
+    """One image ready to store on a unit that is being created."""
+
+    payload: bytes
+    intake: UnitImageIntake
+    image_license: UnitImageLicense
+    source: str
+    license_note: str
+    alt_text: str | None
+
+
+def create_unit_with_images_upload(
+    source_id: uuid.UUID,
+    unit_json: str = Form(...),
+    files: list[UploadFile] | None = File(None),
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> UnitReadResponse:
+    """Create a unit and its images in one request. Storage stays on disk.
+
+    An image-only unit is valid because the images are part of this call.
+    A license, type, or download failure writes no row and no file.
+    """
+
+    _ = current_ops_operator
+    create_request: UnitWithImagesCreateRequest = parse_unit_with_images_json(unit_json)
+    upload_files: list[UploadFile] = [] if files is None else list(files)
+    file_payloads: list[bytes] = [upload.file.read() for upload in upload_files]
+
+    with httpx.Client() as http_client:
+        attachments: list[UnitImageAttachment] = attachments_for_new_unit(
+            create_request,
+            file_payloads,
+            http_client,
+        )
+
+    unit_write_request: UnitWriteRequest = UnitWriteRequest(
+        free_text=create_request.free_text,
+        tags=create_request.tags,
+        fields=create_request.fields,
+    )
+    created_unit: UnitReadResponse = create_unit_with_images(
+        source_id,
+        unit_write_request,
+        attachments,
+        our_database_session,
+        configured_album_image_store(),
+    )
+
+    return created_unit
+
+
+def parse_unit_with_images_json(unit_json: str) -> UnitWithImagesCreateRequest:
+    """Read the unit JSON field. A bad license is rejected before a write."""
+
+    try:
+        create_request: UnitWithImagesCreateRequest = (
+            UnitWithImagesCreateRequest.model_validate_json(unit_json)
+        )
+    except ValidationError as validation_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_UNIT_IMAGE_DETAIL,
+        ) from validation_error
+
+    return create_request
+
+
+def attachments_for_new_unit(
+    create_request: UnitWithImagesCreateRequest,
+    file_payloads: list[bytes],
+    http_client: httpx.Client,
+) -> list[UnitImageAttachment]:
+    """Check every license, then read files and download URLs.
+
+    Args:
+        create_request: Parsed unit and image list.
+        file_payloads: Multipart files, in ``file_index`` order.
+        http_client: Used once per URL image.
+
+    Returns:
+        Attachments whose metadata already passed the license gate.
+
+    Raises:
+        HTTPException: Too many images, a missing file, a blank URL, or
+            a license failure. No file is written.
+    """
+
+    if len(create_request.images) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=TOO_MANY_FILES_DETAIL,
+        )
+
+    for image_item in create_request.images:
+        _metadata_or_400(
+            image_item.license,
+            image_item.source,
+            image_item.license_note,
+            image_item.alt_text,
+        )
+
+    attachments: list[UnitImageAttachment] = []
+
+    for image_item in create_request.images:
+        payload, intake = _payload_for_create_item(image_item, file_payloads, http_client)
+        image_source, license_note, alt_text = _metadata_or_400(
+            image_item.license,
+            image_item.source,
+            image_item.license_note,
+            image_item.alt_text,
+        )
+        attachment: UnitImageAttachment = UnitImageAttachment(
+            payload=payload,
+            intake=intake,
+            image_license=image_item.license,
+            source=image_source,
+            license_note=license_note,
+            alt_text=alt_text,
+        )
+        attachments.append(attachment)
+
+    return attachments
+
+
+def create_unit_with_images(
+    source_id: uuid.UUID,
+    unit_write_request: UnitWriteRequest,
+    attachments: list[UnitImageAttachment],
+    our_database_session: Session,
+    image_store: LocalAlbumImageStore,
+) -> UnitReadResponse:
+    """Store the unit and every image in one commit, or store nothing.
+
+    Args:
+        source_id: Album id.
+        unit_write_request: Free text, tags, and fields.
+        attachments: Images for this unit. Empty is allowed when the
+            text or a field gives the unit content.
+        our_database_session: Open session.
+        image_store: Disk store. Bytes stay under ``ARTIFACT_STORAGE_DIR``.
+
+    Returns:
+        The new unit, including its images.
+
+    Raises:
+        HTTPException: The unit would be empty, or an image fails the
+            license, type, or size gate. No row and no file remain.
+    """
+
+    found_source: ContentSource = fetch_content_source_by_id_or_raise(
+        source_id,
+        our_database_session,
+    )
+
+    if found_source.kind != ContentSourceKind.ALBUM:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=RESOURCE_NOT_IN_SLICE_DETAIL,
+        )
+
+    if len(attachments) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=TOO_MANY_FILES_DETAIL,
+        )
+
+    free_text, tags, fields = _parsed_unit_write(unit_write_request)
+    staged_images: list[tuple[PreparedUnitImage, UnitImageAttachment]] = []
+
+    for attachment in attachments:
+        _metadata_or_400(
+            attachment.image_license,
+            attachment.source,
+            attachment.license_note,
+            attachment.alt_text,
+        )
+
+        try:
+            prepared_image: PreparedUnitImage = prepare_image_bytes(attachment.payload)
+        except ImageIntakeError as intake_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=intake_error.detail,
+            ) from intake_error
+
+        staged_images.append((prepared_image, attachment))
+
+    _require_unit_content(free_text, len(fields), len(staged_images))
+    unit_id: uuid.UUID = new_row_id()
+    next_position: int = _next_unit_position(found_source.id, our_database_session)
+    saved_paths: list[str] = []
+
+    try:
+        created_images: list[UnitImage] = [
+            _materialize_unit_image(
+                found_source.id,
+                unit_id,
+                image_position,
+                prepared_image,
+                attachment,
+                image_store,
+                saved_paths,
+            )
+            for image_position, (prepared_image, attachment) in enumerate(staged_images)
+        ]
+    except Exception:
+        _delete_saved_paths(image_store, saved_paths)
+
+        raise
+
+    created_unit: Unit = Unit(
+        id=unit_id,
+        source_id=found_source.id,
+        position=next_position,
+        free_text=free_text,
+        tags=tags,
+    )
+    created_unit.images = created_images
+    created_unit.fields = []
+    our_database_session.add(created_unit)
+
+    for created_image in created_images:
+        our_database_session.add(created_image)
+
+    _replace_fields(created_unit, fields, our_database_session)
+
+    try:
+        commit_database_session_or_raise_conflict(
+            our_database_session,
+            conflict_detail="Unit could not be saved.",
+        )
+    except Exception:
+        _delete_saved_paths(image_store, saved_paths)
+
+        raise
+
+    our_database_session.refresh(created_unit)
+
+    from app.api.v1.sources import serialize_unit
+
+    return serialize_unit(created_unit)
+
+
+def _payload_for_create_item(
+    image_item: UnitImageCreateItem,
+    file_payloads: list[bytes],
+    http_client: httpx.Client,
+) -> tuple[bytes, UnitImageIntake]:
+    """Return bytes for one create item. License was already checked."""
+
+    if image_item.kind == "file":
+        file_index: int | None = image_item.file_index
+        file_missing: bool = (
+            file_index is None
+            or file_index < 0
+            or file_index >= len(file_payloads)
+        )
+
+        if file_missing or file_index is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=CHOOSE_IMAGE_FILE_DETAIL,
+            )
+
+        return file_payloads[file_index], UnitImageIntake.UPLOAD
+
+    image_url: str = "" if image_item.url is None else image_item.url.strip()
+
+    if image_url == "":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ENTER_IMAGE_URL_DETAIL,
+        )
+
+    try:
+        downloaded: bytes = download_image_once(image_url, http_client)
+    except ImageIntakeError as intake_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=intake_error.detail,
+        ) from intake_error
+
+    return downloaded, UnitImageIntake.URL
+
+
+def _materialize_unit_image(
+    source_id: uuid.UUID,
+    unit_id: uuid.UUID,
+    position: int,
+    prepared_image: PreparedUnitImage,
+    attachment: UnitImageAttachment,
+    image_store: LocalAlbumImageStore,
+    saved_paths: list[str],
+) -> UnitImage:
+    """Write one original and its thumbnail. The row is not committed yet."""
+
+    image_id: uuid.UUID = new_row_id()
+    relative_path: str = album_image_relative_path(
+        source_id,
+        unit_id,
+        image_id,
+        prepared_image.extension,
+    )
+    thumbnail_path: str | None = None
+    saved_paths.append(relative_path)
+    image_store.save(relative_path, prepared_image.payload)
+
+    if prepared_image.thumbnail_jpeg is not None:
+        thumbnail_path = album_thumbnail_relative_path(source_id, unit_id, image_id)
+        saved_paths.append(thumbnail_path)
+        image_store.save(thumbnail_path, prepared_image.thumbnail_jpeg)
+
+    created_image: UnitImage = UnitImage(
+        id=image_id,
+        unit_id=unit_id,
+        position=position,
+        relative_path=relative_path,
+        media_type=prepared_image.media_type,
+        byte_size=len(prepared_image.payload),
+        width=prepared_image.width,
+        height=prepared_image.height,
+        alt_text=attachment.alt_text,
+        license=attachment.image_license,
+        source=attachment.source,
+        license_note=attachment.license_note,
+        intake=attachment.intake,
+        thumbnail_path=thumbnail_path,
+    )
+
+    return created_image
 
 
 def add_images_from_payloads(
