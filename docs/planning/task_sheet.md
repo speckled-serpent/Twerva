@@ -422,6 +422,40 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 ---
 
+## Sources v2 — albums of units
+
+**Exit:** An operator can read the Default album as six image-only units, then manage albums and units, take in images, store resources, and pick those images from a theme. Campaign combination and the model stay later.
+
+**Source of truth:** [`docs/planning/sources_v2.md`](sources_v2.md). Phases ship in order. Do not start a phase before the previous one is `[x]`.
+
+**Numbering:** `S1` through `S5` are the build phases. Tick a leaf when its done-when holds. Later is not a build leaf.
+
+#### Phase 1 — Model and Default
+
+- [x] **S1** Alembic `sources_default_album` after `themes_element_rectangle`. Do not edit that revision. Tables `sources`, `units`, `unit_fields`, and `unit_images`, including `tags` and the license columns in the design. Seed one album, slug `default`, with six image-only units. Each `relative_path` stays `theme-defaults/…`. License and source come from `default_images/LICENSES.md`. Bytes stay in the package. Read API: `GET /api/v1/sources?kind=album` and `GET /api/v1/sources/{id}`. Readers may GET. **Done when:** a clean database migrates; a test reads Default and the six units with those paths and `cc0` or `public_domain`; a theme that already stores one of those paths still renders; no theme row is rewritten. **Out of scope:** ops pages, upload, URL import, thumbnails, resources, the theme picker, write and delete routes.
+
+#### Phase 2 — Albums and units in ops
+
+- [ ] **S2** No migration. Write API for albums and units: create, rename, edit free text, fields, tags, and the license, source, alt, and note on an image that already exists. Reject an empty unit, a license outside the allowlist, a blank image source, and `licensed` with no note. Delete of an image, unit, or album is 409 while a theme or artifact stores that path. Ops: Sources, an Albums tab, a units grid, and a unit editor. The grid shows the packaged JPEG for a `theme-defaults/` path, streamed with the existing package resolver. Admin writes. Reader reads. **Done when:** an admin creates an album and a text-only unit with a field and a tag, reloads, and sees them; deleting a Default image whose path a theme stores returns 409 and the row remains; a reader cannot save. **Out of scope:** new image bytes, URL import, generated thumbnails, the Resources tab, replacing the hard-coded theme album list.
+
+#### Phase 3 — Image intake
+
+- [ ] **S3** No migration. Disk storage behind `save`, `open`, and `delete`, prefix `albums/<source_id>/<unit_id>/<image_id>.<ext>` under `ARTIFACT_STORAGE_DIR`. Multipart upload and URL import. The server downloads a URL once. SVG, PNG, or JPEG, 8 MB. The same license gate as Phase 2; a failure writes nothing. Thumbnail JPEG, longest edge 480. SVG has no thumbnail. The unit editor gains upload and import. The grid uses the thumbnail when one exists. **Done when:** an admin uploads a JPEG and imports a PNG from a URL, both appear with license and source, a file over 8 MB or a missing license note is 400 and leaves no row, and a theme path from Phase 1 still resolves. **Out of scope:** S3, WebP, resources, pointing the theme picker at the new albums.
+
+#### Phase 4 — Resources
+
+- [ ] **S4** Migration yes. Table `resource_files`. Upload `.md` or `.txt`, stored as-is, 2 MB, with a required provenance note. Replacing the file is a new upload. Ops: a Resources tab, the note, and the file as text. Delete is allowed, because nothing points at a resource yet. **Done when:** an admin uploads a Markdown file and a note, reloads, and the bytes match; a `.txt` works; a PDF or a blank note is 400; a reader can open the text and cannot upload. **Out of scope:** PDF conversion, auto-synthesis, tags on a resource, campaign links, image changes.
+
+#### Phase 5 — Theme pickers
+
+- [ ] **S5** No migration. Themes keep `background_asset_ref` and `image_asset_ref`. The picture and image controls list albums, then units that have an image, then those images. Text-only units stay off the picker. A caption from free text or the first field is display only. Pick and Shuffle store one concrete path. Samples, live preview, and generate read that path. An unknown path stays "Saved image". This replaces the hard-coded Default catalog. **Done when:** an admin picks one Default image and one uploaded image, reloads, and both stored paths are those files; Shuffle writes a different path once and a second sample uses the saved path; a reader sees the list and cannot upload. **Out of scope:** a unit id on the theme, generate-time random, copying unit text onto the frame, resources in the picker.
+
+**Later (not a leaf):** campaign combination rules and the model, S3, brand or campaign ownership, a texture album, PDF synthesis, and WebP. See the Later section in `sources_v2.md`.
+
+**Sources v2 done when:** S1–S5 are `[x]`.
+
+---
+
 ## Phase 2 — Spotmu (harden the pipeline)
 
 **Exit:** Multiple clusters running; medians above suppression floor; steer is routine; Spotmu traffic signal visible.
@@ -520,9 +554,9 @@ Extend the Themes detail view (`apps/ops/src/pages/ThemesPage.tsx`, `apps/ops/sr
 
 ## Suggested next coding slice
 
-**1.10 Carousel theme frame.** Source of truth:
-[`docs/planning/themes_v1.md`](themes_v1.md). Start at **1.10a-i**.
-Do not implement a cell or skeleton layout. Phase 1 stays closed.
-Do not start Phase 2. Posts that ship stay on `carousel_template_v1`
+**Sources v2, phase 2 (S2).** Source of truth:
+[`docs/planning/sources_v2.md`](sources_v2.md). **S1** is done.
+Do not start image intake, resources, or the theme picker until S2 is `[x]`.
+Do not start product Phase 2. Posts that ship stay on `carousel_template_v1`
 until a later slice binds a Live theme into `POST /api/v1/generate/carousel`.
 

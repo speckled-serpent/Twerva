@@ -13,7 +13,8 @@ Closed vocabularies are native Postgres ENUM types. Allowed values and
 ``app.models.enums`` and ``docs/planning/domain_statuses.md``.
 ``ThemeStatus`` (``draft``, ``live``) is stored the same way.
 ``theme_elements`` stores band, content kind, Spotmu text source, and
-alignment the same way.
+alignment the same way. ``sources`` stores album or resource.
+``units``, ``unit_fields``, and ``unit_images`` hang off an album.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -29,6 +30,7 @@ from app.models.base import Base
 from app.models.brand import Brand
 from app.models.campaign import Campaign, CampaignAccount, CampaignInterest
 from app.models.cluster import Cluster, cluster_source_items
+from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
 from app.models.enums import (
     ACCOUNT_STATUS_ENUM,
     ADVERTISEMENT_TYPE_ENUM,
@@ -38,6 +40,7 @@ from app.models.enums import (
     CAMPAIGN_STATUS_ENUM,
     CAMPAIGN_STATUS_TRANSITIONS,
     CAMPAIGN_TYPE_ENUM,
+    CONTENT_SOURCE_KIND_ENUM,
     OPS_USER_ROLE_ENUM,
     PLATFORM_ENUM,
     POST_JOB_STATUS_ENUM,
@@ -49,12 +52,16 @@ from app.models.enums import (
     THEME_ELEMENT_CONTENT_KIND_ENUM,
     THEME_ELEMENT_TEXT_SOURCE_ENUM,
     THEME_STATUS_ENUM,
+    UNIT_IMAGE_INTAKE_ENUM,
+    UNIT_IMAGE_LICENSE_ENUM,
+    UNIT_IMAGE_MEDIA_TYPE_ENUM,
     AccountStatus,
     AdvertisementType,
     ArtifactStatus,
     BackgroundKind,
     CampaignStatus,
     CampaignType,
+    ContentSourceKind,
     OpsUserRole,
     Platform,
     PostJobStatus,
@@ -65,6 +72,9 @@ from app.models.enums import (
     ThemeElementContentKind,
     ThemeElementTextSource,
     ThemeStatus,
+    UnitImageIntake,
+    UnitImageLicense,
+    UnitImageMediaType,
 )
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.ops_user import OpsUser
@@ -93,12 +103,15 @@ __all__ = [
     "CAMPAIGN_STATUS_ENUM",
     "CAMPAIGN_STATUS_TRANSITIONS",
     "CAMPAIGN_TYPE_ENUM",
+    "CONTENT_SOURCE_KIND_ENUM",
     "Campaign",
     "CampaignAccount",
     "CampaignInterest",
     "CampaignStatus",
     "CampaignType",
     "Cluster",
+    "ContentSource",
+    "ContentSourceKind",
     "MetricSnapshot",
     "OPS_USER_ROLE_ENUM",
     "OpsUser",
@@ -116,8 +129,17 @@ __all__ = [
     "THEME_ELEMENT_CONTENT_KIND_ENUM",
     "THEME_ELEMENT_TEXT_SOURCE_ENUM",
     "THEME_STATUS_ENUM",
+    "UNIT_IMAGE_INTAKE_ENUM",
+    "UNIT_IMAGE_LICENSE_ENUM",
+    "UNIT_IMAGE_MEDIA_TYPE_ENUM",
     "SourceItem",
     "SourceType",
+    "Unit",
+    "UnitField",
+    "UnitImage",
+    "UnitImageIntake",
+    "UnitImageLicense",
+    "UnitImageMediaType",
     "SteerAction",
     "SteerActionType",
     "Theme",

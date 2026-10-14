@@ -13,6 +13,7 @@ from app.models.enums import (
     BackgroundKind,
     CampaignStatus,
     CampaignType,
+    ContentSourceKind,
     OpsUserRole,
     Platform,
     PostJobStatus,
@@ -23,6 +24,9 @@ from app.models.enums import (
     ThemeElementContentKind,
     ThemeElementTextSource,
     ThemeStatus,
+    UnitImageIntake,
+    UnitImageLicense,
+    UnitImageMediaType,
 )
 from app.models.theme import (
     DEFAULT_BACKGROUND_COLOR,
@@ -832,3 +836,65 @@ class OpsUserResetPasswordRequest(BaseModel):
     """Body for `POST /api/v1/auth/users/{id}/reset-password` (admin only)."""
 
     new_password: str = Field(min_length=8)
+
+
+class UnitFieldReadResponse(BaseModel):
+    """One labeled field on a unit."""
+
+    id: uuid.UUID
+    position: int
+    label: str
+    value: str
+
+
+class UnitImageReadResponse(BaseModel):
+    """One image on a unit, including license and the stored path."""
+
+    id: uuid.UUID
+    position: int
+    relative_path: str
+    media_type: UnitImageMediaType
+    byte_size: int
+    width: int | None
+    height: int | None
+    alt_text: str | None
+    license: UnitImageLicense
+    source: str
+    license_note: str
+    intake: UnitImageIntake
+    thumbnail_path: str | None
+
+
+class UnitReadResponse(BaseModel):
+    """One unit: free text, tags, fields, and images."""
+
+    id: uuid.UUID
+    position: int
+    free_text: str | None
+    tags: list[str]
+    fields: list[UnitFieldReadResponse]
+    images: list[UnitImageReadResponse]
+
+
+class SourceListItemResponse(BaseModel):
+    """One source on `GET /api/v1/sources`. Units are on the detail route."""
+
+    id: uuid.UUID
+    kind: ContentSourceKind
+    name: str
+    slug: str
+    unit_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class SourceReadResponse(BaseModel):
+    """One source and its units, ordered by position."""
+
+    id: uuid.UUID
+    kind: ContentSourceKind
+    name: str
+    slug: str
+    created_at: datetime
+    updated_at: datetime
+    units: list[UnitReadResponse]

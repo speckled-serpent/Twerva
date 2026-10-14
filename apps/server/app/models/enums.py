@@ -164,6 +164,41 @@ class ThemeElementAlignment(enum.StrEnum):
     RIGHT = "right"
 
 
+class ContentSourceKind(enum.StrEnum):
+    """Whether a content source is an album of units or a resource file.
+
+    Phase 1 stores albums only. ``resource`` is reserved so the enum
+    does not need a rewrite when resource files land.
+    """
+
+    ALBUM = "album"
+    RESOURCE = "resource"
+
+
+class UnitImageMediaType(enum.StrEnum):
+    """Stored type of one unit image. SVG has no pixel size."""
+
+    SVG = "svg"
+    PNG = "png"
+    JPEG = "jpeg"
+
+
+class UnitImageLicense(enum.StrEnum):
+    """Allowlist for a unit image. Anything else cannot be stored."""
+
+    CC0 = "cc0"
+    PUBLIC_DOMAIN = "public_domain"
+    OWNED = "owned"
+    LICENSED = "licensed"
+
+
+class UnitImageIntake(enum.StrEnum):
+    """How a unit image's bytes arrived. Phase 1 seeds ``upload`` only."""
+
+    UPLOAD = "upload"
+    URL = "url"
+
+
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ArtifactStatus.DRAFT: frozenset(
         {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
@@ -262,4 +297,20 @@ THEME_ELEMENT_TEXT_SOURCE_ENUM: Enum = as_postgres_enum(
 THEME_ELEMENT_ALIGNMENT_ENUM: Enum = as_postgres_enum(
     ThemeElementAlignment,
     "theme_element_alignment",
+)
+CONTENT_SOURCE_KIND_ENUM: Enum = as_postgres_enum(
+    ContentSourceKind,
+    "content_source_kind",
+)
+UNIT_IMAGE_MEDIA_TYPE_ENUM: Enum = as_postgres_enum(
+    UnitImageMediaType,
+    "unit_image_media_type",
+)
+UNIT_IMAGE_LICENSE_ENUM: Enum = as_postgres_enum(
+    UnitImageLicense,
+    "unit_image_license",
+)
+UNIT_IMAGE_INTAKE_ENUM: Enum = as_postgres_enum(
+    UnitImageIntake,
+    "unit_image_intake",
 )

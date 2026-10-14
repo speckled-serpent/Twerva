@@ -11,6 +11,7 @@ from app.models import (
     Brand,
     Campaign,
     Cluster,
+    ContentSource,
     PostJob,
     SourceItem,
     Theme,
@@ -186,6 +187,37 @@ def fetch_theme_by_id_or_raise(
         )
 
     return found_theme
+
+
+def fetch_content_source_by_id_or_raise(
+    source_id: uuid.UUID,
+    our_database_session: Session,
+) -> ContentSource:
+    """Return a content source or raise HTTP 404.
+
+    Args:
+        source_id: Primary key to load.
+        our_database_session: Open SQLAlchemy session.
+
+    Returns:
+        The matching ``sources`` row.
+
+    Raises:
+        HTTPException: If no source exists for `source_id`.
+    """
+
+    found_source: ContentSource | None = our_database_session.get(
+        ContentSource,
+        source_id,
+    )
+
+    if found_source is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Source not found: {source_id}",
+        )
+
+    return found_source
 
 
 def fetch_campaign_by_id_or_raise(
