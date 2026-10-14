@@ -31,7 +31,10 @@ LICENSE_NOTE_DETAIL: str = "A licensed image needs a license note."
 IMAGE_IN_USE_DETAIL: str = "This image is still used by a theme or an artifact."
 UNIT_IN_USE_DETAIL: str = "This unit is still used by a theme or an artifact."
 ALBUM_IN_USE_DETAIL: str = "This album is still used by a theme or an artifact."
-RESOURCE_NOT_IN_SLICE_DETAIL: str = "Resources are not in this slice."
+RESOURCE_NOT_IN_SLICE_DETAIL: str = "That action is only for an album."
+RESOURCE_FILE_REQUIRED_DETAIL: str = (
+    "A resource is created by uploading a Markdown or TXT file."
+)
 
 
 def slugify_source_name(source_name: str) -> str:

@@ -8,6 +8,7 @@ import {
   deleteUnitImage,
   fetchSourceById,
   listAlbums,
+  listResources,
   patchSourceUnit,
   patchUnitImageMetadata,
   renameSource,
@@ -25,6 +26,7 @@ import type {
   UnitWriteRequest,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ResourceDetailView, ResourceListView, SourceTabBar, type SourceTab } from "./ResourceViews";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 
@@ -41,14 +43,14 @@ interface FieldDraft {
 }
 
 /**
- * Sources: the albums list, one album's units, and a unit editor.
- * Upload and URL import are not on this page.
+ * Sources: albums of units, and resource files beside them.
  *
  * @returns The Sources page
  */
 export function SourcesPage(): ReactElement {
 
-  const [albums, setAlbums] = useState<SourceListItemResponse[]>([]);
+  const [sourceTab, setSourceTab] = useState<SourceTab>("albums");
+  const [listedSources, setListedSources] = useState<SourceListItemResponse[]>([]);
   const [openedSourceId, setOpenedSourceId] = useState<string | null>(null);
   const [openedUnitId, setOpenedUnitId] = useState<string | null>(null);
   const [isCreatingUnit, setIsCreatingUnit] = useState<boolean>(false);
@@ -61,16 +63,18 @@ export function SourcesPage(): ReactElement {
   useEffect((): (() => void) => {
     let isCancelled: boolean = false;
 
-    const loadAlbums = async (): Promise<void> => {
+    const loadSources = async (): Promise<void> => {
 
       try {
-        const loadedAlbums: SourceListItemResponse[] = await listAlbums();
+        const loadedSources: SourceListItemResponse[] = sourceTab === "albums"
+          ? await listAlbums()
+          : await listResources();
 
         if (isCancelled) {
           return;
         }
 
-        setAlbums(loadedAlbums);
+        setListedSources(loadedSources);
         setLoadError(null);
       } catch (caughtError: unknown) {
         if (isCancelled) {
@@ -81,12 +85,12 @@ export function SourcesPage(): ReactElement {
       }
     };
 
-    void loadAlbums();
+    void loadSources();
 
     return (): void => {
       isCancelled = true;
     };
-  }, [reloadToken]);
+  }, [reloadToken, sourceTab]);
 
   useEffect((): (() => void) => {
     let isCancelled: boolean = false;
@@ -130,6 +134,40 @@ export function SourcesPage(): ReactElement {
   const requestReload = (): void => {
     setReloadToken((currentToken: number): number => currentToken + 1);
   };
+
+  const chooseTab = (nextTab: SourceTab): void => {
+    setSourceTab(nextTab);
+    setOpenedSourceId(null);
+    setOpenedUnitId(null);
+    setIsCreatingUnit(false);
+    setHeldUnit(null);
+    setStatusMessage("");
+  };
+
+  const sourceTabs: ReactElement = <SourceTabBar sourceTab={sourceTab} onTab={chooseTab} />;
+
+  if (openedSourceId !== null && sourceTab === "resources") {
+    return (
+      <ResourceDetailView
+        source={selectedSource !== null && selectedSource.kind === "resource" ? selectedSource : null}
+        loadError={loadError}
+        statusMessage={statusMessage}
+        onBack={(): void => {
+          setOpenedSourceId(null);
+          setStatusMessage("");
+        }}
+        onChanged={(message: string): void => {
+          setStatusMessage(message);
+          requestReload();
+        }}
+        onDeleted={(): void => {
+          setOpenedSourceId(null);
+          setStatusMessage("Deleted the resource.");
+          requestReload();
+        }}
+      />
+    );
+  }
 
   if (openedSourceId !== null && (openedUnitId !== null || isCreatingUnit)) {
     const loadedUnit: UnitReadResponse | null = findUnit(selectedSource, openedUnitId);
@@ -209,9 +247,34 @@ export function SourcesPage(): ReactElement {
     );
   }
 
+  if (sourceTab === "resources") {
+    return (
+      <ResourceListView
+        resources={listedSources}
+        tabs={sourceTabs}
+        loadError={loadError}
+        statusMessage={statusMessage}
+        onOpenResource={(sourceId: string): void => {
+          setOpenedSourceId(sourceId);
+          setStatusMessage("");
+        }}
+        onResourceCreated={(createdSource: SourceReadResponse): void => {
+          setStatusMessage(`Created resource ${createdSource.name}.`);
+          setOpenedSourceId(createdSource.id);
+          requestReload();
+        }}
+        onResourceDeleted={(resourceName: string): void => {
+          setStatusMessage(`Deleted resource ${resourceName}.`);
+          requestReload();
+        }}
+      />
+    );
+  }
+
   return (
     <AlbumListView
-      albums={albums}
+      albums={listedSources}
+      tabs={sourceTabs}
       loadError={loadError}
       statusMessage={statusMessage}
       onOpenAlbum={(sourceId: string): void => {
@@ -233,6 +296,7 @@ export function SourcesPage(): ReactElement {
 
 interface AlbumListViewProps {
   albums: SourceListItemResponse[];
+  tabs: ReactElement;
   loadError: unknown;
   statusMessage: string;
   onOpenAlbum: (sourceId: string) => void;
@@ -242,6 +306,7 @@ interface AlbumListViewProps {
 
 function AlbumListView({
   albums,
+  tabs,
   loadError,
   statusMessage,
   onOpenAlbum,
@@ -281,11 +346,12 @@ function AlbumListView({
 
   return (
     <section>
+      {tabs}
       <div className="page-header-row">
         <div>
           <h1>Sources</h1>
           <p className="lede">
-            Albums. Open one to see its units. New image files are not added here.
+            Albums of units. Open one to edit text, images, and tags.
           </p>
         </div>
       </div>

@@ -15,6 +15,7 @@ Closed vocabularies are native Postgres ENUM types. Allowed values and
 ``theme_elements`` stores band, content kind, Spotmu text source, and
 alignment the same way. ``sources`` stores album or resource.
 ``units``, ``unit_fields``, and ``unit_images`` hang off an album.
+``resource_files`` is the one Markdown or TXT file on a resource.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -30,7 +31,7 @@ from app.models.base import Base
 from app.models.brand import Brand
 from app.models.campaign import Campaign, CampaignAccount, CampaignInterest
 from app.models.cluster import Cluster, cluster_source_items
-from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
+from app.models.content_source import ContentSource, ResourceFile, Unit, UnitField, UnitImage
 from app.models.enums import (
     ACCOUNT_STATUS_ENUM,
     ADVERTISEMENT_TYPE_ENUM,
@@ -52,6 +53,7 @@ from app.models.enums import (
     THEME_ELEMENT_CONTENT_KIND_ENUM,
     THEME_ELEMENT_TEXT_SOURCE_ENUM,
     THEME_STATUS_ENUM,
+    RESOURCE_FILE_MEDIA_TYPE_ENUM,
     UNIT_IMAGE_INTAKE_ENUM,
     UNIT_IMAGE_LICENSE_ENUM,
     UNIT_IMAGE_MEDIA_TYPE_ENUM,
@@ -63,6 +65,7 @@ from app.models.enums import (
     CampaignType,
     ContentSourceKind,
     OpsUserRole,
+    ResourceFileMediaType,
     Platform,
     PostJobStatus,
     SourceType,
@@ -112,6 +115,9 @@ __all__ = [
     "Cluster",
     "ContentSource",
     "ContentSourceKind",
+    "RESOURCE_FILE_MEDIA_TYPE_ENUM",
+    "ResourceFile",
+    "ResourceFileMediaType",
     "MetricSnapshot",
     "OPS_USER_ROLE_ENUM",
     "OpsUser",

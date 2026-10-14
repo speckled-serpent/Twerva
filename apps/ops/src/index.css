@@ -621,3 +621,28 @@ td {
     grid-template-columns: 1fr;
   }
 }
+
+.source-tabs {
+  margin-bottom: 1rem;
+}
+
+.resource-markdown h1,
+.resource-markdown h2,
+.resource-markdown h3 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 1.15rem;
+}
+
+.resource-markdown p,
+.resource-markdown ul,
+.resource-markdown ol {
+  margin: 0.35rem 0;
+}
+
+.resource-markdown pre,
+.resource-source-text {
+  white-space: pre-wrap;
+  background: #f6f3ee;
+  padding: 0.75rem;
+  overflow: auto;
+}

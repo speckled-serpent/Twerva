@@ -210,7 +210,7 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         self.assertEqual(renamed.slug, "harbor")
 
     def test_resource_kind_is_rejected(self) -> None:
-        """Phase 2 does not create resources."""
+        """JSON create does not store a resource. The file upload route does."""
 
         session: _MemorySourceSession = _MemorySourceSession()
 

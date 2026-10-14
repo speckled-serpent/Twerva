@@ -1,8 +1,8 @@
-"""Content sources: an album of units, and the images and fields on a unit.
+"""Content sources: an album of units, or one resource file.
 
-Phase 1 stores albums only. A resource is a later kind on the same
-``sources`` table. Themes still store a concrete image path. They do
-not reference these rows.
+Themes still store a concrete image path. They do not reference these
+rows. A resource file lives at ``resources/<source_id>/body.md`` or
+``body.txt`` under the artifact store.
 """
 
 from __future__ import annotations
@@ -18,8 +18,10 @@ from app.models.enums import (
     CONTENT_SOURCE_KIND_ENUM,
     UNIT_IMAGE_INTAKE_ENUM,
     UNIT_IMAGE_LICENSE_ENUM,
+    RESOURCE_FILE_MEDIA_TYPE_ENUM,
     UNIT_IMAGE_MEDIA_TYPE_ENUM,
     ContentSourceKind,
+    ResourceFileMediaType,
     UnitImageIntake,
     UnitImageLicense,
     UnitImageMediaType,
@@ -52,6 +54,25 @@ UNIT_IMAGE_DIMENSIONS_CHECK_SQL: str = (
     "media_type <> 'svg'::unit_image_media_type"
     " AND width > 0"
     " AND height > 0"
+    ")"
+)
+RESOURCE_FILE_MAX_BYTES: int = 2 * 1024 * 1024
+RESOURCE_FILE_PROVENANCE_CHECK_SQL: str = "btrim(provenance) <> ''"
+RESOURCE_FILE_FILENAME_CHECK_SQL: str = (
+    "btrim(original_filename) <> ''"
+    " AND strpos(original_filename, '/') = 0"
+    " AND strpos(original_filename, chr(92)) = 0"
+)
+RESOURCE_FILE_BYTE_SIZE_CHECK_SQL: str = (
+    f"byte_size > 0 AND byte_size <= {RESOURCE_FILE_MAX_BYTES}"
+)
+RESOURCE_FILE_PATH_CHECK_SQL: str = (
+    "("
+    "media_type = 'markdown'::resource_file_media_type"
+    " AND relative_path = ('resources/' || source_id::text || '/body.md')"
+    ") OR ("
+    "media_type = 'plain'::resource_file_media_type"
+    " AND relative_path = ('resources/' || source_id::text || '/body.txt')"
     ")"
 )
 UNIT_IMAGE_PATH_CHECK_SQL: str = (
@@ -89,6 +110,12 @@ class ContentSource(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="source",
         cascade="all, delete-orphan",
         order_by="Unit.position",
+    )
+    resource_file: Mapped["ResourceFile | None"] = relationship(
+        "ResourceFile",
+        back_populates="source",
+        cascade="all, delete-orphan",
+        uselist=False,
     )
 
 
@@ -221,3 +248,44 @@ class UnitImage(Base, UuidPrimaryKeyMixin, TimestampMixin):
     thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     unit: Mapped[Unit] = relationship("Unit", back_populates="images")
+
+
+class ResourceFile(Base):
+    """The one file on a resource source. Bytes stay the upload."""
+
+    __tablename__ = "resource_files"
+    __table_args__ = (
+        UniqueConstraint("relative_path", name="uq_resource_files_relative_path"),
+        CheckConstraint(
+            RESOURCE_FILE_PROVENANCE_CHECK_SQL,
+            name="ck_resource_files_provenance",
+        ),
+        CheckConstraint(
+            RESOURCE_FILE_FILENAME_CHECK_SQL,
+            name="ck_resource_files_original_filename",
+        ),
+        CheckConstraint(
+            RESOURCE_FILE_BYTE_SIZE_CHECK_SQL,
+            name="ck_resource_files_byte_size",
+        ),
+        CheckConstraint(RESOURCE_FILE_PATH_CHECK_SQL, name="ck_resource_files_path"),
+    )
+
+    source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sources.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
+    media_type: Mapped[ResourceFileMediaType] = mapped_column(
+        RESOURCE_FILE_MEDIA_TYPE_ENUM,
+        nullable=False,
+    )
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    original_filename: Mapped[str] = mapped_column(Text, nullable=False)
+    provenance: Mapped[str] = mapped_column(Text, nullable=False)
+
+    source: Mapped[ContentSource] = relationship(
+        "ContentSource",
+        back_populates="resource_file",
+    )

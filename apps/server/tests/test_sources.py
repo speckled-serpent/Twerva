@@ -216,6 +216,10 @@ class ContentSourceReadApiTests(unittest.TestCase):
             "POST",
             methods_by_path["/sources/{source_id}/units/{unit_id}/images/import"],
         )
+        self.assertIn("POST", methods_by_path["/sources/resource"])
+        self.assertTrue(
+            {"GET", "PUT"}.issubset(methods_by_path["/sources/{source_id}/resource"]),
+        )
 
 
 class ThemeDefaultsRenderingUnchangedTests(unittest.TestCase):

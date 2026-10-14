@@ -355,10 +355,11 @@ Check `ck_theme_elements_content`:
 
 ## Content sources (`sources`)
 
-Alembic `sources_default_album` (parent `themes_element_rectangle`).
-An album is a source with `kind = album` and has units. `resource` is
-reserved. Phase 1 seeds one album, slug `default`, and does not update
-`themes`.
+Alembic `sources_default_album` (parent `themes_element_rectangle`),
+then `sources_resource_files` (parent `sources_default_album`).
+An album is a source with `kind = album` and has units. A resource has
+one row in `resource_files`. Phase 1 seeds one album, slug `default`,
+and does not update `themes`.
 
 | Enum | Values |
 |---|---|
@@ -366,6 +367,7 @@ reserved. Phase 1 seeds one album, slug `default`, and does not update
 | `unit_image_media_type` | `svg`, `png`, `jpeg` |
 | `unit_image_license` | `cc0`, `public_domain`, `owned`, `licensed` |
 | `unit_image_intake` | `upload`, `url` |
+| `resource_file_media_type` | `markdown`, `plain` |
 
 `units.tags` is a text array, default empty. `unit_images.license_note`
 is empty unless `license` is `licensed`, in which case it is required.
@@ -378,4 +380,8 @@ New bytes go under `ARTIFACT_STORAGE_DIR` at
 `albums/<source_id>/<unit_id>/<image_id>.<ext>`. A failure writes no
 row and no file. Delete of an image, unit, or album is 409 while a
 theme or artifact stores that path. The theme picker still uses the
-hard-coded Default list.
+hard-coded Default list. Admins may also create a resource by uploading
+a Markdown or TXT file (2 MB) with a provenance note, replace that
+file, edit the note, and delete the resource. The bytes stay at
+`resources/<source_id>/body.md` or `body.txt` under `ARTIFACT_STORAGE_DIR`.
+Readers may open the text and download the file. They cannot upload.
