@@ -23,6 +23,7 @@ import { NewThemePage } from "./pages/NewThemePage";
 import { QueuePage } from "./pages/QueuePage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SchedulePage } from "./pages/SchedulePage";
+import { SourcesPage } from "./pages/SourcesPage";
 import { ThemesPage } from "./pages/ThemesPage";
 import { UsersPage } from "./pages/UsersPage";
 import { OpsSessionContext, isAdminOpsRole } from "./session/OpsSessionContext";
@@ -242,6 +243,10 @@ function renderActivePage(
 
   if (activePageId === "themes") {
     return <ThemesPage statusMessage={themeStatusMessage} />;
+  }
+
+  if (activePageId === "sources") {
+    return <SourcesPage />;
   }
 
   if (activePageId === "new-theme") {

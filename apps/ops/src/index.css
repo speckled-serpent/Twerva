@@ -549,3 +549,75 @@ td {
   flex-direction: column;
   gap: 0.2rem;
 }
+
+.unit-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+}
+
+.unit-card {
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.unit-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1080 / 1920;
+  object-fit: cover;
+  background: #eee;
+}
+
+.unit-card-excerpt {
+  margin: 0;
+  font-size: 0.85rem;
+  min-height: 3.2rem;
+  white-space: pre-wrap;
+}
+
+.unit-card-tags {
+  margin: 0;
+  color: #4a4a4a;
+  font-size: 0.8rem;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.4rem;
+  align-items: end;
+}
+
+.image-editor {
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 0.75rem;
+  display: grid;
+  grid-template-columns: 7rem 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.image-editor img {
+  width: 100%;
+  aspect-ratio: 1080 / 1920;
+  object-fit: cover;
+  background: #eee;
+}
+
+@media (max-width: 640px) {
+  .image-editor,
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+}

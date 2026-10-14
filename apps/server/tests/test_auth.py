@@ -738,7 +738,7 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(brands_response.json(), [])
 
     def test_reader_cannot_mutate_domain_routes(self) -> None:
-        """POST /api/v1/brands is 403 for readers."""
+        """POST brands, themes, and sources are 403 for readers."""
 
         create_brand_response = self.test_client.post(
             "/api/v1/brands",
@@ -785,6 +785,14 @@ class ReaderRbacHttpTests(unittest.TestCase):
 
         self.assertEqual(delete_theme_response.status_code, 403)
         self.assertIn("read-only", delete_theme_response.json()["detail"].lower())
+
+        create_source_response = self.test_client.post(
+            "/api/v1/sources",
+            json={"name": "Blocked album", "kind": "album"},
+        )
+
+        self.assertEqual(create_source_response.status_code, 403)
+        self.assertIn("read-only", create_source_response.json()["detail"].lower())
 
         sample_response = self.test_client.post(
             f"/api/v1/themes/{uuid.uuid4()}/samples",

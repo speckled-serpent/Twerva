@@ -7,6 +7,7 @@ export type OpsPageId =
   | "new-campaign"
   | "themes"
   | "new-theme"
+  | "sources"
   | "queue"
   | "schedule"
   | "accounts"
@@ -35,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
   { pageId: "new-campaign", label: "New Campaign" },
   { pageId: "themes", label: "Themes" },
   { pageId: "new-theme", label: "Create Theme" },
+  { pageId: "sources", label: "Sources" },
   { pageId: "queue", label: "Queue" },
   { pageId: "schedule", label: "Schedule" },
   { pageId: "accounts", label: "Accounts" },

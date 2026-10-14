@@ -22,6 +22,10 @@ import type {
   ThemeReadResponse,
   ThemeSampleRequest,
   ThemeSampleResponse,
+  UnitImageMetadataPatch,
+  UnitImageReadResponse,
+  UnitReadResponse,
+  UnitWriteRequest,
   CarouselGenerateRequest,
   ClusterAgentSummaryResponse,
   ClusterCreateRequest,
@@ -39,8 +43,12 @@ import type {
   OpsUserRolePatchRequest,
   PostJobReadResponse,
   SchedulePostJobRequest,
+  SourceCreateRequest,
   SourceItemCreateRequest,
   SourceItemReadResponse,
+  SourceListItemResponse,
+  SourcePatchRequest,
+  SourceReadResponse,
   SpotmuInterestSearchHit,
   SteerActionReadResponse,
 } from "./types";
@@ -189,6 +197,120 @@ export async function createCampaign(
     "/api/v1/campaigns",
     campaignCreateRequest,
   );
+}
+
+export async function listAlbums(): Promise<SourceListItemResponse[]> {
+
+  return requestJson<SourceListItemResponse[]>("GET", "/api/v1/sources?kind=album");
+}
+
+export async function fetchSourceById(sourceId: string): Promise<SourceReadResponse> {
+
+  return requestJson<SourceReadResponse>("GET", `/api/v1/sources/${sourceId}`);
+}
+
+export async function createAlbum(
+  sourceCreateRequest: SourceCreateRequest,
+): Promise<SourceReadResponse> {
+
+  return requestJson<SourceReadResponse>("POST", "/api/v1/sources", sourceCreateRequest);
+}
+
+export async function renameSource(
+  sourceId: string,
+  sourcePatchRequest: SourcePatchRequest,
+): Promise<SourceReadResponse> {
+
+  return requestJson<SourceReadResponse>(
+    "PATCH",
+    `/api/v1/sources/${sourceId}`,
+    sourcePatchRequest,
+  );
+}
+
+export async function deleteSource(sourceId: string): Promise<void> {
+
+  await requestJson<undefined>("DELETE", `/api/v1/sources/${sourceId}`);
+}
+
+export async function createSourceUnit(
+  sourceId: string,
+  unitWriteRequest: UnitWriteRequest,
+): Promise<UnitReadResponse> {
+
+  return requestJson<UnitReadResponse>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units`,
+    unitWriteRequest,
+  );
+}
+
+export async function patchSourceUnit(
+  sourceId: string,
+  unitId: string,
+  unitWriteRequest: UnitWriteRequest,
+): Promise<UnitReadResponse> {
+
+  return requestJson<UnitReadResponse>(
+    "PATCH",
+    `/api/v1/sources/${sourceId}/units/${unitId}`,
+    unitWriteRequest,
+  );
+}
+
+export async function deleteSourceUnit(sourceId: string, unitId: string): Promise<void> {
+
+  await requestJson<undefined>(
+    "DELETE",
+    `/api/v1/sources/${sourceId}/units/${unitId}`,
+  );
+}
+
+export async function patchUnitImageMetadata(
+  sourceId: string,
+  unitId: string,
+  imageId: string,
+  imagePatchRequest: UnitImageMetadataPatch,
+): Promise<UnitImageReadResponse> {
+
+  return requestJson<UnitImageReadResponse>(
+    "PATCH",
+    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}`,
+    imagePatchRequest,
+  );
+}
+
+export async function deleteUnitImage(
+  sourceId: string,
+  unitId: string,
+  imageId: string,
+): Promise<void> {
+
+  await requestJson<undefined>(
+    "DELETE",
+    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}`,
+  );
+}
+
+/**
+ * Same-origin URL for an image that already exists. The session cookie
+ * is sent with the request. This is not an upload.
+ *
+ * @param sourceId - Album UUID
+ * @param unitId - Unit UUID
+ * @param imageId - Image UUID
+ * @returns Path the grid can use as an img src
+ */
+export function unitImageFileUrl(
+  sourceId: string,
+  unitId: string,
+  imageId: string,
+): string {
+
+  const requestPath: string =
+    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}/file`;
+
+  return `${resolveApiBaseUrl()}${requestPath}`;
 }
 
 export async function listThemes(): Promise<ThemeReadResponse[]> {

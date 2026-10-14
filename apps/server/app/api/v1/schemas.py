@@ -898,3 +898,50 @@ class SourceReadResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     units: list[UnitReadResponse]
+
+
+class SourceCreateRequest(BaseModel):
+    """Body for `POST /api/v1/sources`. Phase 2 accepts albums only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    kind: ContentSourceKind
+
+
+class SourcePatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/sources/{id}`. Renames the album."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+
+class UnitFieldWrite(BaseModel):
+    """One labeled field to store on a unit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    value: str
+
+
+class UnitWriteRequest(BaseModel):
+    """Free text, tags, and fields for create or replace. Images stay put."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    free_text: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    fields: list[UnitFieldWrite] = Field(default_factory=list)
+
+
+class UnitImageMetadataPatch(BaseModel):
+    """License and source on an image that already exists. Not the bytes."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    alt_text: str | None = None
+    license: UnitImageLicense
+    source: str
+    license_note: str = ""
