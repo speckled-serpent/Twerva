@@ -17,25 +17,25 @@ An earlier loop still renders a shipping carousel from the text template, and th
 
 ## 1. Combining rules
 
-**Goal.** A campaign says which sources and which themes it pulls from, and how those pieces mix into one post.
+**Goal.** A campaign picks one theme-bound source and assembles a post from units that were already reviewed.
 
-**Scope.** Two mixes are already described. An album can be used as units, so each unit's text stays with its images. Or a resource holds the writing and an image-only album supplies pictures, chosen by tags. The campaign also names the theme or themes. Create and list already exist; they do not store this mix yet. See `docs/planning/sources_v2.md`.
+**Scope.** This work follows the phase plan in `docs/planning/source_redesign.md`. A source requires one theme (phase 1 there). The campaign picks that theme, then one source bound to it, then runs (phase 5 there). The run assembles reviewed units and respects per-unit exclusion rules. Album-versus-resource mixes are dropped with that redesign.
 
-**Open questions.** Does one campaign use one theme, a list, or a rotation? Is the mix a rule the operator picks, or a choice the model makes per draft? Can one campaign name several albums and several resources, or one of each?
+**Open questions.** Closed by the redesign: one theme on the source, one matching source on the campaign, operator choice at those two steps, reviewed units only. Build order and migrations are in that phase plan.
 
 ## 2. Model / instruction sets
 
-**Goal.** An instruction set tells a model how to write the caption and the text on the frame from the sources a campaign named.
+**Goal.** Text on a unit is written inside the source, from inspiration and rules, and a person reviews it before it is live.
 
-**Scope.** The set is the voice and the limits: what to pull from a unit or a resource, what to leave out, how long, and whether a CTA is required. It produces words. It does not render slides. The caption on today's text-template carousel is a stand-in, filled from a Spotmu interest title.
+**Scope.** This work is phase 4 of the phase plan in `docs/planning/source_redesign.md`. Images stay manual uploads. Inspiration and rules live on the source. An LLM writes the theme text from those. The campaign run assembles the reviewed text and does not generate. The caption on today's text-template carousel stays a stand-in, filled from a Spotmu interest title, until generation renders the reviewed units.
 
-**Open questions.** Is a set global, per campaign, or per theme? Which model runs it, inside Twerva or through a rented API? Does the set emit only the caption and the overlay lines, or also hashtags and the CTA?
+**Open questions.** The redesign leaves which model runs the call, and any hashtag or CTA copy, until that phase is built.
 
 ## 3. Generation
 
-**Goal.** A campaign produces real carousel drafts: combining rule, instruction set, and theme, rendered into slides an operator can review.
+**Goal.** A campaign run renders reviewed source units into carousel drafts an operator can review.
 
-**Scope.** `POST /api/v1/generate/carousel` still draws the text template from one Spotmu interest. Theme samples stay previews and do not create an artifact. This phase writes a draft artifact — slides on disk, caption, and the theme's image paths — from a campaign. Shipping pixels move off `carousel_template_v1` here.
+**Scope.** `POST /api/v1/generate/carousel` still draws the text template from one Spotmu interest. Theme samples stay previews and do not create an artifact. After the source redesign phase plan, this phase writes a draft artifact — slides on disk, caption, and the theme's image paths — from the campaign's chosen source. Shipping pixels move off `carousel_template_v1` here.
 
 **Open questions.** One draft per run, or a batch? Does a draft freeze the chosen image files, or keep a pointer that can change later? Where does a layout that overlaps or misses a file go — a blocked draft, or no row?
 
