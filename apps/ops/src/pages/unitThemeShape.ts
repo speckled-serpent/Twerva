@@ -3,6 +3,7 @@ import type {
   ThemeElementReadResponse,
   ThemeElementTextSource,
   ThemeReadResponse,
+  UnitElementTextReadResponse,
   UnitReadResponse,
 } from "../api/types";
 
@@ -109,8 +110,13 @@ export function textDraftsForTheme(
   unit: UnitReadResponse | null,
 ): Record<string, string> {
 
+  const shownTexts: UnitElementTextReadResponse[] = unit === null
+    ? []
+    : unit.text_status === "draft"
+      ? unit.draft_texts
+      : unit.texts;
   const storedValues: Map<string, string> = new Map(
-    (unit?.texts ?? []).map((elementText): [string, string] => [
+    shownTexts.map((elementText): [string, string] => [
       elementText.theme_element_id,
       elementText.value,
     ]),

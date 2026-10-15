@@ -195,6 +195,17 @@ class UnitImageIntake(enum.StrEnum):
     URL = "url"
 
 
+class UnitTextStatus(enum.StrEnum):
+    """Whether a unit's text is approved.
+
+    ``live`` is text a person saved or accepted. ``draft`` is generated
+    text that is not the live unit until someone accepts it.
+    """
+
+    LIVE = "live"
+    DRAFT = "draft"
+
+
 ARTIFACT_STATUS_TRANSITIONS: dict[ArtifactStatus, frozenset[ArtifactStatus]] = {
     ArtifactStatus.DRAFT: frozenset(
         {ArtifactStatus.APPROVED, ArtifactStatus.REJECTED},
@@ -310,3 +321,4 @@ RESOURCE_FILE_MEDIA_TYPE_ENUM: Enum = as_postgres_enum(
     ResourceFileMediaType,
     "resource_file_media_type",
 )
+UNIT_TEXT_STATUS_ENUM: Enum = as_postgres_enum(UnitTextStatus, "unit_text_status")

@@ -28,8 +28,8 @@ from app.api.v1.schemas import (
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitElementText, UnitExclusion, UnitImage
+from app.models.enums import UnitImageMediaType, UnitTextStatus
 from app.models.theme import Theme
-from app.models.enums import UnitImageMediaType
 from app.models.ops_user import OpsUser
 from app.settings import get_settings
 from app.sources.editing import (
@@ -147,6 +147,8 @@ def create_content_source(
         theme_id=source_create_request.theme_id,
         name=album_name,
         slug=album_slug,
+        inspiration="",
+        rules="",
     )
     created_source.units = []
     our_database_session.add(created_source)
@@ -252,6 +254,7 @@ def create_unit(
     created_unit.images = []
     created_unit.element_texts = []
     created_unit.exclusions = []
+    created_unit.text_status = UnitTextStatus.LIVE
     _replace_texts(created_unit, stored_texts, our_database_session)
     our_database_session.add(created_unit)
     _store_exclusion_pairs(created_unit, excluded_ids, found_source, our_database_session)
@@ -297,7 +300,13 @@ def patch_unit(
     )
     _require_image_when_theme_needs_one(found_theme, len(list(found_unit.images)))
     found_unit.name = unit_name
-    _replace_texts(found_unit, stored_texts, our_database_session)
+
+    if found_unit.text_status == UnitTextStatus.DRAFT:
+        _store_draft_texts(found_unit, stored_texts, our_database_session)
+    else:
+        _replace_texts(found_unit, stored_texts, our_database_session)
+        found_unit.text_status = UnitTextStatus.LIVE
+
     _replace_exclusion_pairs(found_unit, excluded_ids, found_source, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -682,17 +691,52 @@ def _sibling_unit(source: ContentSource, unit_id: uuid.UUID) -> Unit | None:
     return None
 
 
+def _store_draft_texts(
+    unit: Unit,
+    stored_texts: list[tuple[uuid.UUID, str]],
+    our_database_session: Session,
+) -> None:
+    """Write draft copy beside the live value. Live text stays."""
+
+    existing_by_element: dict[uuid.UUID, UnitElementText] = {
+        element_text.theme_element_id: element_text
+        for element_text in list(unit.element_texts)
+    }
+
+    for theme_element_id, value in stored_texts:
+        existing_text: UnitElementText | None = existing_by_element.get(theme_element_id)
+
+        if existing_text is None:
+            created_text: UnitElementText = UnitElementText(
+                id=new_row_id(),
+                unit_id=unit.id,
+                theme_element_id=theme_element_id,
+                value="",
+                draft_value=value,
+            )
+            unit.element_texts.append(created_text)
+            our_database_session.add(created_text)
+        else:
+            existing_text.draft_value = value
+
+
 def _replace_texts(
     unit: Unit,
     stored_texts: list[tuple[uuid.UUID, str]],
     our_database_session: Session,
 ) -> None:
-    """Replace theme text. One row per text element, including blanks."""
+    """Replace theme text. One row per text element, including blanks.
+
+    The delete is flushed before the new rows. Postgres rejects a second
+    row for the same unit and theme element while the old row is still
+    pending.
+    """
 
     for existing_text in list(unit.element_texts):
         our_database_session.delete(existing_text)
 
     unit.element_texts = []
+    our_database_session.flush()
 
     for theme_element_id, value in stored_texts:
         created_text: UnitElementText = UnitElementText(
@@ -700,6 +744,7 @@ def _replace_texts(
             unit_id=unit.id,
             theme_element_id=theme_element_id,
             value=value,
+            draft_value=None,
         )
         unit.element_texts.append(created_text)
         our_database_session.add(created_text)

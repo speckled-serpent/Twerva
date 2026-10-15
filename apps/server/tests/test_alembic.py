@@ -25,6 +25,7 @@ SOURCES_RESOURCE_FILES_REVISION_ID: str = "sources_resource_files"
 SOURCES_THEME_BOUND_REVISION_ID: str = "sources_theme_bound"
 UNIT_ELEMENT_TEXTS_REVISION_ID: str = "unit_element_texts"
 UNIT_EXCLUSIONS_REVISION_ID: str = "unit_exclusions"
+UNIT_TEXT_DRAFTS_REVISION_ID: str = "unit_text_drafts"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -71,6 +72,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{THEMES_STATUS_REVISION_ID}.py",
                 f"{UNIT_ELEMENT_TEXTS_REVISION_ID}.py",
                 f"{UNIT_EXCLUSIONS_REVISION_ID}.py",
+                f"{UNIT_TEXT_DRAFTS_REVISION_ID}.py",
             ],
         )
 
@@ -587,6 +589,32 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn('op.create_table(\n        "unit_exclusions"', revision_source)
         self.assertIn("ck_unit_exclusions_not_self", revision_source)
         self.assertIn('op.drop_table("unit_exclusions")', revision_source)
+
+    def test_unit_text_drafts_follow_unit_exclusions(self) -> None:
+        """Inspiration, rules, and draft text follow exclusion pairs."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{UNIT_TEXT_DRAFTS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            UNIT_TEXT_DRAFTS_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            UNIT_EXCLUSIONS_REVISION_ID,
+        )
+        self.assertIn('sa.Column("inspiration"', revision_source)
+        self.assertIn('sa.Column("rules"', revision_source)
+        self.assertIn("unit_text_status", revision_source)
+        self.assertIn('sa.Column("draft_value"', revision_source)
+        self.assertIn('op.drop_column("sources", "inspiration")', revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

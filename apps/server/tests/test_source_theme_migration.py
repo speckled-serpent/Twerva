@@ -293,6 +293,76 @@ class SourceThemeMigrationTests(unittest.TestCase):
 
         self.assertEqual(exclusion_tables, 0)
 
+    def test_existing_units_stay_live_and_downgrade_drops_drafts(self) -> None:
+        """Inspiration defaults empty. Existing units stay live. Downgrade drops both."""
+
+        self._upgrade("head")
+        source_id: str = "abababab-abab-4aba-8aba-abababababab"
+        unit_id: str = "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd"
+
+        with self._engine().begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO sources (id, theme_id, name, slug)
+                    VALUES (
+                        CAST(:source_id AS uuid),
+                        CAST(:theme_id AS uuid),
+                        'Guidance',
+                        'guidance'
+                    )
+                    """
+                ),
+                {
+                    "source_id": source_id,
+                    "theme_id": str(DEFAULT_ALBUM_THEME_ID),
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO units (id, source_id, position, name)
+                    VALUES (
+                        CAST(:unit_id AS uuid),
+                        CAST(:source_id AS uuid),
+                        0,
+                        'Harbor'
+                    )
+                    """
+                ),
+                {"unit_id": unit_id, "source_id": source_id},
+            )
+            inspiration: str = str(
+                connection.execute(
+                    text("SELECT inspiration FROM sources WHERE slug = 'guidance'"),
+                ).scalar_one(),
+            )
+            text_status: str = str(
+                connection.execute(
+                    text("SELECT text_status::text FROM units WHERE name = 'Harbor'"),
+                ).scalar_one(),
+            )
+
+        self.assertEqual(inspiration, "")
+        self.assertEqual(text_status, "live")
+        self._downgrade("unit_exclusions")
+
+        with self._engine().connect() as connection:
+            inspiration_columns: int = int(
+                connection.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM information_schema.columns
+                        WHERE table_name = 'sources'
+                          AND column_name = 'inspiration'
+                        """
+                    ),
+                ).scalar_one(),
+            )
+
+        self.assertEqual(inspiration_columns, 0)
+
     def test_stored_path_blocks_deletion_then_unreferenced_rows_go(self) -> None:
         """A theme path stops the upgrade. Clearing it deletes the extra source."""
 
