@@ -36,6 +36,7 @@ import {
 
 export interface ThemesPageProps {
   statusMessage: string;
+  onCreateTheme: () => void;
 }
 
 /**
@@ -47,7 +48,10 @@ export interface ThemesPageProps {
  * @param props - Banner shown after create
  * @returns The Themes list or detail
  */
-export function ThemesPage({ statusMessage }: ThemesPageProps): ReactElement {
+export function ThemesPage({
+  statusMessage,
+  onCreateTheme,
+}: ThemesPageProps): ReactElement {
 
   const [themes, setThemes] = useState<ThemeReadResponse[]>([]);
   const [openedThemeId, setOpenedThemeId] = useState<string | null>(null);
@@ -158,6 +162,7 @@ export function ThemesPage({ statusMessage }: ThemesPageProps): ReactElement {
       themes={themes}
       loadError={loadError}
       statusMessage={statusMessage}
+      onCreateTheme={onCreateTheme}
       onSelectTheme={(themeId: string): void => {
         setOpenedThemeId(themeId);
       }}
@@ -176,6 +181,7 @@ interface ThemeListViewProps {
   themes: ThemeReadResponse[];
   loadError: unknown;
   statusMessage: string;
+  onCreateTheme: () => void;
   onSelectTheme: (themeId: string) => void;
   onThemeDeleted: (themeId: string) => void;
 }
@@ -184,6 +190,7 @@ function ThemeListView({
   themes,
   loadError,
   statusMessage,
+  onCreateTheme,
   onSelectTheme,
   onThemeDeleted,
 }: ThemeListViewProps): ReactElement {
@@ -230,8 +237,13 @@ function ThemeListView({
           <h1>Themes</h1>
           <p className="lede">
             Visual styling for carousels. Open a row for the saved record.
-            Create lives on Create Theme. Delete asks before it removes a row.
+            Delete asks before it removes a row.
           </p>
+        </div>
+        <div className="page-header-actions">
+          <button type="button" className="primary" onClick={onCreateTheme}>
+            Create theme
+          </button>
         </div>
       </div>
       <ReadOnlyNotice />
@@ -239,7 +251,7 @@ function ThemeListView({
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 
       {loadError !== null ? null : themes.length === 0 ? (
-        <p>No themes yet. Use Create Theme to save a carousel theme.</p>
+        <p className="empty-hint">No themes yet.</p>
       ) : (
         <table>
           <thead>

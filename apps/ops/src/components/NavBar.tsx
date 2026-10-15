@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 
 import type { OpsUserRole } from "../api/types";
 
@@ -32,26 +32,65 @@ interface NavItem {
   adminOnly?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { pageId: "campaigns", label: "Campaigns" },
-  { pageId: "new-campaign", label: "New Campaign" },
-  { pageId: "themes", label: "Themes" },
-  { pageId: "new-theme", label: "Create Theme" },
-  { pageId: "sources", label: "Sources" },
-  { pageId: "new-source", label: "Create Source" },
-  { pageId: "queue", label: "Queue" },
-  { pageId: "schedule", label: "Schedule" },
-  { pageId: "accounts", label: "Accounts" },
-  { pageId: "results", label: "Results" },
-  { pageId: "account", label: "Account" },
-  { pageId: "users", label: "Users", adminOnly: true },
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Content",
+    items: [
+      { pageId: "campaigns", label: "Campaigns" },
+      { pageId: "themes", label: "Themes" },
+      { pageId: "sources", label: "Sources" },
+    ],
+  },
+  {
+    label: "Run",
+    items: [
+      { pageId: "queue", label: "Queue" },
+      { pageId: "schedule", label: "Schedule" },
+      { pageId: "results", label: "Results" },
+    ],
+  },
+  {
+    label: "Setup",
+    items: [
+      { pageId: "accounts", label: "Accounts" },
+      { pageId: "users", label: "Users", adminOnly: true },
+    ],
+  },
 ];
 
 /**
- * Top nav for ops pages plus operator role and logout.
+ * Map create-form pages back to the list section they belong to.
+ *
+ * @param activePageId - Page currently shown in the main pane
+ * @returns The rail item that should look selected
+ */
+function railSectionForPage(activePageId: OpsPageId): OpsPageId {
+
+  if (activePageId === "new-campaign") {
+    return "campaigns";
+  }
+
+  if (activePageId === "new-theme") {
+    return "themes";
+  }
+
+  if (activePageId === "new-source") {
+    return "sources";
+  }
+
+  return activePageId;
+}
+
+/**
+ * Left rail for ops sections, with account and logout pinned at the bottom.
  *
  * @param props - Active page, navigate callback, health, session
- * @returns The ops header
+ * @returns The ops navigation rail
  */
 export function NavBar({
   activePageId,
@@ -63,20 +102,88 @@ export function NavBar({
   isLoggingOut,
 }: NavBarProps): ReactElement {
 
-  const visibleNavItems: NavItem[] = NAV_ITEMS.filter((navItem: NavItem): boolean => {
-    return navItem.adminOnly !== true || signedInRole === "admin";
-  });
+  const [isNavOpen, setIsNavOpen] = useState<boolean>(false);
+  const sectionPageId: OpsPageId = railSectionForPage(activePageId);
+  const railClassName: string = isNavOpen ? "ops-rail is-open" : "ops-rail";
+
+  const navigateTo = (pageId: OpsPageId): void => {
+
+    setIsNavOpen(false);
+    onNavigate(pageId);
+  };
 
   return (
-    <header className="ops-header">
-      <div className="ops-header-title-row">
-        <strong>Twerva ops</strong>
-        <span className="ops-header-meta">
-          <span className="ops-health">{healthLabel}</span>
-          <span className="ops-signed-in">
-            {signedInUsername}
+    <aside className={railClassName}>
+      <div className="ops-rail-top">
+        <div className="ops-brand-block">
+          <strong className="ops-brand">Twerva</strong>
+          <span className="ops-brand-sub">ops</span>
+        </div>
+        <button
+          type="button"
+          className="ops-rail-toggle"
+          aria-expanded={isNavOpen}
+          aria-controls="ops-rail-body"
+          onClick={(): void => {
+            setIsNavOpen((currentlyOpen: boolean): boolean => {
+              return !currentlyOpen;
+            });
+          }}
+        >
+          {isNavOpen ? "Close" : "Menu"}
+        </button>
+      </div>
+      <div className="ops-rail-body" id="ops-rail-body">
+        <nav className="ops-nav" aria-label="Ops pages">
+          {NAV_GROUPS.map((navGroup: NavGroup): ReactElement | null => {
+            const visibleItems: NavItem[] = navGroup.items.filter((navItem: NavItem): boolean => {
+              return navItem.adminOnly !== true || signedInRole === "admin";
+            });
+
+            if (visibleItems.length === 0) {
+              return null;
+            }
+
+            return (
+              <div key={navGroup.label} className="ops-nav-group">
+                <p className="ops-nav-group-label">{navGroup.label}</p>
+                {visibleItems.map((navItem: NavItem): ReactElement => {
+                  const isActive: boolean = navItem.pageId === sectionPageId;
+
+                  return (
+                    <button
+                      key={navItem.pageId}
+                      type="button"
+                      className={isActive ? "ops-nav-button is-active" : "ops-nav-button"}
+                      aria-current={isActive ? "page" : undefined}
+                      onClick={(): void => {
+                        navigateTo(navItem.pageId);
+                      }}
+                    >
+                      {navItem.label}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </nav>
+        <div className="ops-rail-footer">
+          <p className="ops-health">{healthLabel}</p>
+          <button
+            type="button"
+            className={sectionPageId === "account" ? "ops-account-button is-active" : "ops-account-button"}
+            aria-current={sectionPageId === "account" ? "page" : undefined}
+            onClick={(): void => {
+              navigateTo("account");
+            }}
+          >
+            <span className="ops-account-copy">
+              <span className="ops-account-label">Account</span>
+              <span className="ops-signed-in">{signedInUsername}</span>
+            </span>
             <span className="ops-role-badge">{signedInRole}</span>
-          </span>
+          </button>
           <button
             type="button"
             className="ops-logout-button"
@@ -87,26 +194,8 @@ export function NavBar({
           >
             {isLoggingOut ? "Signing out…" : "Log out"}
           </button>
-        </span>
+        </div>
       </div>
-      <nav className="ops-nav" aria-label="Ops pages">
-        {visibleNavItems.map((navItem: NavItem): ReactElement => {
-          const isActive: boolean = navItem.pageId === activePageId;
-
-          return (
-            <button
-              key={navItem.pageId}
-              type="button"
-              className={isActive ? "ops-nav-button is-active" : "ops-nav-button"}
-              onClick={(): void => {
-                onNavigate(navItem.pageId);
-              }}
-            >
-              {navItem.label}
-            </button>
-          );
-        })}
-      </nav>
-    </header>
+    </aside>
   );
 }

@@ -51,11 +51,15 @@ export function AccountPage(): ReactElement {
 
   return (
     <section>
-      <h1>Account</h1>
-      <p className="lede">
-        Signed in as <strong>{currentOperator.username}</strong> ({currentOperator.role}).
-        Change your own password here — bootstrap env does not rotate an existing admin.
-      </p>
+      <div className="page-header-row">
+        <div>
+          <h1>Account</h1>
+          <p className="lede">
+            Signed in as <strong>{currentOperator.username}</strong> ({currentOperator.role}).
+            Change your own password here — bootstrap env does not rotate an existing admin.
+          </p>
+        </div>
+      </div>
       <ErrorBanner error={formError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 

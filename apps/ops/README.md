@@ -6,7 +6,7 @@ Vite + React + TypeScript ops console for the Phase 1 loop:
 source → generate carousel → approve → schedule → mock publish → measure / steer
 ```
 
-Ugly-but-usable. Operator login against `/api/v1/auth` (session cookie).
+Operator login against `/api/v1/auth` (session cookie).
 Roles: **admin** (full) and **reader** (GET-only; Account password change
 still allowed). Requires **Node.js 20+** (22 is fine).
 
@@ -53,15 +53,17 @@ admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
 
 ### Walk the loop in the browser
 
-1. **New Campaign** — Spotmu + carousel + platforms + accounts + live
-   Spotmu interest search. Saves `ready` only — no generate on this page.
-   Success opens the new campaign on **Campaigns**.
-2. **Campaigns** — list all campaigns; open a row for details and
+1. **Campaigns** — list all campaigns; open a row for details and
    Start / Pause / Resume / Finish (admin). Readers see data only.
-3. **Create Theme** / **Themes** — save a carousel theme (name required,
-   advertisement type locked to Carousel) and list it. Seeded Spotmu
-   Paper v1 and Bold v1 appear after `alembic upgrade head`. Readers
-   can list; only admins can create.
+   **Create campaign** on this page saves a `ready` definition (theme,
+   source, platforms, accounts, live Spotmu interest search). It does
+   not generate. Success opens the new campaign.
+2. **Themes** — list carousel themes. **Create theme** on this page saves
+   a carousel theme (name required, advertisement type locked to
+   Carousel). Seeded Spotmu Paper v1 and Bold v1 appear after
+   `alembic upgrade head`. Readers can list; only admins can create.
+3. **Sources** — list theme-bound sources. **Create source** on this page
+   asks for a name and a theme, then opens the source.
 4. **Queue** — edit caption if needed → **Approve** (or Reject).
 5. **Accounts** — create a cluster + account if none exist (set
    `cadence_cap_per_day` if you want the cap enforced).
@@ -73,8 +75,9 @@ admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
    **Accounts**.
 
 API errors render as plain text under the page heading (403 writes say
-the role is read-only). **Log out** and the current **role** are in the
-header. All fetches use `credentials: "include"`.
+the role is read-only). **Log out**, the signed-in name, and the current
+**role** sit at the bottom of the left rail. All fetches use
+`credentials: "include"`.
 
 Agent dry-run (generate drafts, **stop before approve**):
 [`docs/agents/playbook_batch_generate_spotmu_cluster.md`](../../docs/agents/playbook_batch_generate_spotmu_cluster.md)

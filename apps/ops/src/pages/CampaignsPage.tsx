@@ -36,6 +36,7 @@ export interface CampaignsPageProps {
   statusMessage: string;
   onOpenedCampaignIdChange: (campaignId: string | null) => void;
   onStatusMessageChange: (statusMessage: string) => void;
+  onCreateCampaign: () => void;
 }
 
 /**
@@ -49,6 +50,7 @@ export function CampaignsPage({
   statusMessage,
   onOpenedCampaignIdChange,
   onStatusMessageChange,
+  onCreateCampaign,
 }: CampaignsPageProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
@@ -227,6 +229,7 @@ export function CampaignsPage({
         setActionError(null);
         onOpenedCampaignIdChange(campaignId);
       }}
+      onCreateCampaign={onCreateCampaign}
     />
   );
 }
@@ -237,6 +240,7 @@ interface CampaignListViewProps {
   actionError: unknown;
   statusMessage: string;
   onSelectCampaign: (campaignId: string) => void;
+  onCreateCampaign: () => void;
 }
 
 function CampaignListView({
@@ -245,6 +249,7 @@ function CampaignListView({
   actionError,
   statusMessage,
   onSelectCampaign,
+  onCreateCampaign,
 }: CampaignListViewProps): ReactElement {
 
   return (
@@ -254,8 +259,13 @@ function CampaignListView({
           <h1>Campaigns</h1>
           <p className="lede">
             All saved campaigns. Open a row for details and lifecycle actions
-            (Start / Pause / Resume / Finish). Create lives on New Campaign.
+            (Start / Pause / Resume / Finish).
           </p>
+        </div>
+        <div className="page-header-actions">
+          <button type="button" className="primary" onClick={onCreateCampaign}>
+            Create campaign
+          </button>
         </div>
       </div>
       <ReadOnlyNotice />
@@ -264,7 +274,7 @@ function CampaignListView({
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 
       {loadError !== null ? null : campaigns.length === 0 ? (
-        <p>No campaigns yet. Use New Campaign to persist a Ready definition.</p>
+        <p className="empty-hint">No campaigns yet.</p>
       ) : (
         <table>
           <thead>

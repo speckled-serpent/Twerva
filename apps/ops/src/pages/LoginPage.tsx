@@ -42,13 +42,12 @@ export function LoginPage({ onSignedIn }: LoginPageProps): ReactElement {
   };
 
   return (
-    <div className="ops-console-shell">
-      <header className="ops-header">
-        <div className="ops-header-title-row">
-          <strong>Twerva ops</strong>
+    <div className="ops-login-shell">
+      <main className="ops-login-card">
+        <div className="ops-brand-block">
+          <strong className="ops-brand">Twerva</strong>
+          <span className="ops-brand-sub">ops</span>
         </div>
-      </header>
-      <main className="ops-main ops-login-main">
         <h1>Sign in</h1>
         <p className="lede">
           Operator login for the Twerva console. Session cookie is httpOnly.

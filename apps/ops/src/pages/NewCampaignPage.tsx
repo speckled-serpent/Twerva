@@ -41,10 +41,10 @@ export interface NewCampaignPageProps {
 }
 
 /**
- * New Campaign tab: pick a theme, then a source bound to it, then save.
+ * Create campaign form: pick a theme, then a source bound to it, then save.
  *
  * @param props - Success and cancel navigation callbacks
- * @returns The New Campaign form
+ * @returns The Create campaign form
  */
 export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): ReactElement {
 
@@ -322,7 +322,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
     <section>
       <div className="page-header-row">
         <div>
-          <h1>New Campaign</h1>
+          <h1>Create campaign</h1>
           <p className="lede">
             Pick a theme, then one source bound to that theme. Run, on the
             campaign, assembles live units into carousels on that theme.
@@ -623,7 +623,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         <div className="button-row">
           {isOtherType ? null : (
             <button id="create-campaign" type="submit" disabled={!canCreate}>
-              {isBusy ? "Saving…" : "Create Campaign"}
+              {isBusy ? "Saving…" : "Create campaign"}
             </button>
           )}
           <button type="button" onClick={onCancel}>

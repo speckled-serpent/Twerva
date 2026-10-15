@@ -45,7 +45,7 @@ export function campaignTypeLabel(campaignType: CampaignType): string {
 }
 
 /**
- * Return whether New Campaign requires a linked social account.
+ * Return whether Create campaign requires a linked social account.
  *
  * @param campaignType - Selected campaign type
  * @returns True only for production Spotmu

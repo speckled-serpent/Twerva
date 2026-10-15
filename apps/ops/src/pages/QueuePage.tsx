@@ -164,10 +164,14 @@ export function QueuePage(): ReactElement {
 
   return (
     <section>
-      <h1>Queue</h1>
-      <p className="lede">
-        Draft artifacts only. Preview slides, approve / reject, edit caption, or regenerate a new draft with another Spotmu template.
-      </p>
+      <div className="page-header-row">
+        <div>
+          <h1>Queue</h1>
+          <p className="lede">
+            Draft artifacts only. Preview slides, approve / reject, edit caption, or regenerate a new draft with another Spotmu template.
+          </p>
+        </div>
+      </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
@@ -231,6 +235,7 @@ export function QueuePage(): ReactElement {
                   </button>
                   <button
                     type="button"
+                    className="primary"
                     disabled={!canWrite || isBusy}
                     onClick={(): void => {
                       handleApprove(draftArtifact.id);

@@ -208,10 +208,14 @@ export function AccountsPage(): ReactElement {
 
   return (
     <section>
-      <h1>Accounts</h1>
-      <p className="lede">
-        Clusters and accounts. Cadence cap is per account. Steer is per cluster.
-      </p>
+      <div className="page-header-row">
+        <div>
+          <h1>Accounts</h1>
+          <p className="lede">
+            Clusters and accounts. Cadence cap is per account. Steer is per cluster.
+          </p>
+        </div>
+      </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
