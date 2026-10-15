@@ -224,6 +224,7 @@ class CampaignCarouselSlide(Base, UuidPrimaryKeyMixin):
             name="uq_campaign_carousel_slides_carousel_id_unit_id",
         ),
         Index("ix_campaign_carousel_slides_carousel_id", "carousel_id"),
+        Index("ix_campaign_carousel_slides_unit_id", "unit_id"),
     )
 
     carousel_id: Mapped[uuid.UUID] = mapped_column(

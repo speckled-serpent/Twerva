@@ -111,10 +111,19 @@ def upgrade() -> None:
         "campaign_carousel_slides",
         ["carousel_id"],
     )
+    op.create_index(
+        "ix_campaign_carousel_slides_unit_id",
+        "campaign_carousel_slides",
+        ["unit_id"],
+    )
 
 
 def downgrade() -> None:
 
+    op.drop_index(
+        "ix_campaign_carousel_slides_unit_id",
+        table_name="campaign_carousel_slides",
+    )
     op.drop_index(
         "ix_campaign_carousel_slides_carousel_id",
         table_name="campaign_carousel_slides",
