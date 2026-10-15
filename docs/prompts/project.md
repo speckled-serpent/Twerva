@@ -2,7 +2,7 @@
 
 *Pronunciation: TWER-vuh*  
 *Last updated: 2026-09-14*  
-*Status: Authoritative strategic seed. Product design: `docs/prompts/product.md`. Build plan: `docs/planning/task_sheet.md`. Spotmu handoff notes: `docs/overview.md`.*
+*Status: Authoritative strategic seed. Product design: `docs/prompts/product.md`. What's left: `docs/planning/phase_map.md`. Spotmu handoff notes: `docs/overview.md`.*
 
 ---
 

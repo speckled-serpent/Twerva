@@ -4,8 +4,8 @@ How agents (Sparky, Canary, and later loops) draft artifacts, stop at
 the human approval gate, and **propose** steer — without guessing
 routes.
 
-Product loop: `docs/prompts/product.md` §II / §VIII. Build order:
-`docs/planning/task_sheet.md` §1.9. Interactive API:
+Product loop: `docs/prompts/product.md` §II / §VIII. What's left:
+`docs/planning/phase_map.md`. Interactive API:
 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs) when the
 local process has `DATABASE_URL`.
 

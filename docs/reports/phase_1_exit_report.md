@@ -5,8 +5,8 @@
 Overnight mandate was **1.5 → 1.9**, then **stop**. This is the
 morning packet. **Phase 2 is not started — awaiting Mu review.**
 
-Task grain: `docs/planning/task_sheet.md`. Agent hooks:
-`docs/agents/README.md`.
+Task grain at the time was the task sheet, since replaced by
+`docs/planning/phase_map.md`. Agent hooks: `docs/agents/README.md`.
 
 ---
 

@@ -1,7 +1,7 @@
 # Twerva — Product
 
 *Last updated: 2026-09-15*  
-*Status: Big-stroke product design (seed). Strategy: `docs/prompts/project.md`. Build order: `docs/planning/task_sheet.md`. Spotmu handoff notes: `docs/overview.md`.*
+*Status: Big-stroke product design (seed). Strategy: `docs/prompts/project.md`. What's left: `docs/planning/phase_map.md`. Spotmu handoff notes: `docs/overview.md`.*
 
 ---
 

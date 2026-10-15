@@ -92,7 +92,7 @@ ops UI (1.8), no Celery/Redis. `GET /health` still starts without
   settings tests
 - `tools/smoke_1_6_publish.sh`
 - `apps/server/README.md`, root `README.md`
-- `docs/planning/domain_statuses.md`, `docs/planning/task_sheet.md`,
+- `docs/planning/domain_statuses.md`, task sheet (later replaced by `docs/planning/phase_map.md`),
   `docs/prompts/product.md`
 - `docs/ops/deploy.md`, `docs/ops/README.md`
 - this file

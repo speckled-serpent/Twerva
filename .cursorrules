@@ -7,7 +7,7 @@ Twerva is NOT a social network, ads bidder, or Outfy-class “post to the seller
 - **Brand before orphan SKU.** High cadence needs a content world. Spotmu’s media hose is Phase 1–2; Phase 3 is brand-shaped suites, not one lamp photo × 200.
 - **Never a paid-ads bidder.** Separate service from Spotmu; same Spotmu AWS account for now.
 
-Authoritative docs: `docs/prompts/project.md` (strategy), `docs/prompts/product.md` (product design), `docs/planning/task_sheet.md` (build order). Prefer those over chat memory when they conflict.
+Authoritative docs: `docs/prompts/project.md` (strategy), `docs/prompts/product.md` (product design), `docs/planning/phase_map.md` (what's left). Prefer those over chat memory when they conflict.
 
 # Tech Stack
 - **Frontend (ops console):** React, TypeScript, Vite, Tailwind as needed — `apps/ops`.
@@ -29,7 +29,7 @@ Authoritative docs: `docs/prompts/project.md` (strategy), `docs/prompts/product.
 - Challenge requests that turn Twerva into an ads bidder or catalog still-spammer.
 
 # Reports
-- When completing a task from `docs/planning/task_sheet.md`, write a short report under `docs/reports/` named for the task (e.g. `task_1_1_report.md`): what changed, trade-offs, next steps, scripts touched. If the request is not an explicit task-sheet item, do not create a report.
+- Do not write a file under `docs/reports/` unless the request asks for one.
 
 # Style Guide
 - Follow `docs/prompts/style_guide.md` for code readability.

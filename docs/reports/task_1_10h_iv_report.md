@@ -25,7 +25,7 @@ Leaf **1.10h-iv** only. The section close stays undone.
 
 ## Next
 
-- **1.10i** close the section.
+- What's left is `docs/planning/phase_map.md`.
 
 ## Scripts
 

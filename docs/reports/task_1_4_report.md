@@ -89,7 +89,7 @@ Celery, video, or S3. `GET /health` still starts without
 - `tools/smoke_1_4_carousel.sh`
 - `apps/server/README.md`, root `README.md`
 - `docs/ops/deploy.md`, `docs/ops/README.md`
-- `docs/planning/task_sheet.md`, this file
+- task sheet (later replaced by `docs/planning/phase_map.md`), this file
 
 ## Next
 

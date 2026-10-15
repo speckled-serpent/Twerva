@@ -104,7 +104,7 @@ is the first).
 - `apps/server/alembic/README`, `apps/server/README.md`
 - `apps/server/tests/test_alembic.py`, `test_models.py`, `test_health.py`
 - `docs/planning/domain_statuses.md`
-- `docs/planning/task_sheet.md` (1.2b–1.2k leaves ticked)
+- task sheet, 1.2b–1.2k leaves ticked (sheet later replaced by `docs/planning/phase_map.md`)
 
 ## Next
 
@@ -178,7 +178,7 @@ No OAuth tokens, S3, Celery, ops UI, or 1.3 ingest.
   `test_api_lookups.py`, `test_seed.py`, `test_api_persist.py`
 - `tools/smoke_1_2l_api.sh`
 - `apps/server/README.md`, root `README.md`
-- `docs/planning/task_sheet.md` (1.2l / 1.2m leaves ticked)
+- task sheet, 1.2l / 1.2m leaves ticked (sheet later replaced by `docs/planning/phase_map.md`)
 
 ## Next
 

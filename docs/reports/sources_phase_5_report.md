@@ -36,7 +36,7 @@ ops console after sync. Uploaded images are already under
 
 ## Next
 
-Sources v2 is done. The next open leaf on the task sheet is **1.10i-i**.
+Sources v2 is done. What's left is `docs/planning/phase_map.md`.
 
 ## Scripts
 

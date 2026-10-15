@@ -22,7 +22,7 @@ script. **No new product features.** No Phase 2.
 - **1.9a-iii** [`tools/agent_batch_generate.sh`](../../tools/agent_batch_generate.sh)
   implements that dry-run against `TWERVA_API_BASE_URL` (default
   loopback). Never calls approve / schedule / publish / steer.
-- **1.9b-i** This report. Leaves ticked on the task sheet.
+- **1.9b-i** This report. Leaves were ticked on the task sheet, later replaced by `docs/planning/phase_map.md`.
 - **1.9b-ii** [`phase_1_exit_report.md`](phase_1_exit_report.md) for Mu
   morning review. **Phase 2 not started.**
 
@@ -72,7 +72,7 @@ script. **No new product features.** No Phase 2.
 - `docs/agents/playbook_batch_generate_spotmu_cluster.md`
 - `tools/agent_batch_generate.sh`
 - `docs/reports/task_1_9_report.md`, `docs/reports/phase_1_exit_report.md`
-- `docs/planning/task_sheet.md` (1.9 leaves + next-slice note)
+- task sheet, 1.9 leaves + next-slice note (sheet later replaced by `docs/planning/phase_map.md`)
 - `README.md`, `apps/server/README.md`, `docs/ops/README.md`,
   `docs/prompts/directory.md`, `docs/prompts/product.md` (pointers)
 
