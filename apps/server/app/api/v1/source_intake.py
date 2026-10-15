@@ -43,6 +43,7 @@ from app.api.v1.source_writes import (
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitImage
+from app.models.enums import UnitTextStatus
 from app.models.enums import UnitImageIntake, UnitImageLicense
 from app.models.theme import Theme
 from app.models.ops_user import OpsUser
@@ -412,6 +413,7 @@ def create_unit_with_images(
     created_unit.images = created_images
     created_unit.element_texts = []
     created_unit.exclusions = []
+    created_unit.text_status = UnitTextStatus.LIVE
     our_database_session.add(created_unit)
     _store_exclusion_pairs(
         created_unit,

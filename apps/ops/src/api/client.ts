@@ -48,6 +48,9 @@ import type {
   PostJobReadResponse,
   SchedulePostJobRequest,
   SourceCreateRequest,
+  SourceGuidancePatchRequest,
+  TextGenerationStatusResponse,
+  UnitAcceptTextRequest,
   SourceItemCreateRequest,
   SourceItemReadResponse,
   SourceListItemResponse,
@@ -229,6 +232,58 @@ export async function renameSource(
     "PATCH",
     `/api/v1/sources/${sourceId}`,
     sourcePatchRequest,
+  );
+}
+
+export async function fetchTextGenerationStatus(): Promise<TextGenerationStatusResponse> {
+
+  return requestJson<TextGenerationStatusResponse>(
+    "GET",
+    "/api/v1/sources/text-generation",
+  );
+}
+
+export async function patchSourceGuidance(
+  sourceId: string,
+  guidanceRequest: SourceGuidancePatchRequest,
+): Promise<SourceReadResponse> {
+
+  return requestJson<SourceReadResponse>(
+    "PATCH",
+    `/api/v1/sources/${sourceId}/guidance`,
+    guidanceRequest,
+  );
+}
+
+export async function generateSourceUnit(sourceId: string): Promise<UnitReadResponse> {
+
+  return requestJson<UnitReadResponse>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units/generate`,
+  );
+}
+
+export async function generateUnitText(
+  sourceId: string,
+  unitId: string,
+): Promise<UnitReadResponse> {
+
+  return requestJson<UnitReadResponse>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units/${unitId}/generate`,
+  );
+}
+
+export async function acceptUnitText(
+  sourceId: string,
+  unitId: string,
+  acceptRequest: UnitAcceptTextRequest,
+): Promise<UnitReadResponse> {
+
+  return requestJson<UnitReadResponse>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units/${unitId}/accept-text`,
+    acceptRequest,
   );
 }
 

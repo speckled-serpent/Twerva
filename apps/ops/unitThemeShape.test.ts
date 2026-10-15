@@ -104,10 +104,27 @@ const drafts: Record<string, string> = textDraftsForTheme(
     id: "unit-1",
     position: 0,
     name: "Harbor",
+    text_status: "live",
     texts: [{ theme_element_id: "title-bottom", value: "Fog" }],
+    draft_texts: [],
     excluded_unit_ids: [],
     images: [],
   },
 );
 assert.equal(drafts["heading-top"], "");
 assert.equal(drafts["title-bottom"], "Fog");
+
+const draftValues: Record<string, string> = textDraftsForTheme(
+  themeWith("color", [titleElement]),
+  {
+    id: "unit-1",
+    position: 0,
+    name: "Harbor",
+    text_status: "draft",
+    texts: [{ theme_element_id: "title-bottom", value: "Fog" }],
+    draft_texts: [{ theme_element_id: "title-bottom", value: "Draft fog" }],
+    excluded_unit_ids: [],
+    images: [],
+  },
+);
+assert.equal(draftValues["title-bottom"], "Draft fog");

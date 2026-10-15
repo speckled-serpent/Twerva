@@ -59,6 +59,8 @@ Each phase can ship and be reviewed on its own. Later phases assume the earlier 
 
 ### 4. LLM text inside the source
 
+**Status.** Done.
+
 **Scope.** Images stay manual uploads. The source holds inspiration and rules. An LLM writes the unit's theme text from those. A person reviews that text before it is the live text on the unit.
 
 **Out of scope.** Campaign assembly, and word-count warnings. The redesign does not name which model runs the call.

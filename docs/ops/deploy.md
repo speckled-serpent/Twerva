@@ -204,6 +204,33 @@ and the other id has to be a unit in the same source.
 Downgrade to `unit_element_texts` drops `unit_exclusions`. It does not
 restore the pairs.
 
+### Drafted unit text
+
+From `apps/server`, run `alembic upgrade head`. The new revision is
+`unit_text_drafts`. Restart `twerva-api` and replace the ops `dist/`
+after sync.
+
+The upgrade adds `sources.inspiration`, `sources.rules`,
+`units.text_status` (`live` or `draft`), and
+`unit_element_texts.draft_value`. Existing units stay `live`.
+Inspiration and rules start empty.
+
+Generate is off until a key is set. It does not crash.
+
+```
+TEXT_GENERATION_PROVIDER=openai
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+```
+
+`TEXT_GENERATION_PROVIDER=fake` drafts text without a key and without
+calling the network. Use that for a local check. Do not commit a key.
+There is no existing LLM key in this repo. `AYRSHARE_API_KEY` is the
+publish adapter, not this call. The default provider is OpenAI.
+
+Downgrade to `unit_exclusions` drops the new columns and
+`unit_text_status`. It does not restore drafts.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.

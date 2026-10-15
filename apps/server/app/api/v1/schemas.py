@@ -26,6 +26,7 @@ from app.models.enums import (
     UnitImageIntake,
     UnitImageLicense,
     UnitImageMediaType,
+    UnitTextStatus,
 )
 from app.models.theme import (
     DEFAULT_BACKGROUND_COLOR,
@@ -863,12 +864,18 @@ class UnitImageReadResponse(BaseModel):
 
 
 class UnitReadResponse(BaseModel):
-    """One unit: name, theme text, exclusions, and at most one image."""
+    """One unit: name, theme text, exclusions, and at most one image.
+
+    ``texts`` is the approved copy. ``draft_texts`` is empty unless
+    ``text_status`` is ``draft``. A draft unit is not live.
+    """
 
     id: uuid.UUID
     position: int
     name: str
+    text_status: UnitTextStatus
     texts: list[UnitElementTextReadResponse]
+    draft_texts: list[UnitElementTextReadResponse]
     excluded_unit_ids: list[uuid.UUID]
     images: list[UnitImageReadResponse]
 
@@ -892,9 +899,28 @@ class SourceReadResponse(BaseModel):
     theme_id: uuid.UUID
     name: str
     slug: str
+    inspiration: str
+    rules: str
+    live_unit_count: int
     created_at: datetime
     updated_at: datetime
     units: list[UnitReadResponse]
+
+
+class SourceGuidancePatchRequest(BaseModel):
+    """Inspiration and rules for drafted unit text."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    inspiration: str = ""
+    rules: str = ""
+
+
+class TextGenerationStatusResponse(BaseModel):
+    """Whether Generate can run. The API key is not included."""
+
+    available: bool
+    detail: str
 
 
 class SourceCreateRequest(BaseModel):
@@ -931,6 +957,14 @@ class UnitWriteRequest(BaseModel):
     name: str
     texts: list[UnitElementTextWrite] = Field(default_factory=list)
     excluded_unit_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class UnitAcceptTextRequest(BaseModel):
+    """The text to store as live. This is the operator's accept action."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    texts: list[UnitElementTextWrite] = Field(default_factory=list)
 
 
 class UnitPreviewRequest(BaseModel):

@@ -94,6 +94,9 @@ const uploadedAlbum: SourceReadResponse = {
   theme_id: "theme-1",
   name: "Lamps",
   slug: "lamps",
+  inspiration: "",
+  rules: "",
+  live_unit_count: 2,
   created_at: "2026-10-14T00:00:00Z",
   updated_at: "2026-10-14T00:00:00Z",
   units: [
@@ -101,7 +104,9 @@ const uploadedAlbum: SourceReadResponse = {
       id: "text-unit",
       position: 0,
       name: "Notes",
+      text_status: "live",
       texts: [{ theme_element_id: "title", value: "Notes only" }],
+      draft_texts: [],
       excluded_unit_ids: [],
       images: [],
     },
@@ -109,10 +114,12 @@ const uploadedAlbum: SourceReadResponse = {
       id: "lamp-unit",
       position: 2,
       name: "Lamp",
+      text_status: "live",
       texts: [
         { theme_element_id: "name", value: "Desk lamp" },
         { theme_element_id: "finish", value: "  Brass lamp  " },
       ],
+      draft_texts: [],
       excluded_unit_ids: [],
       images: [
         {

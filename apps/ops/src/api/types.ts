@@ -545,11 +545,15 @@ export interface UnitImageReadResponse {
   thumbnail_path: string | null;
 }
 
+export type UnitTextStatus = "live" | "draft";
+
 export interface UnitReadResponse {
   id: string;
   position: number;
   name: string;
+  text_status: UnitTextStatus;
   texts: UnitElementTextReadResponse[];
+  draft_texts: UnitElementTextReadResponse[];
   excluded_unit_ids: string[];
   images: UnitImageReadResponse[];
 }
@@ -569,9 +573,26 @@ export interface SourceReadResponse {
   theme_id: string;
   name: string;
   slug: string;
+  inspiration: string;
+  rules: string;
+  live_unit_count: number;
   created_at: string;
   updated_at: string;
   units: UnitReadResponse[];
+}
+
+export interface SourceGuidancePatchRequest {
+  inspiration: string;
+  rules: string;
+}
+
+export interface TextGenerationStatusResponse {
+  available: boolean;
+  detail: string;
+}
+
+export interface UnitAcceptTextRequest {
+  texts: UnitElementTextWrite[];
 }
 
 export interface SourceCreateRequest {

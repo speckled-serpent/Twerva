@@ -12,6 +12,11 @@ S3 is not used.
 `ayrshare` when a live key exists). Mock is required for CI. Ayrshare
 live HTTP is not wired in this slice.
 
+`TEXT_GENERATION_PROVIDER` is `openai` or `fake`. `openai` calls
+api.openai.com when `OPENAI_API_KEY` is set. `OPENAI_MODEL` defaults
+to `gpt-4o-mini`. An empty key leaves Generate off. `fake` drafts
+text without a key and without the network.
+
 Ops operator auth (public console): `SESSION_SECRET` is required outside
 tests once `DATABASE_URL` is present. `OPS_ADMIN_USERNAME` /
 `OPS_ADMIN_PASSWORD` seed the first `ops_users` row only when the table
@@ -31,6 +36,8 @@ TEST_PLACEHOLDER_SESSION_SECRET: str = "test-session-secret-not-for-production"
 DEFAULT_SPOTMU_API_BASE_URL: str = "https://spotmu.com"
 DEFAULT_ARTIFACT_STORAGE_DIR: str = "/opt/twerva/artifacts"
 DEFAULT_PUBLISH_ADAPTER: str = "mock"
+DEFAULT_TEXT_GENERATION_PROVIDER: str = "openai"
+DEFAULT_OPENAI_MODEL: str = "gpt-4o-mini"
 DEFAULT_SESSION_COOKIE_NAME: str = "twerva_ops_session"
 DEFAULT_SESSION_COOKIE_SAMESITE: str = "lax"
 DEFAULT_SESSION_TTL_SECONDS: int = 60 * 60 * 12
@@ -73,6 +80,9 @@ class Settings(BaseSettings):
     artifact_storage_dir: str = Field(default=DEFAULT_ARTIFACT_STORAGE_DIR)
     publish_adapter: str = Field(default=DEFAULT_PUBLISH_ADAPTER)
     ayrshare_api_key: str = Field(default="")
+    text_generation_provider: str = Field(default=DEFAULT_TEXT_GENERATION_PROVIDER)
+    openai_api_key: str = Field(default="")
+    openai_model: str = Field(default=DEFAULT_OPENAI_MODEL)
     ops_admin_username: str = Field(default="")
     ops_admin_password: str = Field(default="")
     session_secret: str = Field(default="")
@@ -126,6 +136,11 @@ def _load_settings() -> Settings:
     stripped_artifact_storage_dir: str = loaded_settings.artifact_storage_dir.strip()
     stripped_publish_adapter: str = loaded_settings.publish_adapter.strip().lower()
     stripped_ayrshare_api_key: str = loaded_settings.ayrshare_api_key.strip()
+    stripped_text_generation_provider: str = (
+        loaded_settings.text_generation_provider.strip().lower()
+    )
+    stripped_openai_api_key: str = loaded_settings.openai_api_key.strip()
+    stripped_openai_model: str = loaded_settings.openai_model.strip()
     stripped_ops_admin_username: str = loaded_settings.ops_admin_username.strip()
     stripped_session_secret: str = loaded_settings.session_secret.strip()
     stripped_session_cookie_name: str = loaded_settings.session_cookie_name.strip()
@@ -142,6 +157,12 @@ def _load_settings() -> Settings:
 
     if stripped_publish_adapter == "":
         stripped_publish_adapter = DEFAULT_PUBLISH_ADAPTER
+
+    if stripped_text_generation_provider == "":
+        stripped_text_generation_provider = DEFAULT_TEXT_GENERATION_PROVIDER
+
+    if stripped_openai_model == "":
+        stripped_openai_model = DEFAULT_OPENAI_MODEL
 
     if stripped_session_cookie_name == "":
         stripped_session_cookie_name = DEFAULT_SESSION_COOKIE_NAME
@@ -172,6 +193,9 @@ def _load_settings() -> Settings:
                 spotmu_api_base_url=loaded_settings.spotmu_api_base_url,
                 publish_adapter=stripped_publish_adapter,
                 ayrshare_api_key=stripped_ayrshare_api_key,
+                text_generation_provider=stripped_text_generation_provider,
+                openai_api_key=stripped_openai_api_key,
+                openai_model=stripped_openai_model,
                 ops_admin_username=stripped_ops_admin_username,
                 ops_admin_password=loaded_settings.ops_admin_password,
                 session_secret=stripped_session_secret,
@@ -194,6 +218,9 @@ def _load_settings() -> Settings:
         spotmu_api_base_url=loaded_settings.spotmu_api_base_url,
         publish_adapter=stripped_publish_adapter,
         ayrshare_api_key=stripped_ayrshare_api_key,
+        text_generation_provider=stripped_text_generation_provider,
+        openai_api_key=stripped_openai_api_key,
+        openai_model=stripped_openai_model,
         ops_admin_username=stripped_ops_admin_username,
         ops_admin_password=loaded_settings.ops_admin_password,
         session_secret=stripped_session_secret,
