@@ -139,10 +139,8 @@ export function App(): ReactElement {
 
   if (sessionState === "checking") {
     return (
-      <div className="ops-console-shell">
-        <main className="ops-main">
-          <p className="lede">Checking session…</p>
-        </main>
+      <div className="ops-session-check">
+        <p className="lede">Checking session…</p>
       </div>
     );
   }
@@ -230,6 +228,10 @@ function renderActivePage(
         statusMessage={campaignStatusMessage}
         onOpenedCampaignIdChange={onOpenedCampaignIdChange}
         onStatusMessageChange={onCampaignStatusMessageChange}
+        onCreateCampaign={(): void => {
+          onOpenedCampaignIdChange(null);
+          onNavigate("new-campaign");
+        }}
       />
     );
   }
@@ -253,12 +255,25 @@ function renderActivePage(
   }
 
   if (activePageId === "themes") {
-    return <ThemesPage statusMessage={themeStatusMessage} />;
+    return (
+      <ThemesPage
+        statusMessage={themeStatusMessage}
+        onCreateTheme={(): void => {
+          onNavigate("new-theme");
+        }}
+      />
+    );
   }
 
   if (activePageId === "sources") {
     return (
-      <SourcesPage openRequest={sourceOpenRequest} />
+      <SourcesPage
+        openRequest={sourceOpenRequest}
+        onCreateSource={(): void => {
+          onSourceOpenRequestChange(null);
+          onNavigate("new-source");
+        }}
+      />
     );
   }
 

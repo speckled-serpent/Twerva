@@ -96,7 +96,7 @@ export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): Reac
     <section>
       <div className="page-header-row">
         <div>
-          <h1>Create Source</h1>
+          <h1>Create source</h1>
           <p className="lede">
             A source needs a name and a theme. After this, it opens so you can add units.
           </p>

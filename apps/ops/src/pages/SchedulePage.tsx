@@ -172,10 +172,14 @@ export function SchedulePage(): ReactElement {
 
   return (
     <section>
-      <h1>Schedule</h1>
-      <p className="lede">
-        Attach an approved artifact to an account and time, then mock-publish the post job.
-      </p>
+      <div className="page-header-row">
+        <div>
+          <h1>Schedule</h1>
+          <p className="lede">
+            Attach an approved artifact to an account and time, then mock-publish the post job.
+          </p>
+        </div>
+      </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />

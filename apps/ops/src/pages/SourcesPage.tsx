@@ -65,6 +65,7 @@ export interface SourcesOpenRequest {
 
 export interface SourcesPageProps {
   openRequest: SourcesOpenRequest | null;
+  onCreateSource: () => void;
 }
 
 /**
@@ -73,7 +74,10 @@ export interface SourcesPageProps {
  * @param props - Optional open request from Create Source
  * @returns The Sources page
  */
-export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
+export function SourcesPage({
+  openRequest,
+  onCreateSource,
+}: SourcesPageProps): ReactElement {
 
   const [listedSources, setListedSources] = useState<SourceListItemResponse[]>([]);
   const [openedSourceId, setOpenedSourceId] = useState<string | null>(
@@ -302,6 +306,7 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
       albums={listedSources}
       loadError={loadError}
       statusMessage={statusMessage}
+      onCreateSource={onCreateSource}
       onOpenAlbum={(sourceId: string): void => {
         setOpenedSourceId(sourceId);
         setStatusMessage("");
@@ -318,6 +323,7 @@ interface AlbumListViewProps {
   albums: SourceListItemResponse[];
   loadError: unknown;
   statusMessage: string;
+  onCreateSource: () => void;
   onOpenAlbum: (sourceId: string) => void;
   onAlbumDeleted: (albumName: string) => void;
 }
@@ -326,6 +332,7 @@ function AlbumListView({
   albums,
   loadError,
   statusMessage,
+  onCreateSource,
   onOpenAlbum,
   onAlbumDeleted,
 }: AlbumListViewProps): ReactElement {
@@ -340,15 +347,19 @@ function AlbumListView({
           <h1>Sources</h1>
           <p className="lede">
             Each source has a theme. Open one to edit units.
-            Create lives on Create Source.
           </p>
+        </div>
+        <div className="page-header-actions">
+          <button type="button" className="primary" onClick={onCreateSource}>
+            Create source
+          </button>
         </div>
       </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
       {loadError !== null ? null : albums.length === 0 ? (
-        <p>No sources yet. Use Create Source to add one.</p>
+        <p className="empty-hint">No sources yet.</p>
       ) : (
         <table>
           <thead>
