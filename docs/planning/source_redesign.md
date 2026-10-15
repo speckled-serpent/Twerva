@@ -71,6 +71,8 @@ Each phase can ship and be reviewed on its own. Later phases assume the earlier 
 
 ### 5. Campaign flow
 
+**Status.** Done.
+
 **Scope.** The operator picks a theme, then one source from the dropdown of sources bound to that theme, then runs. The run assembles units whose text is already reviewed, and it respects exclusion rules. Matching is the theme stored on the source. The run does not call the LLM.
 
 **Out of scope.** Word-count warnings, queue and schedule, account connection, and measurement. Those stay on `docs/planning/phase_map.md` after this plan.

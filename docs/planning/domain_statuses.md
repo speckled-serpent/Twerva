@@ -217,13 +217,22 @@ lifecycle values in `campaign_status_lifecycle`):
 
 Create persists a definition with status **`ready`**. `other` is
 rejected by the API (`400`). `spotmu` and `spotmu_test` share the
-create flow (name, carousel, platforms, ≥1 Spotmu interest). `spotmu`
-also requires ≥1 linked account; `spotmu_test` may persist with an
-empty `account_ids` list (provided accounts still must match the
-selected platforms). `slug` and `hashtag` (`#slug`) are unique and
-derived from `name`. Platforms are a JSONB list of `instagram` /
-`tiktok`. Accounts and Spotmu interests live on `campaign_accounts` and
-`campaign_interests`.
+create flow (name, carousel, platforms, ≥1 Spotmu interest, a theme,
+and one source bound to that theme). `spotmu` also requires ≥1 linked
+account; `spotmu_test` may persist with an empty `account_ids` list
+(provided accounts still must match the selected platforms). `slug`
+and `hashtag` (`#slug`) are unique and derived from `name`. Platforms
+are a JSONB list of `instagram` / `tiktok`. Accounts and Spotmu
+interests live on `campaign_accounts` and `campaign_interests`.
+
+`campaigns.theme_id` and `campaigns.source_id` are nullable.
+Campaigns saved before `campaign_theme_source` keep both null. They
+are not deleted and they are not given a theme. `POST .../run` is
+400 until both are set. A source on a different theme is 400. Run
+loads live units only, calls `assert_unit_pick_allowed` for each
+carousel, and does not generate text. The latest assembly is
+`campaign_carousels` and `campaign_carousel_slides`. A later run
+replaces that assembly.
 
 Existing rows stored as `not_started` (create-only slice) become
 `ready` by renaming the enum value.
@@ -357,7 +366,8 @@ Check `ck_theme_elements_content`:
 
 Alembic `sources_default_album`, then `sources_resource_files`, then
 `sources_theme_bound`, then `unit_element_texts`, then
-`unit_exclusions`, then `unit_text_drafts`. A source requires
+`unit_exclusions`, then `unit_text_drafts`, then
+`campaign_theme_source`. A source requires
 `theme_id`. `kind` and
 `resource_files` are gone. A unit keeps its id and has a required
 `name`. `unit_images` allows one row per unit.

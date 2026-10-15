@@ -231,6 +231,28 @@ publish adapter, not this call. The default provider is OpenAI.
 Downgrade to `unit_exclusions` drops the new columns and
 `unit_text_status`. It does not restore drafts.
 
+### Campaign theme and source
+
+From `apps/server`, run `alembic upgrade head`. The new revision is
+`campaign_theme_source`. No new env var. Restart `twerva-api` and
+replace the ops `dist/` after sync.
+
+The upgrade adds nullable `campaigns.theme_id` and
+`campaigns.source_id`, plus `campaign_carousels` and
+`campaign_carousel_slides`. Existing campaigns stay. Both new columns
+are left empty. Those rows were saved when a campaign had no theme
+and no source, so the upgrade does not invent a theme and does not
+delete the name, accounts, interests, or status. Run returns 400
+until an operator picks both. New campaigns require a theme and a
+source bound to that theme.
+
+Run assembles live units from that source into carousels on the
+theme. Draft units stay out. Excluded units do not share a carousel.
+Run does not generate text.
+
+Downgrade to `unit_text_drafts` drops the columns and the carousel
+tables. It does not restore a run.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.
