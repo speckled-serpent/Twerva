@@ -8,6 +8,15 @@ Unit text is stored by theme element id and labeled by the element
 name. ``text_source`` stays for Spotmu source-item preview when a row
 already has one. Image rows still forbid it. Existing text rows keep
 their source. Downgrade restores the check that required one.
+
+The model names this check ``content``. The metadata convention
+``ck_%(table_name)s_%(constraint_name)s`` stores that as
+``ck_theme_elements_content``, which is the name on production and on
+a database built from these revisions. Passing that rendered name to
+``op.drop_constraint`` or ``op.create_check_constraint`` asks Postgres
+for ``ck_theme_elements_ck_theme_elements_content`` instead. Upgrade
+and downgrade drop either spelling with ``IF EXISTS``, then create the
+check under the logical name ``content``.
 """
 
 from collections.abc import Sequence
@@ -22,7 +31,9 @@ down_revision: str | None = "theme_element_names"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-CONTENT_CHECK_NAME: str = "ck_theme_elements_content"
+CONTENT_CHECK_LOGICAL_NAME: str = "content"
+CONTENT_CHECK_RENDERED_NAME: str = "ck_theme_elements_content"
+CONTENT_CHECK_DOUBLE_PREFIXED_NAME: str = "ck_theme_elements_ck_theme_elements_content"
 
 THEME_ELEMENT_CONTENT_CHECK_REQUIRING_TEXT_SOURCE_SQL: str = (
     "("
@@ -57,25 +68,39 @@ THEME_ELEMENT_CONTENT_CHECK_REQUIRING_TEXT_SOURCE_SQL: str = (
     " OR lower(right(image_asset_ref, 5)) = '.jpeg'"
     ")"
     "))"
-    ")"
 )
 
 
 def upgrade() -> None:
+    """Replace the content check so a text row may omit text_source."""
 
-    op.drop_constraint(CONTENT_CHECK_NAME, "theme_elements", type_="check")
+    _drop_content_check_either_name()
     op.create_check_constraint(
-        CONTENT_CHECK_NAME,
+        CONTENT_CHECK_LOGICAL_NAME,
         "theme_elements",
         THEME_ELEMENT_CONTENT_CHECK_SQL,
     )
 
 
 def downgrade() -> None:
+    """Restore the content check that requires text_source on text rows."""
 
-    op.drop_constraint(CONTENT_CHECK_NAME, "theme_elements", type_="check")
+    _drop_content_check_either_name()
     op.create_check_constraint(
-        CONTENT_CHECK_NAME,
+        CONTENT_CHECK_LOGICAL_NAME,
         "theme_elements",
         THEME_ELEMENT_CONTENT_CHECK_REQUIRING_TEXT_SOURCE_SQL,
+    )
+
+
+def _drop_content_check_either_name() -> None:
+    """Drop the content check under the rendered name or the doubled name."""
+
+    op.execute(
+        "ALTER TABLE theme_elements "
+        f"DROP CONSTRAINT IF EXISTS {CONTENT_CHECK_RENDERED_NAME}",
+    )
+    op.execute(
+        "ALTER TABLE theme_elements "
+        f"DROP CONSTRAINT IF EXISTS {CONTENT_CHECK_DOUBLE_PREFIXED_NAME}",
     )
