@@ -269,6 +269,7 @@ def _append_preview_elements(
             band=element_request.band,
             sort_order=0,
             content_kind=resolved_element.content_kind,
+            name=element_request.name,
             rectangle_color=resolved_element.rectangle_color,
             rectangle_opacity=resolved_element.rectangle_opacity,
             rectangle_radius=resolved_element.rectangle_radius,

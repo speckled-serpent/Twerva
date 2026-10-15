@@ -161,6 +161,16 @@ class SourceThemeMigrationTests(unittest.TestCase):
                     ),
                 ).scalar_one(),
             )
+            stored_names = connection.execute(
+                text(
+                    """
+                    SELECT id::text, name
+                    FROM theme_elements
+                    WHERE theme_id = CAST(:theme_id AS uuid)
+                    """
+                ),
+                {"theme_id": theme_id},
+            ).fetchall()
 
         stored_by_element: dict[str, str] = {
             str(stored_row[0]): str(stored_row[1]) for stored_row in stored_rows
@@ -169,6 +179,12 @@ class SourceThemeMigrationTests(unittest.TestCase):
         self.assertEqual(stored_by_element[top_element_id], "Fog line")
         self.assertEqual(stored_by_element[bottom_element_id], "Field one")
         self.assertEqual(len(stored_by_element), 2)
+        names_by_element: dict[str, str] = {
+            str(stored_name[0]): str(stored_name[1]) for stored_name in stored_names
+        }
+
+        self.assertEqual(names_by_element[top_element_id], "Interest heading")
+        self.assertEqual(names_by_element[bottom_element_id], "Title")
         self.assertEqual(free_text_columns, 0)
         self.assertEqual(field_tables, 0)
 

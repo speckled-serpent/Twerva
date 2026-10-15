@@ -110,6 +110,7 @@ def _text_element_request(
     """One clear text element on the top band."""
 
     text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+        name=text_source.value,
         band=ThemeElementBand.TOP,
         content_kind=ThemeElementContentKind.TEXT,
         text_source=text_source,
@@ -366,6 +367,7 @@ class ThemeElementUnitTextSyncTests(unittest.TestCase):
         image_element: ThemeElementReadResponse = create_theme_element(
             self.paper_theme_id,
             ThemeElementCreateRequest(
+                name="Image",
                 band=ThemeElementBand.MIDDLE,
                 content_kind=ThemeElementContentKind.IMAGE,
                 image_asset_ref="logos/mark.png",
@@ -392,6 +394,7 @@ class ThemeElementUnitTextSyncTests(unittest.TestCase):
         image_element: ThemeElementReadResponse = create_theme_element(
             self.paper_theme_id,
             ThemeElementCreateRequest(
+                name="Image",
                 band=ThemeElementBand.BOTTOM,
                 content_kind=ThemeElementContentKind.IMAGE,
                 image_asset_ref="logos/mark.png",

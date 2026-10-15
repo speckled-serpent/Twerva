@@ -813,6 +813,7 @@ def _copy_theme_element(
         band=source_element.band,
         sort_order=source_element.sort_order,
         content_kind=source_element.content_kind,
+        name=source_element.name,
         rectangle_color=source_element.rectangle_color,
         rectangle_opacity=rectangle_opacity_value(source_element.rectangle_opacity),
         rectangle_radius=rectangle_radius_value(source_element.rectangle_radius),

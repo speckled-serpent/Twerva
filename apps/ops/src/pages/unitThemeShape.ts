@@ -1,7 +1,6 @@
 import type {
   ThemeElementBand,
   ThemeElementReadResponse,
-  ThemeElementTextSource,
   ThemeReadResponse,
   UnitElementTextReadResponse,
   UnitReadResponse,
@@ -11,13 +10,6 @@ const BAND_RANK: Record<ThemeElementBand, number> = {
   top: 0,
   middle: 1,
   bottom: 2,
-};
-
-const TEXT_SOURCE_LABELS: Record<ThemeElementTextSource, string> = {
-  title: "Title",
-  interest_heading: "Interest heading",
-  overview_bullets: "Overview bullets",
-  canonical_url: "Canonical URL",
 };
 
 /**
@@ -68,7 +60,9 @@ export function orderedTextElements(
 }
 
 /**
- * Label for one text input. A repeated source adds the band and sort.
+ * Label for one text input. The element's name is the label.
+ *
+ * A repeated name adds the band and sort order.
  *
  * @param element - The text element this input edits
  * @param textElements - Every text element on the theme, in frame order
@@ -79,23 +73,32 @@ export function labelForTextElement(
   textElements: readonly ThemeElementReadResponse[],
 ): string {
 
-  const sourceLabel: string = element.text_source === null
-    ? "Text"
-    : TEXT_SOURCE_LABELS[element.text_source];
-  const sameSourceCount: number = textElements.filter(
+  const elementName: string = displayName(element);
+  const sameNameCount: number = textElements.filter(
     (otherElement: ThemeElementReadResponse): boolean => (
-      otherElement.text_source === element.text_source
+      displayName(otherElement) === elementName
     ),
   ).length;
 
-  if (sameSourceCount < 2) {
-    return sourceLabel;
+  if (sameNameCount < 2) {
+    return elementName;
   }
 
   const bandName: string = element.band;
   const bandLabel: string = bandName.slice(0, 1).toUpperCase() + bandName.slice(1);
 
-  return `${sourceLabel} (${bandLabel}, ${element.sort_order})`;
+  return `${elementName} (${bandLabel}, ${element.sort_order})`;
+}
+
+function displayName(element: ThemeElementReadResponse): string {
+
+  const trimmedName: string = element.name.trim();
+
+  if (trimmedName === "") {
+    return "Text";
+  }
+
+  return trimmedName;
 }
 
 /**

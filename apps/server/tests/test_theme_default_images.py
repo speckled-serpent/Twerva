@@ -133,6 +133,7 @@ class ThemeDefaultImageTests(unittest.TestCase):
                 source_item_id=source_item.id,
                 elements=[
                     ThemeElementCreateRequest(
+                        name="Image",
                         band=ThemeElementBand.MIDDLE,
                         content_kind=ThemeElementContentKind.IMAGE,
                         image_asset_ref=stored_ref,
@@ -181,6 +182,7 @@ class ThemeDefaultImageTests(unittest.TestCase):
                 source_item_id=source_item.id,
                 elements=[
                     ThemeElementCreateRequest(
+                        name="Image",
                         band=ThemeElementBand.MIDDLE,
                         content_kind=ThemeElementContentKind.IMAGE,
                         image_asset_ref=album_path,

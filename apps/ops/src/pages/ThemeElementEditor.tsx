@@ -45,6 +45,7 @@ interface BandOption {
 }
 
 interface ElementDraft {
+  name: string;
   band: ThemeElementBand;
   contentKind: ThemeElementContentKind;
   rectangleColor: string;
@@ -519,6 +520,18 @@ function ElementFields({
   return (
     <>
       <label>
+        Name
+        <input
+          id={`${idPrefix}-name`}
+          value={draft.name}
+          spellCheck={false}
+          onChange={(changeEvent): void => {
+            onDraftChange({ ...draft, name: changeEvent.target.value });
+          }}
+        />
+      </label>
+      <p className="field-hint">This name labels the field when you edit a unit.</p>
+      <label>
         Band
         <select
           value={draft.band}
@@ -788,6 +801,7 @@ async function draftReadyToAdd(addDraft: ElementDraft): Promise<ElementDraft> {
 function emptyElementDraft(): ElementDraft {
 
   const draft: ElementDraft = {
+    name: "",
     band: "top",
     contentKind: "text",
     rectangleColor: "",
@@ -812,6 +826,7 @@ function emptyElementDraft(): ElementDraft {
 function draftFromElement(element: ThemeElementReadResponse): ElementDraft {
 
   const draft: ElementDraft = {
+    name: element.name,
     band: element.band,
     contentKind: element.content_kind,
     rectangleColor: element.rectangle_color ?? "",
@@ -972,7 +987,9 @@ function elementRequestFromDraft(
 ): ThemeElementCreateRequest {
 
   const fontWeight: number | null = parseOptionalFontWeight(draft.fontWeight);
+  const elementName: string = requiredElementName(draft.name);
   const request: ThemeElementCreateRequest = {
+    name: elementName,
     band: draft.band,
     content_kind: draft.contentKind,
     rectangle_color: normalizeHexColor(draft.rectangleColor),
@@ -1133,6 +1150,17 @@ function parseRectangleRadius(rawValue: string): number {
   return radius;
 }
 
+function requiredElementName(rawName: string): string {
+
+  const elementName: string = rawName.trim();
+
+  if (elementName === "") {
+    throw new Error("Name is required.");
+  }
+
+  return elementName;
+}
+
 function parseRequiredFontSize(rawValue: string): number {
 
   const trimmedValue: string = rawValue.trim();
@@ -1236,6 +1264,7 @@ function localElementFromRequest(
     band: request.band,
     sort_order: bandCount,
     content_kind: request.content_kind,
+    name: request.name,
     rectangle_color: emptyToNull(request.rectangle_color),
     rectangle_opacity: request.rectangle_opacity ?? 100,
     rectangle_radius: request.rectangle_radius ?? 0,
@@ -1268,6 +1297,7 @@ function applyRequestToElement(
     ...element,
     band: request.band,
     content_kind: request.content_kind,
+    name: request.name,
     rectangle_color: emptyToNull(request.rectangle_color),
     rectangle_opacity: request.rectangle_opacity ?? 100,
     rectangle_radius: request.rectangle_radius ?? 0,

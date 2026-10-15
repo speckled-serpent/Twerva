@@ -34,6 +34,8 @@ if TYPE_CHECKING:
     from app.models.theme import Theme
 
 
+THEME_ELEMENT_NAME_CHECK_SQL: str = "btrim(name) <> ''"
+
 IMAGE_ASSET_REF_IS_RELATIVE_SQL: str = (
     "btrim(image_asset_ref) = image_asset_ref"
     " AND image_asset_ref <> ''"
@@ -78,8 +80,9 @@ class ThemeElement(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """Row in `theme_elements`.
 
     Every element is the full content width of its theme. There is no
-    ``x``, ``y``, or ``width`` column. ``rectangle_color`` null means the
-    rectangle is clear. ``text`` requires a Spotmu ``text_source``, a
+    ``x``, ``y``, or ``width`` column. ``name`` is the operator's label
+    for the element and cannot be blank. ``rectangle_color`` null means
+    the rectangle is clear. ``text`` requires a Spotmu ``text_source``, a
     non-blank family and color, a positive ``font_size``, and an
     ``alignment``. ``image`` requires ``image_asset_ref`` (relative path,
     no ``..``, no scheme, suffix ``.svg`` / ``.png`` / ``.jpg`` /
@@ -108,6 +111,10 @@ class ThemeElement(Base, UuidPrimaryKeyMixin, TimestampMixin):
             " AND rectangle_radius >= 0 AND rectangle_radius <= 10000",
             name="rectangle_style",
         ),
+        CheckConstraint(
+            THEME_ELEMENT_NAME_CHECK_SQL,
+            name="name",
+        ),
     )
 
     theme_id: Mapped[uuid.UUID] = mapped_column(
@@ -124,6 +131,7 @@ class ThemeElement(Base, UuidPrimaryKeyMixin, TimestampMixin):
         THEME_ELEMENT_CONTENT_KIND_ENUM,
         nullable=False,
     )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     rectangle_color: Mapped[str | None] = mapped_column(Text, nullable=True)
     rectangle_opacity: Mapped[int] = mapped_column(
         Integer,

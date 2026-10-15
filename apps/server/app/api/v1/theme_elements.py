@@ -103,6 +103,7 @@ def create_theme_element(
         found_theme,
         theme_element_create_request.band,
         resolved_element,
+        theme_element_create_request.name,
     )
     found_theme.elements.append(created_element)
     our_database_session.add(created_element)
@@ -238,6 +239,10 @@ def patch_theme_element(
         ),
     )
     _apply_resolved_element(found_element, resolved_element)
+
+    if "name" in assigned_fields and theme_element_patch_request.name is not None:
+        found_element.name = theme_element_patch_request.name
+
     resulting_band: ThemeElementBand = found_element.band
     requested_sort_order: int | None = None
     placement_changes: bool = False
@@ -378,6 +383,7 @@ def attach_prepared_theme_elements(
             theme,
             element_request.band,
             resolved_element,
+            element_request.name,
         )
         theme.elements.append(created_element)
         our_database_session.add(created_element)
@@ -406,6 +412,7 @@ def serialize_theme_element(element: ThemeElement) -> ThemeElementReadResponse:
         band=element.band,
         sort_order=element.sort_order,
         content_kind=element.content_kind,
+        name=element.name,
         rectangle_color=element.rectangle_color,
         rectangle_opacity=rectangle_opacity_value(element.rectangle_opacity),
         rectangle_radius=rectangle_radius_value(element.rectangle_radius),
@@ -431,6 +438,7 @@ def _new_theme_element(
     theme: Theme,
     band: ThemeElementBand,
     resolved_element: ResolvedThemeElement,
+    name: str,
 ) -> ThemeElement:
     """Build an element row. Placement assigns the final sort_order."""
 
@@ -439,6 +447,7 @@ def _new_theme_element(
         band=band,
         sort_order=-1,
         content_kind=resolved_element.content_kind,
+        name=name,
         rectangle_color=resolved_element.rectangle_color,
         rectangle_opacity=resolved_element.rectangle_opacity,
         rectangle_radius=resolved_element.rectangle_radius,

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import (
     AccountStatus,
@@ -202,10 +202,29 @@ class ThemePatchRequest(BaseModel):
     background_asset_ref: str | None = None
 
 
+THEME_ELEMENT_NAME_REQUIRED_DETAIL: str = "Name is required."
+
+
+def stripped_theme_element_name(name: str | None) -> str:
+    """Return a trimmed element name. Blank and null are rejected."""
+
+    if name is None:
+        raise ValueError(THEME_ELEMENT_NAME_REQUIRED_DETAIL)
+
+    stripped_name: str = name.strip()
+
+    if stripped_name == "":
+        raise ValueError(THEME_ELEMENT_NAME_REQUIRED_DETAIL)
+
+    return stripped_name
+
+
 class ThemeElementCreateRequest(BaseModel):
     """Body for `POST /api/v1/themes/{theme_id}/elements`.
 
-    ``band`` and ``content_kind`` are required. ``sort_order`` is optional
+    ``name``, ``band``, and ``content_kind`` are required. ``name`` is
+    the label operators see when they edit a unit. Blank and
+    whitespace-only names are rejected. ``sort_order`` is optional
     and 0-based within the band; omitted means append. ``rectangle_color``
     null means the rectangle is clear. Text requires a Spotmu
     ``text_source``, family, positive size, color, and alignment. Image
@@ -215,6 +234,7 @@ class ThemeElementCreateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str
     band: ThemeElementBand
     content_kind: ThemeElementContentKind
     sort_order: int | None = None
@@ -233,6 +253,15 @@ class ThemeElementCreateRequest(BaseModel):
     alignment: ThemeElementAlignment | None = None
     image_asset_ref: str | None = None
 
+    @field_validator("name")
+    @classmethod
+    def name_is_non_blank(cls, name: str) -> str:
+        """Reject a blank name and store the trimmed text."""
+
+        stripped_name: str = stripped_theme_element_name(name)
+
+        return stripped_name
+
 
 ThemeCreateRequest.model_rebuild()
 
@@ -241,6 +270,8 @@ class ThemeElementPatchRequest(BaseModel):
     """Body for `PATCH /api/v1/themes/{theme_id}/elements/{element_id}`.
 
     Partial. Only fields present in the body are written. Omitted
+    ``name`` leaves the stored label. A present name must be non-blank
+    after trimming; null and whitespace are rejected. Omitted
     ``sort_order`` leaves the index unless ``band`` changes, in which
     case the element is appended on the new band. The server compacts
     the band afterward. ``x``, ``y``, and ``width`` are rejected.
@@ -248,6 +279,7 @@ class ThemeElementPatchRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str | None = None
     band: ThemeElementBand | None = None
     content_kind: ThemeElementContentKind | None = None
     sort_order: int | None = None
@@ -266,6 +298,15 @@ class ThemeElementPatchRequest(BaseModel):
     alignment: ThemeElementAlignment | None = None
     image_asset_ref: str | None = None
 
+    @field_validator("name")
+    @classmethod
+    def name_is_non_blank(cls, name: str | None) -> str:
+        """Reject a blank or null name when the client sent one."""
+
+        stripped_name: str = stripped_theme_element_name(name)
+
+        return stripped_name
+
 
 class ThemeElementReadResponse(BaseModel):
     """Serialized theme element. No coordinates."""
@@ -277,6 +318,7 @@ class ThemeElementReadResponse(BaseModel):
     band: ThemeElementBand
     sort_order: int
     content_kind: ThemeElementContentKind
+    name: str
     rectangle_color: str | None
     rectangle_opacity: int
     rectangle_radius: int

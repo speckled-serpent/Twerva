@@ -41,7 +41,10 @@ from app.models import (
     BackgroundKind,
     cluster_source_items,
 )
-from app.models.theme_element import THEME_ELEMENT_CONTENT_CHECK_SQL
+from app.models.theme_element import (
+    THEME_ELEMENT_CONTENT_CHECK_SQL,
+    THEME_ELEMENT_NAME_CHECK_SQL,
+)
 from app.models.account import Account as AccountModel
 
 
@@ -320,6 +323,7 @@ class DomainEnumTests(unittest.TestCase):
             "band",
             "sort_order",
             "content_kind",
+            "name",
             "rectangle_color",
             "rectangle_opacity",
             "rectangle_radius",
@@ -367,6 +371,7 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(theme_foreign_key.column.table.name, "themes")
         self.assertEqual(theme_foreign_key.ondelete, "CASCADE")
         self.assertFalse(ThemeElement.__table__.columns["sort_order"].nullable)
+        self.assertFalse(ThemeElement.__table__.columns["name"].nullable)
         self.assertTrue(ThemeElement.__table__.columns["rectangle_color"].nullable)
         opacity_column: Column[object] = ThemeElement.__table__.columns["rectangle_opacity"]
         radius_column: Column[object] = ThemeElement.__table__.columns["rectangle_radius"]
@@ -403,7 +408,11 @@ class DomainEnumTests(unittest.TestCase):
 
         self.assertEqual(
             set(checks_by_name),
-            {"ck_theme_elements_content", "ck_theme_elements_rectangle_style"},
+            {
+                "ck_theme_elements_content",
+                "ck_theme_elements_rectangle_style",
+                "ck_theme_elements_name",
+            },
         )
         self.assertEqual(
             str(checks_by_name["ck_theme_elements_content"].sqltext),
@@ -432,6 +441,10 @@ class DomainEnumTests(unittest.TestCase):
             THEME_ELEMENT_CONTENT_CHECK_SQL,
         )
         self.assertIn(".jpeg", THEME_ELEMENT_CONTENT_CHECK_SQL)
+        self.assertEqual(
+            str(checks_by_name["ck_theme_elements_name"].sqltext),
+            THEME_ELEMENT_NAME_CHECK_SQL,
+        )
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:
