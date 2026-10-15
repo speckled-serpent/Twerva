@@ -725,12 +725,18 @@ def _replace_texts(
     stored_texts: list[tuple[uuid.UUID, str]],
     our_database_session: Session,
 ) -> None:
-    """Replace theme text. One row per text element, including blanks."""
+    """Replace theme text. One row per text element, including blanks.
+
+    The delete is flushed before the new rows. Postgres rejects a second
+    row for the same unit and theme element while the old row is still
+    pending.
+    """
 
     for existing_text in list(unit.element_texts):
         our_database_session.delete(existing_text)
 
     unit.element_texts = []
+    our_database_session.flush()
 
     for theme_element_id, value in stored_texts:
         created_text: UnitElementText = UnitElementText(

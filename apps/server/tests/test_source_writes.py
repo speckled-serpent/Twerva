@@ -94,6 +94,9 @@ class _MemorySourceSession:
     def delete(self, row: object) -> None:
         self.deleted.append(row)
 
+    def flush(self) -> None:
+        return
+
     def commit(self) -> None:
         self.commit_count += 1
 
