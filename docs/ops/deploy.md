@@ -172,6 +172,24 @@ removed by hand. Do not delete `theme-defaults/` in the package.
 Downgrade to `sources_resource_files` restores `kind` and an empty
 `resource_files` table. It does not restore rows the upgrade deleted.
 
+### Unit text per theme element
+
+From `apps/server`, run `alembic upgrade head`. The new revision is
+`unit_element_texts`. No new env var. Restart `twerva-api` and replace
+the ops `dist/` after sync.
+
+The upgrade adds `unit_element_texts` and copies each unit's free text,
+then its labeled field values, onto that source theme's text elements
+in frame order (top, then middle, then bottom, then sort order). A
+blank free text is skipped. Extra pieces have no element to land on
+and are dropped. Tags are dropped. It then removes `units.free_text`,
+`units.tags`, and `unit_fields`.
+
+Downgrade to `sources_theme_bound` restores `free_text`, an empty tags
+array, and an empty `unit_fields` table. The first stored value, in
+that same frame order, is written back to `free_text`. Later values
+are not restored.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.

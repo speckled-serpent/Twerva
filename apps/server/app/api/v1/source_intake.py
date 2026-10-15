@@ -16,7 +16,10 @@ from fastapi.responses import FileResponse
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.api.v1.lookups import fetch_content_source_by_id_or_raise
+from app.api.v1.lookups import (
+    fetch_content_source_by_id_or_raise,
+    fetch_theme_by_id_or_raise,
+)
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
     UnitImageCreateItem,
@@ -30,17 +33,19 @@ from app.api.v1.source_writes import (
     _fetch_image_or_raise,
     _fetch_unit_or_raise,
     _next_unit_position,
-    _parsed_unit_write,
-    _replace_fields,
+    _parsed_texts,
+    _replace_texts,
+    _require_image_when_theme_needs_one,
     _require_name,
-    _require_unit_content,
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitImage
 from app.models.enums import UnitImageIntake, UnitImageLicense
+from app.models.theme import Theme
 from app.models.ops_user import OpsUser
 from app.sources.editing import ONE_IMAGE_DETAIL, new_row_id, normalize_image_metadata
+from app.sources.unit_theme import IMAGE_NOT_USED_DETAIL, theme_requires_image
 from app.sources.image_intake import (
     ImageIntakeError,
     PreparedUnitImage,
@@ -204,9 +209,7 @@ def create_unit_with_images_upload(
 
     unit_write_request: UnitWriteRequest = UnitWriteRequest(
         name=create_request.name,
-        free_text=create_request.free_text,
-        tags=create_request.tags,
-        fields=create_request.fields,
+        texts=create_request.texts,
     )
     created_unit: UnitReadResponse = create_unit_with_images(
         source_id,
@@ -321,6 +324,16 @@ def create_unit_with_images(
         source_id,
         our_database_session,
     )
+    found_theme: Theme = fetch_theme_by_id_or_raise(
+        found_source.theme_id,
+        our_database_session,
+    )
+
+    if not theme_requires_image(found_theme):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=IMAGE_NOT_USED_DETAIL,
+        )
 
     if len(attachments) > 1:
         raise HTTPException(
@@ -335,7 +348,10 @@ def create_unit_with_images(
         )
 
     unit_name: str = _require_name(unit_write_request.name)
-    free_text, tags, fields = _parsed_unit_write(unit_write_request)
+    stored_texts: list[tuple[uuid.UUID, str]] = _parsed_texts(
+        found_theme,
+        unit_write_request.texts,
+    )
     staged_images: list[tuple[PreparedUnitImage, UnitImageAttachment]] = []
 
     for attachment in attachments:
@@ -356,7 +372,7 @@ def create_unit_with_images(
 
         staged_images.append((prepared_image, attachment))
 
-    _require_unit_content(free_text, len(fields), len(staged_images))
+    _require_image_when_theme_needs_one(found_theme, len(staged_images))
     unit_id: uuid.UUID = new_row_id()
     next_position: int = _next_unit_position(found_source.id, our_database_session)
     saved_paths: list[str] = []
@@ -384,17 +400,15 @@ def create_unit_with_images(
         source_id=found_source.id,
         position=next_position,
         name=unit_name,
-        free_text=free_text,
-        tags=tags,
     )
     created_unit.images = created_images
-    created_unit.fields = []
+    created_unit.element_texts = []
     our_database_session.add(created_unit)
 
     for created_image in created_images:
         our_database_session.add(created_image)
 
-    _replace_fields(created_unit, fields, our_database_session)
+    _replace_texts(created_unit, stored_texts, our_database_session)
 
     try:
         commit_database_session_or_raise_conflict(
@@ -533,6 +547,20 @@ def add_images_from_payloads(
     """
 
     found_unit: Unit = _fetch_unit_or_raise(source_id, unit_id, our_database_session)
+    found_source: ContentSource = fetch_content_source_by_id_or_raise(
+        source_id,
+        our_database_session,
+    )
+    found_theme: Theme = fetch_theme_by_id_or_raise(
+        found_source.theme_id,
+        our_database_session,
+    )
+
+    if not theme_requires_image(found_theme):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=IMAGE_NOT_USED_DETAIL,
+        )
 
     if len(payloads) != 1 or len(list(found_unit.images)) > 0:
         raise HTTPException(

@@ -1,15 +1,16 @@
 """Content sources: one kind of source, bound to a required theme.
 
-A unit keeps its id, has a name, and holds at most one image. Themes
-still store a concrete image path. They do not reference these rows.
+A unit keeps its id, has a name, and holds at most one image. Its text
+is one value per text element on that theme. Themes still store a
+concrete image path. They do not reference these rows.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, Text, UniqueConstraint, text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UuidPrimaryKeyMixin
@@ -133,20 +134,12 @@ class Unit(Base, UuidPrimaryKeyMixin, TimestampMixin):
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
-    free_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(Text),
-        nullable=False,
-        default=list,
-        server_default=text("'{}'"),
-    )
 
     source: Mapped[ContentSource] = relationship("ContentSource", back_populates="units")
-    fields: Mapped[list["UnitField"]] = relationship(
-        "UnitField",
+    element_texts: Mapped[list["UnitElementText"]] = relationship(
+        "UnitElementText",
         back_populates="unit",
         cascade="all, delete-orphan",
-        order_by="UnitField.position",
     )
     images: Mapped[list["UnitImage"]] = relationship(
         "UnitImage",
@@ -156,18 +149,16 @@ class Unit(Base, UuidPrimaryKeyMixin, TimestampMixin):
     )
 
 
-class UnitField(Base, UuidPrimaryKeyMixin):
-    """One labeled value on a unit, such as name or price."""
+class UnitElementText(Base, UuidPrimaryKeyMixin):
+    """The text a unit stores for one theme text element."""
 
-    __tablename__ = "unit_fields"
+    __tablename__ = "unit_element_texts"
     __table_args__ = (
         UniqueConstraint(
             "unit_id",
-            "position",
-            name="uq_unit_fields_unit_id_position",
+            "theme_element_id",
+            name="uq_unit_element_texts_unit_id_theme_element_id",
         ),
-        CheckConstraint(UNIT_POSITION_CHECK_SQL, name="ck_unit_fields_position"),
-        CheckConstraint(UNIT_FIELD_TEXT_CHECK_SQL, name="ck_unit_fields_text"),
     )
 
     unit_id: Mapped[uuid.UUID] = mapped_column(
@@ -176,11 +167,15 @@ class UnitField(Base, UuidPrimaryKeyMixin):
         nullable=False,
         index=True,
     )
-    position: Mapped[int] = mapped_column(Integer, nullable=False)
-    label: Mapped[str] = mapped_column(Text, nullable=False)
-    value: Mapped[str] = mapped_column(Text, nullable=False)
+    theme_element_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("theme_elements.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    value: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
 
-    unit: Mapped[Unit] = relationship("Unit", back_populates="fields")
+    unit: Mapped[Unit] = relationship("Unit", back_populates="element_texts")
 
 
 class UnitImage(Base, UuidPrimaryKeyMixin, TimestampMixin):

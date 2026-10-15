@@ -23,6 +23,7 @@ THEMES_ELEMENT_RECTANGLE_REVISION_ID: str = "themes_element_rectangle"
 SOURCES_DEFAULT_ALBUM_REVISION_ID: str = "sources_default_album"
 SOURCES_RESOURCE_FILES_REVISION_ID: str = "sources_resource_files"
 SOURCES_THEME_BOUND_REVISION_ID: str = "sources_theme_bound"
+UNIT_ELEMENT_TEXTS_REVISION_ID: str = "unit_element_texts"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -67,6 +68,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{THEMES_ELEMENT_RECTANGLE_REVISION_ID}.py",
                 f"{THEMES_SPACING_REVISION_ID}.py",
                 f"{THEMES_STATUS_REVISION_ID}.py",
+                f"{UNIT_ELEMENT_TEXTS_REVISION_ID}.py",
             ],
         )
 
@@ -534,6 +536,31 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("DROP TYPE content_source_kind", revision_source)
         self.assertIn('op.drop_table("resource_files")', revision_source)
         self.assertIn("Refusing to delete image paths", revision_source)
+
+    def test_unit_element_texts_follow_theme_bound_sources(self) -> None:
+        """Theme text rows replace free text, tags, and labeled fields."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{UNIT_ELEMENT_TEXTS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            UNIT_ELEMENT_TEXTS_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            SOURCES_THEME_BOUND_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "unit_element_texts"', revision_source)
+        self.assertIn('op.drop_column("units", "free_text")', revision_source)
+        self.assertIn('op.drop_column("units", "tags")', revision_source)
+        self.assertIn('op.drop_table("unit_fields")', revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

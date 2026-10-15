@@ -33,14 +33,24 @@ from app.api.v1.source_writes import (
 )
 from app.api.v1.sources import get_content_source
 from app.models.content_source import ContentSource, Unit, UnitImage
-from app.models.enums import AdvertisementType, BackgroundKind, ThemeStatus, UnitImageLicense
+from app.models.enums import (
+    AdvertisementType,
+    BackgroundKind,
+    ThemeElementAlignment,
+    ThemeElementBand,
+    ThemeElementContentKind,
+    ThemeElementTextSource,
+    ThemeStatus,
+    UnitImageLicense,
+)
 from app.models.theme import Theme
+from app.models.theme_element import ThemeElement
 from app.sources.default_album import DEFAULT_ALBUM_THEME_ID
 from app.sources.editing import (
-    EMPTY_UNIT_DETAIL,
     LICENSE_NOTE_DETAIL,
     collect_used_paths,
 )
+from app.sources.unit_theme import IMAGE_REQUIRED_DETAIL, UNKNOWN_TEXT_ELEMENT_DETAIL
 from tests.test_sources import _default_source_from_catalog
 
 
@@ -72,6 +82,7 @@ class _MemorySourceSession:
             element_margin=0,
             background_kind=BackgroundKind.COLOR,
         )
+        self.theme.elements = []
 
     def add(self, row: object) -> None:
         if isinstance(row, ContentSource) and row not in self.sources:
@@ -167,9 +178,11 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
     """Create, rename, edit, and the empty-unit rule."""
 
     def test_admin_creates_album_and_text_unit_then_reads_them_back(self) -> None:
-        """A text-only unit with a field and a tag is still there on GET."""
+        """A unit stores the value for the theme's text element."""
 
         session: _MemorySourceSession = _MemorySourceSession()
+        text_element: ThemeElement = _title_element(session.theme.id)
+        session.theme.elements.append(text_element)
         created: SourceReadResponse = create_content_source(
             SourceCreateRequest(name="Harbor notes", theme_id=session.theme.id),
             session,
@@ -179,9 +192,10 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
             created.id,
             UnitWriteRequest(
                 name="Fog",
-                free_text="Fog on the water",
-                tags=[" coast ", "coast", ""],
-                fields=[{"label": " Place ", "value": " Harbor "}],
+                texts=[{
+                    "theme_element_id": str(text_element.id),
+                    "value": "Fog on the water",
+                }],
             ),
             session,
             None,
@@ -195,12 +209,10 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         self.assertEqual(loaded_unit.id, unit.id)
         self.assertEqual(loaded_unit.name, "Fog")
         self.assertEqual(loaded.theme_id, session.theme.id)
-        self.assertEqual(loaded_unit.free_text, "Fog on the water")
-        self.assertEqual(loaded_unit.tags, ["coast"])
         self.assertEqual(loaded_unit.images, [])
-        self.assertEqual(len(loaded_unit.fields), 1)
-        self.assertEqual(loaded_unit.fields[0].label, "Place")
-        self.assertEqual(loaded_unit.fields[0].value, "Harbor")
+        self.assertEqual(len(loaded_unit.texts), 1)
+        self.assertEqual(loaded_unit.texts[0].theme_element_id, text_element.id)
+        self.assertEqual(loaded_unit.texts[0].value, "Fog on the water")
 
     def test_second_album_with_the_same_name_gets_a_suffixed_slug(self) -> None:
         """Slug stays unique. Rename does not change it."""
@@ -244,10 +256,11 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         self.assertEqual(session.sources, [])
         self.assertEqual(session.commit_count, 0)
 
-    def test_empty_unit_is_rejected_and_not_stored(self) -> None:
-        """Tags alone do not count. A half-filled field is also 400."""
+    def test_picture_theme_without_an_image_is_not_stored(self) -> None:
+        """A theme that needs an image rejects a unit that has none."""
 
         session: _MemorySourceSession = _MemorySourceSession()
+        session.theme.background_kind = BackgroundKind.PICTURE
         created: SourceReadResponse = create_content_source(
             SourceCreateRequest(name="Empty check", theme_id=session.theme.id),
             session,
@@ -257,35 +270,21 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as empty_error:
             create_unit(
                 created.id,
-                UnitWriteRequest(name="Empty", free_text="  ", tags=["  "], fields=[]),
+                UnitWriteRequest(name="Empty"),
                 session,
                 None,
             )
 
         self.assertEqual(empty_error.exception.status_code, 400)
-        self.assertEqual(empty_error.exception.detail, EMPTY_UNIT_DETAIL)
+        self.assertEqual(empty_error.exception.detail, IMAGE_REQUIRED_DETAIL)
         self.assertEqual(get_content_source(created.id, session).units, [])
 
-        with self.assertRaises(HTTPException) as field_error:
-            create_unit(
-                created.id,
-                UnitWriteRequest(
-                    name="Empty",
-                    free_text=None,
-                    tags=[],
-                    fields=[{"label": "Place", "value": "  "}],
-                ),
-                session,
-                None,
-            )
-
-        self.assertEqual(field_error.exception.status_code, 400)
-        self.assertEqual(get_content_source(created.id, session).units, [])
-
-    def test_patch_that_would_empty_a_text_unit_writes_nothing(self) -> None:
-        """The stored text stays when the replacement has no content."""
+    def test_unknown_text_element_writes_nothing(self) -> None:
+        """A text id from another theme is 400 and leaves the unit as it was."""
 
         session: _MemorySourceSession = _MemorySourceSession()
+        text_element: ThemeElement = _title_element(session.theme.id)
+        session.theme.elements.append(text_element)
         created: SourceReadResponse = create_content_source(
             SourceCreateRequest(name="Keep text", theme_id=session.theme.id),
             session,
@@ -293,7 +292,10 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         )
         unit: UnitReadResponse = create_unit(
             created.id,
-            UnitWriteRequest(name="Stay", free_text="Stay", tags=["keep"], fields=[]),
+            UnitWriteRequest(
+                name="Stay",
+                texts=[{"theme_element_id": str(text_element.id), "value": "Stay"}],
+            ),
             session,
             None,
         )
@@ -302,17 +304,20 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
             patch_unit(
                 created.id,
                 unit.id,
-                UnitWriteRequest(name="Stay", free_text="", tags=[], fields=[]),
+                UnitWriteRequest(
+                    name="Stay",
+                    texts=[{"theme_element_id": str(uuid.uuid4()), "value": "Gone"}],
+                ),
                 session,
                 None,
             )
 
         self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(raised.exception.detail, UNKNOWN_TEXT_ELEMENT_DETAIL)
         stored: Unit | None = session.get(Unit, unit.id)
         self.assertIsNotNone(stored)
         assert stored is not None
-        self.assertEqual(stored.free_text, "Stay")
-        self.assertEqual(list(stored.tags), ["keep"])
+        self.assertEqual(stored.element_texts[0].value, "Stay")
 
 
 class ImageMetadataAndDeleteTests(unittest.TestCase):
@@ -446,6 +451,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
         """After the in-use check, an empty unit is still 400."""
 
         session: _MemorySourceSession = _MemorySourceSession()
+        session.theme.background_kind = BackgroundKind.PICTURE
         session.sources.append(_default_source_from_catalog())
         source: ContentSource = session.sources[0]
         unit: Unit = list(source.units)[0]
@@ -459,7 +465,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
                 delete_unit_image(source.id, unit.id, image.id, session, None)
 
         self.assertEqual(raised.exception.status_code, 400)
-        self.assertEqual(raised.exception.detail, EMPTY_UNIT_DETAIL)
+        self.assertEqual(raised.exception.detail, IMAGE_REQUIRED_DETAIL)
         self.assertEqual(session.deleted, [])
 
 
@@ -491,6 +497,31 @@ class UsedPathCollectionTests(unittest.TestCase):
         )
 
         self.assertEqual(used_paths, {background_path, element_path, slide_path})
+
+
+def _title_element(theme_id: uuid.UUID) -> ThemeElement:
+    """One text element the unit form can fill."""
+
+    text_element: ThemeElement = ThemeElement(
+        id=uuid.uuid4(),
+        theme_id=theme_id,
+        band=ThemeElementBand.TOP,
+        sort_order=0,
+        content_kind=ThemeElementContentKind.TEXT,
+        text_source=ThemeElementTextSource.TITLE,
+        font_family="DejaVu Sans",
+        font_size=32,
+        font_color="#112233",
+        alignment=ThemeElementAlignment.LEFT,
+        bold=False,
+        italic=False,
+        underline=False,
+        strikethrough=False,
+        rectangle_opacity=100,
+        rectangle_radius=0,
+    )
+
+    return text_element
 
 
 if __name__ == "__main__":

@@ -21,32 +21,33 @@ from app.api.v1.schemas import (
     SourceReadResponse,
     UnitImageMetadataPatch,
     UnitImageReadResponse,
+    UnitElementTextWrite,
     UnitReadResponse,
     UnitWriteRequest,
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
-from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
+from app.models.content_source import ContentSource, Unit, UnitElementText, UnitImage
+from app.models.theme import Theme
 from app.models.enums import UnitImageMediaType
 from app.models.ops_user import OpsUser
 from app.settings import get_settings
 from app.sources.editing import (
     ALBUM_IN_USE_DETAIL,
-    BLANK_FIELD_DETAIL,
     BLANK_NAME_DETAIL,
-    EMPTY_UNIT_DETAIL,
     IMAGE_IN_USE_DETAIL,
     UNIT_IN_USE_DETAIL,
     allocate_unique_source_slug,
     in_use_detail,
     new_row_id,
-    normalize_field_writes,
-    normalize_free_text,
     normalize_image_metadata,
-    normalize_tags,
     slugify_source_name,
     stored_paths_in_use,
-    unit_has_content,
+)
+from app.sources.unit_theme import (
+    IMAGE_REQUIRED_DETAIL,
+    text_values_for_theme,
+    theme_requires_image,
 )
 from app.storage.artifacts import ArtifactAssetPathEscapeError
 from app.themes.default_images import resolve_theme_image_path
@@ -217,28 +218,33 @@ def create_unit(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> UnitReadResponse:
-    """Add a unit. An empty unit is 400 and is not stored."""
+    """Add a unit. A theme that needs an image is 400 here."""
 
     _ = current_ops_operator
     found_source: ContentSource = fetch_content_source_by_id_or_raise(
         source_id,
         our_database_session,
     )
+    found_theme: Theme = fetch_theme_by_id_or_raise(
+        found_source.theme_id,
+        our_database_session,
+    )
     unit_name: str = _require_name(unit_write_request.name)
-    free_text, tags, fields = _parsed_unit_write(unit_write_request)
-    _require_unit_content(free_text, len(fields), 0)
+    stored_texts: list[tuple[uuid.UUID, str]] = _parsed_texts(
+        found_theme,
+        unit_write_request.texts,
+    )
+    _require_image_when_theme_needs_one(found_theme, 0)
     next_position: int = _next_unit_position(found_source.id, our_database_session)
     created_unit: Unit = Unit(
         id=new_row_id(),
         source_id=found_source.id,
         position=next_position,
         name=unit_name,
-        free_text=free_text,
-        tags=tags,
     )
     created_unit.images = []
-    created_unit.fields = []
-    _replace_fields(created_unit, fields, our_database_session)
+    created_unit.element_texts = []
+    _replace_texts(created_unit, stored_texts, our_database_session)
     our_database_session.add(created_unit)
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -258,17 +264,26 @@ def patch_unit(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> UnitReadResponse:
-    """Replace the name, free text, tags, and fields. Images are not changed here."""
+    """Replace the name and theme text. Images are not changed here."""
 
     _ = current_ops_operator
     found_unit: Unit = _fetch_unit_or_raise(source_id, unit_id, our_database_session)
+    found_source: ContentSource = fetch_content_source_by_id_or_raise(
+        source_id,
+        our_database_session,
+    )
+    found_theme: Theme = fetch_theme_by_id_or_raise(
+        found_source.theme_id,
+        our_database_session,
+    )
     unit_name: str = _require_name(unit_write_request.name)
-    free_text, tags, fields = _parsed_unit_write(unit_write_request)
-    _require_unit_content(free_text, len(fields), len(list(found_unit.images)))
+    stored_texts: list[tuple[uuid.UUID, str]] = _parsed_texts(
+        found_theme,
+        unit_write_request.texts,
+    )
+    _require_image_when_theme_needs_one(found_theme, len(list(found_unit.images)))
     found_unit.name = unit_name
-    found_unit.free_text = free_text
-    found_unit.tags = tags
-    _replace_fields(found_unit, fields, our_database_session)
+    _replace_texts(found_unit, stored_texts, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Unit could not be saved.",
@@ -359,12 +374,16 @@ def delete_unit_image(
         IMAGE_IN_USE_DETAIL,
     )
     found_unit: Unit = _fetch_unit_or_raise(source_id, unit_id, our_database_session)
-    remaining_images: int = len(list(found_unit.images)) - 1
-    _require_unit_content(
-        found_unit.free_text,
-        len(list(found_unit.fields)),
-        remaining_images,
+    found_source: ContentSource = fetch_content_source_by_id_or_raise(
+        source_id,
+        our_database_session,
     )
+    found_theme: Theme = fetch_theme_by_id_or_raise(
+        found_source.theme_id,
+        our_database_session,
+    )
+    remaining_images: int = len(list(found_unit.images)) - 1
+    _require_image_when_theme_needs_one(found_theme, remaining_images)
     stored_files: list[tuple[str, str | None]] = [
         (found_image.relative_path, found_image.thumbnail_path),
     ]
@@ -434,42 +453,41 @@ def _require_name(raw_name: str) -> str:
     return album_name
 
 
-def _parsed_unit_write(
-    unit_write_request: UnitWriteRequest,
-) -> tuple[str | None, list[str], list[tuple[str, str]]]:
-    """Normalize text, tags, and fields. A half-filled field is 400."""
+def _parsed_texts(
+    theme: Theme,
+    text_writes: list[UnitElementTextWrite],
+) -> list[tuple[uuid.UUID, str]]:
+    """Return one value per text element. A foreign element id is 400."""
 
-    free_text: str | None = normalize_free_text(unit_write_request.free_text)
-    tags: list[str] = normalize_tags(unit_write_request.tags)
-    raw_fields: list[tuple[str, str]] = [
-        (field.label, field.value) for field in unit_write_request.fields
+    submitted_texts: list[tuple[uuid.UUID, str]] = [
+        (text_write.theme_element_id, text_write.value)
+        for text_write in text_writes
     ]
 
     try:
-        fields: list[tuple[str, str]] = normalize_field_writes(raw_fields)
-    except ValueError as field_error:
+        stored_texts: list[tuple[uuid.UUID, str]] = text_values_for_theme(
+            theme,
+            submitted_texts,
+        )
+    except ValueError as text_error:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(field_error) or BLANK_FIELD_DETAIL,
-        ) from field_error
+            detail=str(text_error),
+        ) from text_error
 
-    return free_text, tags, fields
+    return stored_texts
 
 
-def _require_unit_content(
-    free_text: str | None,
-    field_count: int,
-    image_count: int,
-) -> None:
-    """400 when the unit would have no image and no text."""
+def _require_image_when_theme_needs_one(theme: Theme, image_count: int) -> None:
+    """400 when a picture theme would be left without its unit image."""
 
-    if unit_has_content(free_text, field_count, image_count):
+    if not theme_requires_image(theme) or image_count > 0:
 
         return
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=EMPTY_UNIT_DETAIL,
+        detail=IMAGE_REQUIRED_DETAIL,
     )
 
 
@@ -531,28 +549,27 @@ def _next_unit_position(source_id: uuid.UUID, our_database_session: Session) -> 
     return next_position
 
 
-def _replace_fields(
+def _replace_texts(
     unit: Unit,
-    fields: list[tuple[str, str]],
+    stored_texts: list[tuple[uuid.UUID, str]],
     our_database_session: Session,
 ) -> None:
-    """Replace labeled fields. Positions restart at 0."""
+    """Replace theme text. One row per text element, including blanks."""
 
-    for existing_field in list(unit.fields):
-        our_database_session.delete(existing_field)
+    for existing_text in list(unit.element_texts):
+        our_database_session.delete(existing_text)
 
-    unit.fields = []
+    unit.element_texts = []
 
-    for position, (label, value) in enumerate(fields):
-        created_field: UnitField = UnitField(
+    for theme_element_id, value in stored_texts:
+        created_text: UnitElementText = UnitElementText(
             id=new_row_id(),
             unit_id=unit.id,
-            position=position,
-            label=label,
+            theme_element_id=theme_element_id,
             value=value,
         )
-        unit.fields.append(created_field)
-        our_database_session.add(created_field)
+        unit.element_texts.append(created_text)
+        our_database_session.add(created_text)
 
 
 def _fetch_unit_or_raise(

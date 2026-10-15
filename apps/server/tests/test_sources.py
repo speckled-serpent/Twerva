@@ -114,7 +114,7 @@ class ContentSourceReadApiTests(unittest.TestCase):
     """GET list and GET one source. Writes live beside these reads."""
 
     def test_get_default_returns_six_licensed_image_only_units(self) -> None:
-        """Detail includes each path, license, and empty text, fields, and tags."""
+        """Detail includes each path, license, and no theme text."""
 
         source: ContentSource = _default_source_from_catalog()
         fake_session: MagicMock = MagicMock()
@@ -130,9 +130,7 @@ class ContentSourceReadApiTests(unittest.TestCase):
 
         for unit, filename in zip(response.units, DEFAULT_IMAGE_FILENAMES, strict=True):
             self.assertEqual(unit.name, default_unit_seeds()[unit.position].name)
-            self.assertIsNone(unit.free_text)
-            self.assertEqual(unit.tags, [])
-            self.assertEqual(unit.fields, [])
+            self.assertEqual(unit.texts, [])
             self.assertEqual(len(unit.images), 1)
             image = unit.images[0]
             licenses.add(image.license)
@@ -269,8 +267,6 @@ def _default_source_from_catalog() -> ContentSource:
             source_id=source.id,
             position=seed.position,
             name=seed.name,
-            free_text=None,
-            tags=[],
             created_at=now,
             updated_at=now,
         )
@@ -293,7 +289,7 @@ def _default_source_from_catalog() -> ContentSource:
             updated_at=now,
         )
         unit.images = [image]
-        unit.fields = []
+        unit.element_texts = []
         units.append(unit)
 
     source.units = units

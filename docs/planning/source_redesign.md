@@ -35,6 +35,8 @@ Each phase can ship and be reviewed on its own. Later phases assume the earlier 
 
 ### 2. Theme-shaped unit editor and in-source preview
 
+**Status.** Done.
+
 **Scope.** Opening a source shows units that follow its theme. The image field is shown when the theme requires an image (an image element, or a picture background). There is one text input per theme text element. Preview, while the operator is editing, renders that theme with this unit's image and text. Theme samples already preview a theme without creating an artifact; this preview is that same kind of frame, filled from the unit.
 
 **Out of scope.** Exclusion rules, LLM generation, the campaign run, and word-count warnings. Images stay a manual upload.

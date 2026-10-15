@@ -837,12 +837,10 @@ class OpsUserResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
-class UnitFieldReadResponse(BaseModel):
-    """One labeled field on a unit."""
+class UnitElementTextReadResponse(BaseModel):
+    """Text stored on a unit for one theme text element."""
 
-    id: uuid.UUID
-    position: int
-    label: str
+    theme_element_id: uuid.UUID
     value: str
 
 
@@ -865,14 +863,12 @@ class UnitImageReadResponse(BaseModel):
 
 
 class UnitReadResponse(BaseModel):
-    """One unit: name, free text, tags, fields, and at most one image."""
+    """One unit: name, one text per theme text element, and at most one image."""
 
     id: uuid.UUID
     position: int
     name: str
-    free_text: str | None
-    tags: list[str]
-    fields: list[UnitFieldReadResponse]
+    texts: list[UnitElementTextReadResponse]
     images: list[UnitImageReadResponse]
 
 
@@ -917,24 +913,35 @@ class SourcePatchRequest(BaseModel):
     name: str
 
 
-class UnitFieldWrite(BaseModel):
-    """One labeled field to store on a unit."""
+class UnitElementTextWrite(BaseModel):
+    """One theme text element and the value to store on the unit."""
 
     model_config = ConfigDict(extra="forbid")
 
-    label: str
-    value: str
+    theme_element_id: uuid.UUID
+    value: str = ""
 
 
 class UnitWriteRequest(BaseModel):
-    """Name, free text, tags, and fields for create or replace. Images stay put."""
+    """Name and one text value per theme text element. Images stay put."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    free_text: str | None = None
-    tags: list[str] = Field(default_factory=list)
-    fields: list[UnitFieldWrite] = Field(default_factory=list)
+    texts: list[UnitElementTextWrite] = Field(default_factory=list)
+
+
+class UnitPreviewRequest(BaseModel):
+    """Unsaved text, and an optional saved unit, for one frame.
+
+    The handler renders the source's theme. It does not write a unit,
+    an artifact, or a preview file.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    texts: list[UnitElementTextWrite] = Field(default_factory=list)
+    unit_id: uuid.UUID | None = None
 
 
 class UnitImageMetadataPatch(BaseModel):
@@ -975,12 +982,10 @@ class UnitImageCreateItem(BaseModel):
 
 
 class UnitWithImagesCreateRequest(BaseModel):
-    """Name, free text, and the one image that can make an image-only unit valid."""
+    """Name, theme text, and the one image when the theme needs one."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    free_text: str | None = None
-    tags: list[str] = Field(default_factory=list)
-    fields: list[UnitFieldWrite] = Field(default_factory=list)
+    texts: list[UnitElementTextWrite] = Field(default_factory=list)
     images: list[UnitImageCreateItem] = Field(default_factory=list)

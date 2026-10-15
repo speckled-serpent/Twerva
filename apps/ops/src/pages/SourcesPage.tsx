@@ -7,6 +7,7 @@ import {
   deleteSourceUnit,
   deleteUnitImage,
   fetchSourceById,
+  fetchThemeById,
   listAlbums,
   patchSourceUnit,
   patchUnitImageMetadata,
@@ -18,7 +19,9 @@ import {
 import type {
   SourceListItemResponse,
   SourceReadResponse,
-  UnitFieldWrite,
+  ThemeElementReadResponse,
+  ThemeReadResponse,
+  UnitElementTextWrite,
   UnitImageCreatePayload,
   UnitImageLicense,
   UnitImageReadResponse,
@@ -34,6 +37,13 @@ import {
 import { firstUnitImageDraftError } from "./unitImageDraft";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { UnitLivePreview } from "./UnitLivePreview";
+import {
+  labelForTextElement,
+  orderedTextElements,
+  textDraftsForTheme,
+  themeRequiresImage,
+} from "./unitThemeShape";
 
 const LICENSE_OPTIONS: UnitImageLicense[] = [
   "cc0",
@@ -41,11 +51,6 @@ const LICENSE_OPTIONS: UnitImageLicense[] = [
   "owned",
   "licensed",
 ];
-
-interface FieldDraft {
-  label: string;
-  value: string;
-}
 
 export interface SourcesOpenRequest {
   sourceId: string;
@@ -57,7 +62,7 @@ export interface SourcesPageProps {
 }
 
 /**
- * Sources: one list of theme-bound sources, and a simple unit editor.
+ * Sources: one list of theme-bound sources, and a unit editor that follows the theme.
  *
  * @param props - Optional open request from Create Source
  * @returns The Sources page
@@ -544,7 +549,6 @@ function UnitCardBody({ sourceId, unit }: UnitCardBodyProps): ReactElement {
 
   const firstImage: UnitImageReadResponse | undefined = unit.images[0];
   const excerpt: string = unitExcerpt(unit);
-  const tagLine: string = unit.tags.join(", ");
 
   return (
     <>
@@ -558,7 +562,6 @@ function UnitCardBody({ sourceId, unit }: UnitCardBodyProps): ReactElement {
         />
       )}
       {firstImage === undefined ? null : <p className="unit-card-excerpt">{excerpt}</p>}
-      {tagLine === "" ? null : <p className="unit-card-tags">{tagLine}</p>}
     </>
   );
 }
@@ -586,10 +589,11 @@ function UnitEditorView({
 }: UnitEditorViewProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
+  const [theme, setTheme] = useState<ThemeReadResponse | null>(null);
+  const [themeError, setThemeError] = useState<unknown>(null);
+  const [themeReady, setThemeReady] = useState<boolean>(false);
   const [unitName, setUnitName] = useState<string>(unit?.name ?? "");
-  const [freeText, setFreeText] = useState<string>(unit?.free_text ?? "");
-  const [tagsText, setTagsText] = useState<string>(unit === null ? "" : unit.tags.join(", "));
-  const [fieldDrafts, setFieldDrafts] = useState<FieldDraft[]>(fieldDraftsFromUnit(unit));
+  const [textValues, setTextValues] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
@@ -597,6 +601,16 @@ function UnitEditorView({
   const [showImageErrors, setShowImageErrors] = useState<boolean>(false);
   const imageDraftsRef = useRef<UnitImageDraft[]>(imageDrafts);
   imageDraftsRef.current = imageDrafts;
+  const needsImage: boolean = theme !== null && themeRequiresImage(theme);
+  const textElements: ThemeElementReadResponse[] = theme === null
+    ? []
+    : orderedTextElements(theme.elements);
+  const textWrites: UnitElementTextWrite[] = textElements.map(
+    (element): UnitElementTextWrite => ({
+      theme_element_id: element.id,
+      value: textValues[element.id] ?? "",
+    }),
+  );
 
   useEffect((): (() => void) => {
     return (): void => {
@@ -606,12 +620,60 @@ function UnitEditorView({
     };
   }, []);
 
+  useEffect((): (() => void) => {
+    if (source === null) {
+      return (): void => {
+        return;
+      };
+    }
+
+    let isCancelled: boolean = false;
+    const themeId: string = source.theme_id;
+
+    const loadTheme = async (): Promise<void> => {
+      setThemeReady(false);
+
+      try {
+        const loadedTheme: ThemeReadResponse = await fetchThemeById(themeId);
+
+        if (isCancelled) {
+          return;
+        }
+
+        setTheme(loadedTheme);
+        setThemeError(null);
+      } catch (caughtError: unknown) {
+        if (isCancelled) {
+          return;
+        }
+
+        setTheme(null);
+        setThemeError(caughtError);
+      } finally {
+        if (!isCancelled) {
+          setThemeReady(true);
+        }
+      }
+    };
+
+    void loadTheme();
+
+    return (): void => {
+      isCancelled = true;
+    };
+  }, [source?.id, source?.theme_id]);
+
   useEffect((): void => {
     setUnitName(unit?.name ?? "");
-    setFreeText(unit?.free_text ?? "");
-    setTagsText(unit === null ? "" : unit.tags.join(", "));
-    setFieldDrafts(fieldDraftsFromUnit(unit));
-  }, [unit?.id]);
+
+    if (theme === null) {
+      setTextValues({});
+
+      return;
+    }
+
+    setTextValues(textDraftsForTheme(theme, unit));
+  }, [unit?.id, theme]);
 
   useEffect((): void => {
     const imagesSection: HTMLElement | null = document.getElementById("unit-images");
@@ -624,17 +686,24 @@ function UnitEditorView({
   const handleSave = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
     submitEvent.preventDefault();
 
-    if (!canWrite || source === null) {
+    if (!canWrite || source === null || theme === null) {
       return;
     }
 
-    const imageError: string | null = unit === null
+    const imageError: string | null = unit === null && needsImage
       ? firstUnitImageDraftError(imageDrafts)
       : null;
 
     if (imageError !== null) {
       setShowImageErrors(true);
       setSaveError(new Error(imageError));
+
+      return;
+    }
+
+    if (unit === null && needsImage && imageDrafts.length === 0) {
+      setShowImageErrors(true);
+      setSaveError(new Error("This theme needs an image on the unit."));
 
       return;
     }
@@ -647,9 +716,7 @@ function UnitEditorView({
 
     const unitWriteRequest: UnitWriteRequest = {
       name: unitName.trim(),
-      free_text: freeText,
-      tags: tagsFromText(tagsText),
-      fields: fieldsFromDrafts(fieldDrafts),
+      texts: textWrites,
     };
 
     setIsSaving(true);
@@ -669,7 +736,7 @@ function UnitEditorView({
       );
       let savedUnit: UnitReadResponse;
 
-      if (unit === null && imagePayloads.length > 0) {
+      if (unit === null && needsImage) {
         savedUnit = await createUnitWithImages(source.id, unitWriteRequest, imagePayloads);
       } else if (unit === null) {
         savedUnit = await createSourceUnit(source.id, unitWriteRequest);
@@ -693,9 +760,9 @@ function UnitEditorView({
   };
 
   const pageTitle: string = unit === null ? "New unit" : "Unit";
-  const pageLede: string = unit === null
-    ? "Give the unit a name. Add one image, free text, or a labeled field."
-    : "One image, free text, and labeled fields. The theme-shaped editor comes later.";
+  const pageLede: string = (
+    "The fields follow this source's theme. Preview shows the unit on that theme."
+  );
 
   return (
     <section>
@@ -713,172 +780,121 @@ function UnitEditorView({
       </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
+      <ErrorBanner error={themeError} />
       <ErrorBanner error={saveError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
       {source === null ? (
         <p>Loading album…</p>
       ) : unit === null && !canWrite ? (
         <p>This unit is not available.</p>
+      ) : !themeReady ? (
+        <p>Loading theme…</p>
+      ) : theme === null ? (
+        <p>This theme is not available.</p>
       ) : (
-        <>
-          {unit === null ? null : (
-            <section id="unit-images" className="unit-images">
-              <h2>Images</h2>
-              <p className="field-hint">
-                Each image shows its thumbnail, license, source, and note.
-              </p>
-              {unit.images.length === 0 ? <p>No images on this unit yet.</p> : null}
-              {unit.images.map((image: UnitImageReadResponse): ReactElement => (
-                <ImageMetadataEditor
-                  key={image.id}
-                  sourceId={source.id}
-                  unitId={unit.id}
-                  image={image}
-                  canWrite={canWrite}
-                  onChanged={(message: string): void => {
-                    onImagesChanged(message);
-                  }}
-                />
-              ))}
-              {canWrite && unit.images.length === 0 ? (
-                <ImageIntakeForm
-                  sourceId={source.id}
-                  unitId={unit.id}
-                  onChanged={(message: string): void => {
-                    onImagesChanged(message);
-                  }}
+        <div className="theme-editor-layout">
+          <div className="theme-editor-main">
+            {unit === null || !needsImage ? null : (
+              <section id="unit-images" className="unit-images">
+                <h2>Image</h2>
+                <p className="field-hint">
+                  This theme uses one image on the unit.
+                </p>
+                {unit.images.length === 0 ? <p>No image on this unit yet.</p> : null}
+                {unit.images.map((image: UnitImageReadResponse): ReactElement => (
+                  <ImageMetadataEditor
+                    key={image.id}
+                    sourceId={source.id}
+                    unitId={unit.id}
+                    image={image}
+                    canWrite={canWrite}
+                    onChanged={(message: string): void => {
+                      onImagesChanged(message);
+                    }}
+                  />
+                ))}
+                {canWrite && unit.images.length === 0 ? (
+                  <ImageIntakeForm
+                    sourceId={source.id}
+                    unitId={unit.id}
+                    onChanged={(message: string): void => {
+                      onImagesChanged(message);
+                    }}
+                  />
+                ) : null}
+              </section>
+            )}
+            <form
+              className="stack-form"
+              onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+                void handleSave(submitEvent);
+              }}
+            >
+              {unit === null && needsImage ? (
+                <NewUnitImages
+                  drafts={imageDrafts}
+                  showFieldErrors={showImageErrors}
+                  onDraftsChange={setImageDrafts}
                 />
               ) : null}
-            </section>
-          )}
-          <form
-            className="stack-form"
-            onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-              void handleSave(submitEvent);
-            }}
-          >
-            {unit === null ? (
-              <NewUnitImages
-                drafts={imageDrafts}
-                showFieldErrors={showImageErrors}
-                onDraftsChange={setImageDrafts}
-              />
-            ) : null}
-            <label>
-              Name
-              <input
-                id="unit-name"
-                value={unitName}
-                disabled={!canWrite}
-                onChange={(changeEvent): void => {
-                  setUnitName(changeEvent.target.value);
-                }}
-              />
-            </label>
-            <p className="field-hint">The id stays the same. The name is what you call this unit.</p>
-            {unit === null ? null : (
-              <p className="field-hint">Id {unit.id}</p>
-            )}
-            <label>
-              Free text
-              <textarea
-                id="unit-free-text"
-                rows={4}
-                value={freeText}
-                disabled={!canWrite}
-                onChange={(changeEvent): void => {
-                  setFreeText(changeEvent.target.value);
-                }}
-              />
-            </label>
-            <fieldset>
-              <legend>Labeled fields</legend>
-              {fieldDrafts.map((fieldDraft: FieldDraft, fieldIndex: number): ReactElement => (
-                <div className="field-row" key={fieldIndex}>
-                  <label>
-                    Label
-                    <input
-                      aria-label={`Field ${fieldIndex + 1} label`}
-                      value={fieldDraft.label}
-                      disabled={!canWrite}
-                      onChange={(changeEvent): void => {
-                        setFieldDrafts(replaceFieldDraft(fieldDrafts, fieldIndex, {
-                          label: changeEvent.target.value,
-                          value: fieldDraft.value,
-                        }));
-                      }}
-                    />
-                  </label>
-                  <label>
-                    Value
-                    <input
-                      aria-label={`Field ${fieldIndex + 1} value`}
-                      value={fieldDraft.value}
-                      disabled={!canWrite}
-                      onChange={(changeEvent): void => {
-                        setFieldDrafts(replaceFieldDraft(fieldDrafts, fieldIndex, {
-                          label: fieldDraft.label,
-                          value: changeEvent.target.value,
-                        }));
-                      }}
-                    />
-                  </label>
-                  {canWrite ? (
-                    <button
-                      type="button"
-                      onClick={(): void => {
-                        setFieldDrafts(removeFieldDraft(fieldDrafts, fieldIndex));
-                      }}
-                    >
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
+              <label>
+                Name
+                <input
+                  id="unit-name"
+                  value={unitName}
+                  disabled={!canWrite}
+                  onChange={(changeEvent): void => {
+                    setUnitName(changeEvent.target.value);
+                  }}
+                />
+              </label>
+              <p className="field-hint">The id stays the same. The name is what you call this unit.</p>
+              {unit === null ? null : (
+                <p className="field-hint">Id {unit.id}</p>
+              )}
+              {textElements.map((element: ThemeElementReadResponse): ReactElement => (
+                <label key={element.id}>
+                  {labelForTextElement(element, textElements)}
+                  <textarea
+                    id={`unit-text-${element.id}`}
+                    rows={3}
+                    value={textValues[element.id] ?? ""}
+                    disabled={!canWrite}
+                    onChange={(changeEvent): void => {
+                      setTextValues({
+                        ...textValues,
+                        [element.id]: changeEvent.target.value,
+                      });
+                    }}
+                  />
+                </label>
               ))}
               {canWrite ? (
-                <button
-                  id="add-field"
-                  type="button"
-                  onClick={(): void => {
-                    setFieldDrafts([...fieldDrafts, { label: "", value: "" }]);
-                  }}
-                >
-                  Add field
-                </button>
-              ) : null}
-            </fieldset>
-            <label>
-              Tags
-              <input
-                id="unit-tags"
-                value={tagsText}
-                disabled={!canWrite}
-                onChange={(changeEvent): void => {
-                  setTagsText(changeEvent.target.value);
-                }}
-              />
-            </label>
-            <p>Separate tags with commas. A unit needs an image, free text, or a field.</p>
-            {canWrite ? (
-              <div className="button-row">
-                <button id="save-unit" type="submit" disabled={isSaving}>
-                  {isSaving ? "Saving…" : "Save unit"}
-                </button>
-                {unit === null ? null : (
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={(): void => {
-                      setPendingDelete(true);
-                    }}
-                  >
-                    Delete unit
+                <div className="button-row">
+                  <button id="save-unit" type="submit" disabled={isSaving}>
+                    {isSaving ? "Saving…" : "Save unit"}
                   </button>
-                )}
-              </div>
-            ) : null}
-          </form>
-        </>
+                  {unit === null ? null : (
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={(): void => {
+                        setPendingDelete(true);
+                      }}
+                    >
+                      Delete unit
+                    </button>
+                  )}
+                </div>
+              ) : null}
+            </form>
+          </div>
+          <UnitLivePreview
+            sourceId={source.id}
+            unitId={unit?.id ?? null}
+            texts={textWrites}
+          />
+        </div>
       )}
       {pendingDelete && source !== null && unit !== null ? (
         <DeleteConfirmDialog
@@ -1410,14 +1426,12 @@ function findUnit(
 
 function unitExcerpt(unit: UnitReadResponse): string {
 
-  if (unit.free_text !== null && unit.free_text.trim() !== "") {
-    return unit.free_text;
-  }
+  for (const elementText of unit.texts) {
+    const trimmedValue: string = elementText.value.trim();
 
-  const firstField: UnitFieldWrite | undefined = unit.fields[0];
-
-  if (firstField !== undefined) {
-    return `${firstField.label}: ${firstField.value}`;
+    if (trimmedValue !== "") {
+      return trimmedValue;
+    }
   }
 
   const firstImage: UnitImageReadResponse | undefined = unit.images[0];
@@ -1427,64 +1441,4 @@ function unitExcerpt(unit: UnitReadResponse): string {
   }
 
   return "Empty unit";
-}
-
-function fieldDraftsFromUnit(unit: UnitReadResponse | null): FieldDraft[] {
-
-  if (unit === null) {
-    return [];
-  }
-
-  const drafts: FieldDraft[] = unit.fields.map((field: UnitFieldWrite): FieldDraft => {
-    return { label: field.label, value: field.value };
-  });
-
-  return drafts;
-}
-
-function tagsFromText(tagsText: string): string[] {
-
-  const tags: string[] = tagsText
-    .split(",")
-    .map((rawTag: string): string => rawTag.trim())
-    .filter((tag: string): boolean => tag !== "");
-
-  return tags;
-}
-
-function fieldsFromDrafts(fieldDrafts: FieldDraft[]): UnitFieldWrite[] {
-
-  const fields: UnitFieldWrite[] = fieldDrafts.map((fieldDraft: FieldDraft): UnitFieldWrite => {
-    return { label: fieldDraft.label, value: fieldDraft.value };
-  });
-
-  return fields;
-}
-
-function replaceFieldDraft(
-  fieldDrafts: FieldDraft[],
-  fieldIndex: number,
-  nextDraft: FieldDraft,
-): FieldDraft[] {
-
-  const nextDrafts: FieldDraft[] = fieldDrafts.map(
-    (fieldDraft: FieldDraft, index: number): FieldDraft => {
-      if (index === fieldIndex) {
-        return nextDraft;
-      }
-
-      return fieldDraft;
-    },
-  );
-
-  return nextDrafts;
-}
-
-function removeFieldDraft(fieldDrafts: FieldDraft[], fieldIndex: number): FieldDraft[] {
-
-  const nextDrafts: FieldDraft[] = fieldDrafts.filter(
-    (_fieldDraft: FieldDraft, index: number): boolean => index !== fieldIndex,
-  );
-
-  return nextDrafts;
 }
