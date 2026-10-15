@@ -347,6 +347,7 @@ export type ThemeElementTextSource =
 export type ThemeElementAlignment = "left" | "center" | "right";
 
 export interface ThemeElementCreateRequest {
+  name: string;
   band: ThemeElementBand;
   content_kind: ThemeElementContentKind;
   sort_order?: number | null;
@@ -367,6 +368,7 @@ export interface ThemeElementCreateRequest {
 }
 
 export interface ThemeElementPatchRequest {
+  name?: string | null;
   band?: ThemeElementBand | null;
   content_kind?: ThemeElementContentKind | null;
   sort_order?: number | null;
@@ -392,6 +394,7 @@ export interface ThemeElementReadResponse {
   band: ThemeElementBand;
   sort_order: number;
   content_kind: ThemeElementContentKind;
+  name: string;
   rectangle_color: string | null;
   rectangle_opacity: number;
   rectangle_radius: number;

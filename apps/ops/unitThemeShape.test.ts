@@ -14,6 +14,7 @@ const titleElement: ThemeElementReadResponse = {
   band: "bottom",
   sort_order: 0,
   content_kind: "text",
+  name: "Title",
   rectangle_color: null,
   rectangle_opacity: 100,
   rectangle_radius: 0,
@@ -36,6 +37,7 @@ const headingElement: ThemeElementReadResponse = {
   ...titleElement,
   id: "heading-top",
   band: "top",
+  name: "Interest heading",
   text_source: "interest_heading",
 };
 
@@ -51,6 +53,7 @@ const imageElement: ThemeElementReadResponse = {
   id: "image-middle",
   band: "middle",
   content_kind: "image",
+  name: "Image",
   text_source: null,
   image_asset_ref: "theme-defaults/ocean-waves.jpg",
 };
@@ -96,7 +99,15 @@ assert.deepEqual(orderedIds, ["heading-top", "title-bottom"]);
 
 const textElements: ThemeElementReadResponse[] = [headingElement, titleElement, secondTitle];
 assert.equal(labelForTextElement(headingElement, textElements), "Interest heading");
+assert.equal(labelForTextElement(titleElement, textElements), "Title (Bottom, 0)");
 assert.equal(labelForTextElement(secondTitle, textElements), "Title (Middle, 1)");
+
+const subjectElement: ThemeElementReadResponse = {
+  ...titleElement,
+  id: "subject-top",
+  name: "Subject",
+};
+assert.equal(labelForTextElement(subjectElement, [subjectElement]), "Subject");
 
 const drafts: Record<string, string> = textDraftsForTheme(
   themeWith("color", [titleElement, headingElement]),

@@ -266,6 +266,7 @@ class ThemePreviewTests(unittest.TestCase):
                 source_item_id=source_item.id,
                 elements=[
                     ThemeElementCreateRequest(
+                        name="Title",
                         band=ThemeElementBand.TOP,
                         content_kind=ThemeElementContentKind.TEXT,
                         text_source=ThemeElementTextSource.TITLE,
@@ -396,6 +397,7 @@ def _text_element_request(
     """One valid text element. Family may be missing on this machine."""
 
     text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+        name="Title",
         band=band,
         content_kind=ThemeElementContentKind.TEXT,
         text_source=ThemeElementTextSource.TITLE,

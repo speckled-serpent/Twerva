@@ -656,6 +656,7 @@ def _title_element(theme_id: uuid.UUID) -> ThemeElement:
         band=ThemeElementBand.TOP,
         sort_order=0,
         content_kind=ThemeElementContentKind.TEXT,
+        name="Title",
         text_source=ThemeElementTextSource.TITLE,
         font_family="DejaVu Sans",
         font_size=32,

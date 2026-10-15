@@ -116,6 +116,7 @@ def _text_element(session: _MemorySourceSession) -> ThemeElement:
         band=ThemeElementBand.TOP,
         sort_order=0,
         content_kind=ThemeElementContentKind.TEXT,
+        name="Title",
         rectangle_color=None,
         rectangle_opacity=100,
         rectangle_radius=0,

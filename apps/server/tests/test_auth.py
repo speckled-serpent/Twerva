@@ -759,6 +759,7 @@ class ReaderRbacHttpTests(unittest.TestCase):
         create_element_response = self.test_client.post(
             f"/api/v1/themes/{uuid.uuid4()}/elements",
             json={
+                "name": "Title",
                 "band": "top",
                 "content_kind": "text",
                 "text_source": "title",

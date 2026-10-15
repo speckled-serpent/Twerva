@@ -5,7 +5,9 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+from httpx import Response
 from pydantic import ValidationError
 
 from app.api.v1.theme_elements import (
@@ -32,6 +34,7 @@ from app.api.v1.themes import (
 )
 from app.api.v1.schemas import (
     ThemeCreateRequest,
+    THEME_ELEMENT_NAME_REQUIRED_DETAIL,
     ThemeElementCreateRequest,
     ThemeElementPatchRequest,
     ThemeElementReadResponse,
@@ -996,6 +999,7 @@ class ThemeElementApiTests(unittest.TestCase):
         )
         element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
         text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            name="Title",
             band=ThemeElementBand.TOP,
             content_kind=ThemeElementContentKind.TEXT,
             text_source=ThemeElementTextSource.TITLE,
@@ -1005,6 +1009,7 @@ class ThemeElementApiTests(unittest.TestCase):
             alignment="left",
         )
         image_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            name="Image",
             band=ThemeElementBand.TOP,
             content_kind=ThemeElementContentKind.IMAGE,
             image_asset_ref="logos/mark.png",
@@ -1027,10 +1032,12 @@ class ThemeElementApiTests(unittest.TestCase):
             )
 
         self.assertIsNone(text_element.rectangle_color)
+        self.assertEqual(text_element.name, "Title")
         self.assertEqual(text_element.text_source, ThemeElementTextSource.TITLE)
         self.assertFalse(text_element.bold)
         self.assertEqual(text_element.sort_order, 0)
         self.assertEqual(image_element.image_asset_ref, "logos/mark.png")
+        self.assertEqual(image_element.name, "Image")
         self.assertIsNone(image_element.text_source)
         self.assertEqual(image_element.sort_order, 1)
         loaded_theme: ThemeReadResponse = get_theme_by_id(
@@ -1060,6 +1067,7 @@ class ThemeElementApiTests(unittest.TestCase):
 
         self.assertEqual(moved_element.band, ThemeElementBand.MIDDLE)
         self.assertEqual(moved_element.sort_order, 0)
+        self.assertEqual(moved_element.name, "Image")
         reloaded_theme: ThemeReadResponse = get_theme_by_id(
             paper_theme.id,
             element_session,
@@ -1074,12 +1082,120 @@ class ThemeElementApiTests(unittest.TestCase):
             [("top", "text", 0), ("middle", "image", 0)],
         )
 
+    def test_blank_name_is_rejected_and_a_trimmed_name_is_stored(self) -> None:
+        """Create and patch refuse a blank name. Surrounding spaces are dropped."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
+        name_application: FastAPI = FastAPI()
+
+        @name_application.post("/elements")
+        def create_named_element(
+            theme_element_create_request: ThemeElementCreateRequest,
+        ) -> dict[str, str]:
+
+            stored_name: dict[str, str] = {"name": theme_element_create_request.name}
+
+            return stored_name
+
+        @name_application.patch("/elements")
+        def patch_named_element(
+            theme_element_patch_request: ThemeElementPatchRequest,
+        ) -> dict[str, str | None]:
+
+            stored_name: dict[str, str | None] = {"name": theme_element_patch_request.name}
+
+            return stored_name
+
+        name_client: TestClient = TestClient(name_application)
+        missing_response: Response = name_client.post(
+            "/elements",
+            json={
+                "band": "top",
+                "content_kind": "text",
+                "text_source": "title",
+                "font_family": "DejaVu Sans",
+                "font_size": 32,
+                "font_color": "#112233",
+                "alignment": "left",
+            },
+        )
+        blank_response: Response = name_client.post(
+            "/elements",
+            json={
+                "name": "   ",
+                "band": "top",
+                "content_kind": "image",
+                "image_asset_ref": "logos/mark.png",
+            },
+        )
+        trimmed_response: Response = name_client.post(
+            "/elements",
+            json={
+                "name": "  Subject  ",
+                "band": "top",
+                "content_kind": "image",
+                "image_asset_ref": "logos/mark.png",
+            },
+        )
+        cleared_response: Response = name_client.patch("/elements", json={"name": " "})
+        null_response: Response = name_client.patch("/elements", json={"name": None})
+        omitted_response: Response = name_client.patch("/elements", json={"font_size": 40})
+
+        self.assertEqual(missing_response.status_code, 422)
+        self.assertEqual(blank_response.status_code, 422)
+        self.assertIn(THEME_ELEMENT_NAME_REQUIRED_DETAIL, blank_response.text)
+        self.assertEqual(trimmed_response.status_code, 200)
+        self.assertEqual(trimmed_response.json()["name"], "Subject")
+        self.assertEqual(cleared_response.status_code, 422)
+        self.assertIn(THEME_ELEMENT_NAME_REQUIRED_DETAIL, cleared_response.text)
+        self.assertEqual(null_response.status_code, 422)
+        self.assertIn(THEME_ELEMENT_NAME_REQUIRED_DETAIL, null_response.text)
+        self.assertEqual(omitted_response.status_code, 200)
+        self.assertIsNone(omitted_response.json()["name"])
+
+        with patch(
+            "app.api.v1.theme_elements.commit_database_session_or_raise_conflict",
+        ):
+            created_element: ThemeElementReadResponse = create_theme_element(
+                paper_theme.id,
+                ThemeElementCreateRequest(
+                    name="  Body  ",
+                    band=ThemeElementBand.TOP,
+                    content_kind=ThemeElementContentKind.TEXT,
+                    text_source=ThemeElementTextSource.TITLE,
+                    font_family="DejaVu Sans",
+                    font_size=32,
+                    font_color="#112233",
+                    alignment="left",
+                ),
+                element_session,
+                None,
+            )
+            renamed_element: ThemeElementReadResponse = patch_theme_element(
+                paper_theme.id,
+                created_element.id,
+                ThemeElementPatchRequest(name="  Caption  "),
+                element_session,
+                None,
+            )
+
+        self.assertEqual(created_element.name, "Body")
+        self.assertEqual(renamed_element.name, "Caption")
+
     def test_unknown_text_source_and_coordinates_are_rejected(self) -> None:
         """Sources outside the four Spotmu keys, and x/y/width, never persist."""
 
         with self.assertRaises(ValidationError):
             ThemeElementCreateRequest.model_validate(
                 {
+                    "name": "Title",
                     "band": "top",
                     "content_kind": "text",
                     "text_source": "caption",
@@ -1093,6 +1209,7 @@ class ThemeElementApiTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             ThemeElementCreateRequest.model_validate(
                 {
+                    "name": "Title",
                     "band": "top",
                     "content_kind": "text",
                     "text_source": "title",
@@ -1118,6 +1235,7 @@ class ThemeElementApiTests(unittest.TestCase):
         )
         element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
         gif_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            name="Image",
             band=ThemeElementBand.BOTTOM,
             content_kind=ThemeElementContentKind.IMAGE,
             image_asset_ref="logos/mark.gif",
@@ -1130,6 +1248,7 @@ class ThemeElementApiTests(unittest.TestCase):
         self.assertEqual(raised_gif.exception.detail, THEME_ELEMENT_IMAGE_REF_DETAIL)
         self.assertEqual(paper_theme.elements, [])
         parent_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            name="Image",
             band=ThemeElementBand.BOTTOM,
             content_kind=ThemeElementContentKind.IMAGE,
             image_asset_ref="../secret.png",
@@ -1158,6 +1277,7 @@ class ThemeElementApiTests(unittest.TestCase):
         )
         element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
         image_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            name="Image",
             band=ThemeElementBand.TOP,
             content_kind=ThemeElementContentKind.IMAGE,
             text_source=ThemeElementTextSource.TITLE,
@@ -1294,6 +1414,7 @@ class ThemeDuplicateTests(unittest.TestCase):
             band=ThemeElementBand.TOP,
             sort_order=0,
             content_kind=ThemeElementContentKind.TEXT,
+            name="Title",
             rectangle_color=None,
             text_source=ThemeElementTextSource.TITLE,
             font_family="DejaVu Sans",
@@ -1315,6 +1436,7 @@ class ThemeDuplicateTests(unittest.TestCase):
             band=ThemeElementBand.BOTTOM,
             sort_order=0,
             content_kind=ThemeElementContentKind.IMAGE,
+            name="Image",
             rectangle_color="#AABBCC",
             text_source=None,
             font_family=None,
@@ -1383,6 +1505,7 @@ class ThemeDuplicateTests(unittest.TestCase):
         ]
         self.assertEqual(len(set(copied_element_ids)), 2)
         self.assertTrue(set(copied_element_ids).isdisjoint(source_element_ids))
+        self.assertEqual(copied_theme.elements[0].name, "Title")
         self.assertEqual(copied_theme.elements[0].band, ThemeElementBand.TOP)
         self.assertEqual(copied_theme.elements[0].sort_order, 0)
         self.assertEqual(
@@ -1391,6 +1514,7 @@ class ThemeDuplicateTests(unittest.TestCase):
         )
         self.assertEqual(copied_theme.elements[0].font_weight, 700)
         self.assertIsNone(copied_theme.elements[0].rectangle_color)
+        self.assertEqual(copied_theme.elements[1].name, "Image")
         self.assertEqual(copied_theme.elements[1].band, ThemeElementBand.BOTTOM)
         self.assertEqual(copied_theme.elements[1].sort_order, 0)
         self.assertEqual(copied_theme.elements[1].image_asset_ref, "logos/mark.png")
@@ -1600,6 +1724,7 @@ def _text_element_request(
     """Build a clear text element on the top band."""
 
     text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+        name=text_source.value,
         band=ThemeElementBand.TOP,
         content_kind=ThemeElementContentKind.TEXT,
         text_source=text_source,
@@ -1632,6 +1757,7 @@ class ThemeCreatePresetTests(unittest.TestCase):
             background_color="#112233",
             elements=[
                 ThemeElementCreateRequest(
+                    name="Title",
                     band=ThemeElementBand.TOP,
                     content_kind=ThemeElementContentKind.TEXT,
                     text_source=ThemeElementTextSource.TITLE,
@@ -1641,6 +1767,7 @@ class ThemeCreatePresetTests(unittest.TestCase):
                     alignment=ThemeElementAlignment.CENTER,
                 ),
                 ThemeElementCreateRequest(
+                    name="Image",
                     band=ThemeElementBand.BOTTOM,
                     content_kind=ThemeElementContentKind.IMAGE,
                     image_asset_ref="logos/mark.png",
@@ -1698,6 +1825,7 @@ class ThemeCreatePresetTests(unittest.TestCase):
             name="Harbor",
             elements=[
                 ThemeElementCreateRequest(
+                    name="Title",
                     band=ThemeElementBand.MIDDLE,
                     content_kind=ThemeElementContentKind.TEXT,
                     text_source=ThemeElementTextSource.TITLE,
