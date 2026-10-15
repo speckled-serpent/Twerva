@@ -863,12 +863,13 @@ class UnitImageReadResponse(BaseModel):
 
 
 class UnitReadResponse(BaseModel):
-    """One unit: name, one text per theme text element, and at most one image."""
+    """One unit: name, theme text, exclusions, and at most one image."""
 
     id: uuid.UUID
     position: int
     name: str
     texts: list[UnitElementTextReadResponse]
+    excluded_unit_ids: list[uuid.UUID]
     images: list[UnitImageReadResponse]
 
 
@@ -923,12 +924,13 @@ class UnitElementTextWrite(BaseModel):
 
 
 class UnitWriteRequest(BaseModel):
-    """Name and one text value per theme text element. Images stay put."""
+    """Name, theme text, and the other units this one cannot be shown with."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
     texts: list[UnitElementTextWrite] = Field(default_factory=list)
+    excluded_unit_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class UnitPreviewRequest(BaseModel):
@@ -982,10 +984,11 @@ class UnitImageCreateItem(BaseModel):
 
 
 class UnitWithImagesCreateRequest(BaseModel):
-    """Name, theme text, and the one image when the theme needs one."""
+    """Name, theme text, exclusions, and the one image when the theme needs one."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
     texts: list[UnitElementTextWrite] = Field(default_factory=list)
+    excluded_unit_ids: list[uuid.UUID] = Field(default_factory=list)
     images: list[UnitImageCreateItem] = Field(default_factory=list)

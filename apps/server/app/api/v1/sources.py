@@ -36,6 +36,7 @@ def content_sources_list_statement() -> Select[tuple[ContentSource]]:
         .options(
             selectinload(ContentSource.units).selectinload(Unit.images),
             selectinload(ContentSource.units).selectinload(Unit.element_texts),
+            selectinload(ContentSource.units).selectinload(Unit.exclusions),
         )
         .order_by(ContentSource.name.asc(), ContentSource.slug.asc())
     )
@@ -132,6 +133,7 @@ def serialize_unit(unit: Unit) -> UnitReadResponse:
     text_responses: list[UnitElementTextReadResponse] = [
         _serialize_element_text(element_text) for element_text in list(unit.element_texts)
     ]
+    excluded_unit_ids: list[uuid.UUID] = _excluded_unit_ids(unit)
     image_responses: list[UnitImageReadResponse] = [
         serialize_image(image) for image in _images_in_position_order(unit)
     ]
@@ -140,6 +142,7 @@ def serialize_unit(unit: Unit) -> UnitReadResponse:
         position=unit.position,
         name=unit.name,
         texts=text_responses,
+        excluded_unit_ids=excluded_unit_ids,
         images=image_responses,
     )
 
@@ -155,6 +158,17 @@ def _serialize_element_text(element_text: UnitElementText) -> UnitElementTextRea
     )
 
     return text_response
+
+
+def _excluded_unit_ids(unit: Unit) -> list[uuid.UUID]:
+    """Return the other unit ids this unit cannot be shown with."""
+
+    excluded_ids: list[uuid.UUID] = sorted(
+        (exclusion.excluded_unit_id for exclusion in list(unit.exclusions)),
+        key=str,
+    )
+
+    return excluded_ids
 
 
 def _images_in_position_order(unit: Unit) -> list[UnitImage]:

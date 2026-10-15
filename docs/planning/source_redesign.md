@@ -47,6 +47,8 @@ Each phase can ship and be reviewed on its own. Later phases assume the earlier 
 
 ### 3. Exclusion rules
 
+**Status.** Done.
+
 **Scope.** A unit declares other unit ids in the same source that it cannot be shown with, so a random carousel pick does not repeat the same story/image pairing. Units that reuse one image for text variants can exclude each other.
 
 **Out of scope.** LLM text, the campaign theme, source, and run screens, and word-count warnings.

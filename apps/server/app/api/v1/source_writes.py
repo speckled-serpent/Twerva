@@ -27,7 +27,7 @@ from app.api.v1.schemas import (
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
-from app.models.content_source import ContentSource, Unit, UnitElementText, UnitImage
+from app.models.content_source import ContentSource, Unit, UnitElementText, UnitExclusion, UnitImage
 from app.models.theme import Theme
 from app.models.enums import UnitImageMediaType
 from app.models.ops_user import OpsUser
@@ -44,6 +44,7 @@ from app.sources.editing import (
     slugify_source_name,
     stored_paths_in_use,
 )
+from app.sources.unit_exclusions import normalized_exclusion_ids
 from app.sources.unit_theme import (
     IMAGE_REQUIRED_DETAIL,
     text_values_for_theme,
@@ -234,18 +235,26 @@ def create_unit(
         found_theme,
         unit_write_request.texts,
     )
+    created_unit_id: uuid.UUID = new_row_id()
+    excluded_ids: list[uuid.UUID] = _parsed_exclusions(
+        created_unit_id,
+        unit_write_request.excluded_unit_ids,
+        found_source,
+    )
     _require_image_when_theme_needs_one(found_theme, 0)
     next_position: int = _next_unit_position(found_source.id, our_database_session)
     created_unit: Unit = Unit(
-        id=new_row_id(),
+        id=created_unit_id,
         source_id=found_source.id,
         position=next_position,
         name=unit_name,
     )
     created_unit.images = []
     created_unit.element_texts = []
+    created_unit.exclusions = []
     _replace_texts(created_unit, stored_texts, our_database_session)
     our_database_session.add(created_unit)
+    _store_exclusion_pairs(created_unit, excluded_ids, found_source, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Unit could not be saved.",
@@ -281,9 +290,15 @@ def patch_unit(
         found_theme,
         unit_write_request.texts,
     )
+    excluded_ids: list[uuid.UUID] = _parsed_exclusions(
+        found_unit.id,
+        unit_write_request.excluded_unit_ids,
+        found_source,
+    )
     _require_image_when_theme_needs_one(found_theme, len(list(found_unit.images)))
     found_unit.name = unit_name
     _replace_texts(found_unit, stored_texts, our_database_session)
+    _replace_exclusion_pairs(found_unit, excluded_ids, found_source, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Unit could not be saved.",
@@ -305,12 +320,17 @@ def delete_unit(
 
     _ = current_ops_operator
     found_unit: Unit = _fetch_unit_or_raise(source_id, unit_id, our_database_session)
+    found_source: ContentSource = fetch_content_source_by_id_or_raise(
+        source_id,
+        our_database_session,
+    )
     _reject_when_paths_in_use(
         our_database_session,
         _image_paths_on_unit(found_unit),
         UNIT_IN_USE_DETAIL,
     )
     stored_files: list[tuple[str, str | None]] = _stored_files_on_unit(found_unit)
+    _clear_exclusion_pairs(found_unit, found_source, our_database_session)
     our_database_session.delete(found_unit)
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -547,6 +567,119 @@ def _next_unit_position(source_id: uuid.UUID, our_database_session: Session) -> 
     next_position: int = max(positions) + 1
 
     return next_position
+
+
+def _parsed_exclusions(
+    unit_id: uuid.UUID,
+    submitted_ids: list[uuid.UUID],
+    source: ContentSource,
+) -> list[uuid.UUID]:
+    """Return the other unit ids to store. A bad id is 400."""
+
+    sibling_ids: set[uuid.UUID] = {
+        sibling.id for sibling in list(source.units) if sibling.id != unit_id
+    }
+
+    try:
+        stored_ids: list[uuid.UUID] = normalized_exclusion_ids(
+            unit_id,
+            submitted_ids,
+            sibling_ids,
+        )
+    except ValueError as exclusion_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exclusion_error),
+        ) from exclusion_error
+
+    return stored_ids
+
+
+def _store_exclusion_pairs(
+    unit: Unit,
+    excluded_ids: list[uuid.UUID],
+    source: ContentSource,
+    our_database_session: Session,
+) -> None:
+    """Write both directions of each new pair."""
+
+    for excluded_id in excluded_ids:
+        _append_exclusion(unit, excluded_id, our_database_session)
+        partner: Unit | None = _sibling_unit(source, excluded_id)
+
+        if partner is None:
+            continue
+
+        _append_exclusion(partner, unit.id, our_database_session)
+
+
+def _replace_exclusion_pairs(
+    unit: Unit,
+    excluded_ids: list[uuid.UUID],
+    source: ContentSource,
+    our_database_session: Session,
+) -> None:
+    """Replace every pair that names this unit, in both directions."""
+
+    _clear_exclusion_pairs(unit, source, our_database_session)
+    _store_exclusion_pairs(unit, excluded_ids, source, our_database_session)
+
+
+def _clear_exclusion_pairs(
+    unit: Unit,
+    source: ContentSource,
+    our_database_session: Session,
+) -> None:
+    """Drop pairs that name this unit from every unit in the source."""
+
+    for sibling in list(source.units):
+        kept_rows: list[UnitExclusion] = []
+
+        for exclusion in list(sibling.exclusions):
+            names_unit: bool = (
+                exclusion.unit_id == unit.id or exclusion.excluded_unit_id == unit.id
+            )
+
+            if names_unit:
+                our_database_session.delete(exclusion)
+            else:
+                kept_rows.append(exclusion)
+
+        sibling.exclusions = kept_rows
+
+
+def _append_exclusion(
+    unit: Unit,
+    excluded_unit_id: uuid.UUID,
+    our_database_session: Session,
+) -> None:
+    """Add one direction if this unit does not already store it."""
+
+    for exclusion in list(unit.exclusions):
+
+        if exclusion.excluded_unit_id == excluded_unit_id:
+
+            return
+
+    created_exclusion: UnitExclusion = UnitExclusion(
+        id=new_row_id(),
+        unit_id=unit.id,
+        excluded_unit_id=excluded_unit_id,
+    )
+    unit.exclusions.append(created_exclusion)
+    our_database_session.add(created_exclusion)
+
+
+def _sibling_unit(source: ContentSource, unit_id: uuid.UUID) -> Unit | None:
+    """Return a unit on this source, or null."""
+
+    for sibling in list(source.units):
+
+        if sibling.id == unit_id:
+
+            return sibling
+
+    return None
 
 
 def _replace_texts(

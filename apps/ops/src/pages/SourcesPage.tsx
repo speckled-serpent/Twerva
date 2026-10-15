@@ -566,6 +566,23 @@ function UnitCardBody({ sourceId, unit }: UnitCardBodyProps): ReactElement {
   );
 }
 
+function labelForExcludedUnit(
+  candidate: UnitReadResponse,
+  otherUnits: UnitReadResponse[],
+): string {
+  const sameNameCount: number = otherUnits.filter(
+    (otherUnit: UnitReadResponse): boolean => otherUnit.name === candidate.name,
+  ).length;
+
+  if (sameNameCount > 1) {
+    const shortId: string = candidate.id.slice(0, 8);
+
+    return `${candidate.name} (${shortId})`;
+  }
+
+  return candidate.name;
+}
+
 interface UnitEditorViewProps {
   source: SourceReadResponse | null;
   unit: UnitReadResponse | null;
@@ -593,6 +610,7 @@ function UnitEditorView({
   const [themeError, setThemeError] = useState<unknown>(null);
   const [themeReady, setThemeReady] = useState<boolean>(false);
   const [unitName, setUnitName] = useState<string>(unit?.name ?? "");
+  const [excludedIds, setExcludedIds] = useState<string[]>(unit?.excluded_unit_ids ?? []);
   const [textValues, setTextValues] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -602,6 +620,9 @@ function UnitEditorView({
   const imageDraftsRef = useRef<UnitImageDraft[]>(imageDrafts);
   imageDraftsRef.current = imageDrafts;
   const needsImage: boolean = theme !== null && themeRequiresImage(theme);
+  const otherUnits: UnitReadResponse[] = (source?.units ?? []).filter(
+    (candidate: UnitReadResponse): boolean => candidate.id !== unit?.id,
+  );
   const textElements: ThemeElementReadResponse[] = theme === null
     ? []
     : orderedTextElements(theme.elements);
@@ -665,6 +686,7 @@ function UnitEditorView({
 
   useEffect((): void => {
     setUnitName(unit?.name ?? "");
+    setExcludedIds(unit?.excluded_unit_ids ?? []);
 
     if (theme === null) {
       setTextValues({});
@@ -714,9 +736,16 @@ function UnitEditorView({
       return;
     }
 
+    const otherIds: Set<string> = new Set(
+      otherUnits.map((candidate: UnitReadResponse): string => candidate.id),
+    );
+    const storedExcludedIds: string[] = excludedIds.filter(
+      (excludedId: string): boolean => otherIds.has(excludedId),
+    );
     const unitWriteRequest: UnitWriteRequest = {
       name: unitName.trim(),
       texts: textWrites,
+      excluded_unit_ids: storedExcludedIds,
     };
 
     setIsSaving(true);
@@ -869,6 +898,48 @@ function UnitEditorView({
                   />
                 </label>
               ))}
+              <fieldset className="form-fieldset" disabled={!canWrite}>
+                <legend>Cannot be shown with</legend>
+                <p className="field-hint">
+                  The rule applies both ways. Saving it here also marks this unit on the other unit.
+                </p>
+                {otherUnits.length === 0 ? (
+                  <p>No other units in this source yet.</p>
+                ) : (
+                  <ul className="account-pick-list">
+                    {otherUnits.map((otherUnit: UnitReadResponse): ReactElement => {
+                      const isExcluded: boolean = excludedIds.includes(otherUnit.id);
+                      const exclusionLabel: string = labelForExcludedUnit(otherUnit, otherUnits);
+
+                      return (
+                        <li key={otherUnit.id}>
+                          <label className="checkbox-row">
+                            <input
+                              id={`unit-exclude-${otherUnit.id}`}
+                              type="checkbox"
+                              checked={isExcluded}
+                              onChange={(): void => {
+                                if (isExcluded) {
+                                  setExcludedIds(
+                                    excludedIds.filter(
+                                      (excludedId: string): boolean => excludedId !== otherUnit.id,
+                                    ),
+                                  );
+
+                                  return;
+                                }
+
+                                setExcludedIds([...excludedIds, otherUnit.id]);
+                              }}
+                            />
+                            <span>{exclusionLabel}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </fieldset>
               {canWrite ? (
                 <div className="button-row">
                   <button id="save-unit" type="submit" disabled={isSaving}>

@@ -105,6 +105,7 @@ const drafts: Record<string, string> = textDraftsForTheme(
     position: 0,
     name: "Harbor",
     texts: [{ theme_element_id: "title-bottom", value: "Fog" }],
+    excluded_unit_ids: [],
     images: [],
   },
 );
