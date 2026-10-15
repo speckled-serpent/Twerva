@@ -918,6 +918,7 @@ function UnitEditorView({
                               id={`unit-exclude-${otherUnit.id}`}
                               type="checkbox"
                               checked={isExcluded}
+                              disabled={!canWrite}
                               onChange={(): void => {
                                 if (isExcluded) {
                                   setExcludedIds(
