@@ -29,6 +29,7 @@ from app.generate.templates import CAROUSEL_TEMPLATES_BY_ID
 from app.models import (
     AdvertisementType,
     BackgroundKind,
+    Campaign,
     OpsUser,
     ContentSource,
     Theme,
@@ -436,9 +437,10 @@ def theme_delete_reference_blockers(
 ) -> list[str]:
     """Return tables that still make deleting this theme unsafe.
 
-    ``theme_elements`` cascade with the theme. ``sources`` block only
-    when a row stores this theme. Any other foreign key to ``themes``
-    blocks the delete, because that table is not counted row by row.
+    ``theme_elements`` cascade with the theme. ``sources`` and
+    ``campaigns`` block only when a row stores this theme. Any other
+    foreign key to ``themes`` blocks the delete, because that table
+    is not counted row by row.
 
     Returns:
         Sorted table names that would make a silent delete unsafe.
@@ -446,9 +448,13 @@ def theme_delete_reference_blockers(
 
     blocker_names: list[str] = unexpected_theme_reference_tables()
     source_count: int = _source_count_for_theme(our_database_session, theme_id)
+    campaign_count: int = _campaign_count_for_theme(our_database_session, theme_id)
 
     if source_count > 0:
         blocker_names.append("sources")
+
+    if campaign_count > 0:
+        blocker_names.append("campaigns")
 
     unique_blockers: list[str] = sorted(set(blocker_names))
 
@@ -471,7 +477,7 @@ def unexpected_theme_reference_tables() -> list[str]:
             if foreign_key.column.table.name != "themes":
                 continue
 
-            if table.name in {"theme_elements", "sources"}:
+            if table.name in {"theme_elements", "sources", "campaigns"}:
                 continue
 
             blocker_names.append(table.name)
@@ -499,6 +505,26 @@ def _source_count_for_theme(
     source_count: int = int(counted)
 
     return source_count
+
+
+def _campaign_count_for_theme(
+    our_database_session: Session,
+    theme_id: uuid.UUID,
+) -> int:
+    """Count campaigns that store this theme."""
+
+    counted: int | None = our_database_session.scalar(
+        select(func.count())
+        .select_from(Campaign)
+        .where(Campaign.theme_id == theme_id),
+    )
+
+    if counted is None:
+        return 0
+
+    campaign_count: int = int(counted)
+
+    return campaign_count
 
 
 def _frame_patch_for_create(

@@ -206,6 +206,11 @@ export async function createCampaign(
   );
 }
 
+export async function runCampaign(campaignId: string): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>("POST", `/api/v1/campaigns/${campaignId}/run`);
+}
+
 export async function listAlbums(): Promise<SourceListItemResponse[]> {
 
   return requestJson<SourceListItemResponse[]>("GET", "/api/v1/sources");

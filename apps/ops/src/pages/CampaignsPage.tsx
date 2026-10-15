@@ -6,10 +6,13 @@ import {
   listCampaigns,
   pauseCampaign,
   resumeCampaign,
+  runCampaign,
   startCampaign,
 } from "../api/client";
 import type {
   CampaignAccountReadResponse,
+  CampaignCarouselRead,
+  CampaignCarouselUnitRead,
   CampaignInterestReadResponse,
   CampaignReadResponse,
 } from "../api/types";
@@ -140,6 +143,31 @@ export function CampaignsPage({
     onStatusMessageChange(nextStatusMessage);
   };
 
+  const handleRun = async (): Promise<void> => {
+
+    if (selectedCampaign === null) {
+      return;
+    }
+
+    setIsBusy(true);
+    setActionError(null);
+    onStatusMessageChange("");
+
+    try {
+      const assembledCampaign: CampaignReadResponse = await runCampaign(selectedCampaign.id);
+      const carouselCount: number = assembledCampaign.carousels.length;
+      const statusText: string = carouselCount === 0
+        ? `Ran ${assembledCampaign.name}. No live units, so no carousel.`
+        : `Ran ${assembledCampaign.name}. ${carouselCount} carousel${carouselCount === 1 ? "" : "s"}.`;
+
+      await reloadCampaignsAfterAction(assembledCampaign, statusText);
+    } catch (caughtError: unknown) {
+      setActionError(caughtError);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleLifecycleAction = async (
     lifecycleAction: CampaignLifecycleAction,
   ): Promise<void> => {
@@ -184,6 +212,7 @@ export function CampaignsPage({
           setActionError(null);
         }}
         onLifecycleAction={handleLifecycleAction}
+        onRun={handleRun}
       />
     );
   }
@@ -297,6 +326,7 @@ interface CampaignDetailViewProps {
   statusMessage: string;
   onBack: () => void;
   onLifecycleAction: (lifecycleAction: CampaignLifecycleAction) => Promise<void>;
+  onRun: () => Promise<void>;
 }
 
 function CampaignDetailView({
@@ -308,6 +338,7 @@ function CampaignDetailView({
   statusMessage,
   onBack,
   onLifecycleAction,
+  onRun,
 }: CampaignDetailViewProps): ReactElement {
 
   const allowedActions: CampaignLifecycleAction[] =
@@ -321,8 +352,8 @@ function CampaignDetailView({
         <div>
           <h1>{selectedCampaign === null ? "Campaign" : selectedCampaign.name}</h1>
           <p className="lede">
-            Basic campaign record. Start flips status only — it does not ingest
-            or generate yet.
+            Run assembles accepted units from the source into carousels on the
+            theme. Drafts stay out. Run does not generate text.
           </p>
         </div>
         <button type="button" onClick={onBack}>
@@ -351,6 +382,10 @@ function CampaignDetailView({
             </dd>
             <dt>Type</dt>
             <dd>{campaignTypeLabel(selectedCampaign.campaign_type)}</dd>
+            <dt>Theme</dt>
+            <dd>{selectedCampaign.theme_name === null ? "—" : selectedCampaign.theme_name}</dd>
+            <dt>Source</dt>
+            <dd>{selectedCampaign.source_name === null ? "—" : selectedCampaign.source_name}</dd>
             <dt>Advertisement</dt>
             <dd>{selectedCampaign.advertisement_type}</dd>
             <dt>Platforms</dt>
@@ -363,6 +398,10 @@ function CampaignDetailView({
             <dd>
               <CampaignInterestList interests={selectedCampaign.interests} />
             </dd>
+            <dt>Carousels</dt>
+            <dd>
+              <CampaignCarouselList carousels={selectedCampaign.carousels} />
+            </dd>
             <dt>Created</dt>
             <dd className="mono">{formatCampaignTimestamp(selectedCampaign.created_at)}</dd>
             <dt>Updated</dt>
@@ -373,8 +412,27 @@ function CampaignDetailView({
             </dd>
           </dl>
 
+          {canWrite && (selectedCampaign.theme_id === null || selectedCampaign.source_id === null) ? (
+            <p className="field-hint">
+              This campaign was saved before a theme and source. Run stays off until both are set.
+            </p>
+          ) : null}
           {canWrite ? (
             <div className="button-row">
+              <button
+                id="run-campaign"
+                type="button"
+                disabled={
+                  isBusy
+                  || selectedCampaign.theme_id === null
+                  || selectedCampaign.source_id === null
+                }
+                onClick={(): void => {
+                  void onRun();
+                }}
+              >
+                Run
+              </button>
               {(["start", "pause", "resume", "finish"] as CampaignLifecycleAction[]).map(
                 (lifecycleAction: CampaignLifecycleAction): ReactElement => {
                   const isAllowed: boolean = allowedActions.includes(lifecycleAction);
@@ -406,6 +464,32 @@ function CampaignDetailView({
 
 interface CampaignAccountListProps {
   accounts: CampaignAccountReadResponse[];
+}
+
+interface CampaignCarouselListProps {
+  carousels: CampaignCarouselRead[];
+}
+
+function CampaignCarouselList({ carousels }: CampaignCarouselListProps): ReactElement {
+
+  if (carousels.length === 0) {
+    return <span id="campaign-carousels">No carousel yet.</span>;
+  }
+
+  return (
+    <ol id="campaign-carousels">
+      {carousels.map((carousel: CampaignCarouselRead): ReactElement => (
+        <li key={carousel.id}>
+          Carousel {carousel.position + 1}
+          <ul>
+            {carousel.units.map((unit: CampaignCarouselUnitRead): ReactElement => (
+              <li key={unit.unit_id}>{unit.name}</li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 function CampaignAccountList({ accounts }: CampaignAccountListProps): ReactElement {

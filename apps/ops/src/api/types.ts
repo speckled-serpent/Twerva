@@ -240,9 +240,23 @@ export interface CampaignCreateRequest {
   name: string;
   campaign_type: CampaignType;
   advertisement_type?: AdvertisementType;
+  theme_id: string;
+  source_id: string;
   platforms: Platform[];
   account_ids: string[];
   interests: CampaignInterestWrite[];
+}
+
+export interface CampaignCarouselUnitRead {
+  unit_id: string;
+  name: string;
+  position: number;
+}
+
+export interface CampaignCarouselRead {
+  id: string;
+  position: number;
+  units: CampaignCarouselUnitRead[];
 }
 
 export interface CampaignInterestReadResponse {
@@ -266,10 +280,15 @@ export interface CampaignReadResponse {
   advertisement_type: AdvertisementType;
   status: CampaignStatus;
   platforms: Platform[];
+  theme_id: string | null;
+  source_id: string | null;
+  theme_name: string | null;
+  source_name: string | null;
   account_count: number;
   interest_count: number;
   accounts: CampaignAccountReadResponse[];
   interests: CampaignInterestReadResponse[];
+  carousels: CampaignCarouselRead[];
   created_at: string;
   updated_at: string;
   created_by: string | null;
