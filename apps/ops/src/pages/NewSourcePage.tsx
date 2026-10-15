@@ -142,7 +142,7 @@ export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): Reac
               ))}
             </select>
           </label>
-          <p className="field-hint">The theme is required. Units stay in the simple editor for now.</p>
+          <p className="field-hint">The theme is required. Units follow that theme.</p>
           <ErrorBanner error={saveError} />
           <div className="button-row">
             <button id="create-source-submit" type="submit" disabled={isSaving || themes.length === 0}>

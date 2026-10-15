@@ -283,7 +283,7 @@ class AlbumImageIntakeTests(unittest.TestCase):
         self.assertIn("not allowed", str(raised.exception))
 
     def test_delete_removes_album_files_and_leaves_package_defaults(self) -> None:
-        """An uploaded file is unlinked. A theme-defaults path is not."""
+        """A picture theme keeps its last image. A color theme unlinks the upload."""
 
         session, source_id, unit_id, store, directory = _text_unit_store()
         created = add_images_from_payloads(
@@ -309,6 +309,13 @@ class AlbumImageIntakeTests(unittest.TestCase):
             "app.sources.image_store.configured_album_image_store",
             return_value=store,
         ):
+            with self.assertRaises(HTTPException) as raised:
+                delete_unit_image(source_id, unit_id, created[0].id, session, None)
+
+            self.assertEqual(raised.exception.status_code, 400)
+            self.assertEqual(raised.exception.detail, IMAGE_REQUIRED_DETAIL)
+            self.assertTrue(image_path.exists())
+            session.theme.background_kind = BackgroundKind.COLOR
             delete_unit_image(source_id, unit_id, created[0].id, session, None)
 
         self.assertFalse(image_path.exists())

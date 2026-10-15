@@ -823,6 +823,17 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(sample_response.status_code, 403)
         self.assertIn("read-only", sample_response.json()["detail"].lower())
 
+    def test_reader_can_preview_a_unit_on_its_theme(self) -> None:
+        """Readers may POST the in-source preview. A missing source is 404."""
+
+        preview_response = self.test_client.post(
+            f"/api/v1/sources/{uuid.uuid4()}/units/preview",
+            json={"texts": [], "unit_id": None},
+        )
+
+        self.assertEqual(preview_response.status_code, 404)
+        self.assertNotIn("read-only", preview_response.json()["detail"].lower())
+
     def test_reader_can_preview_a_theme_payload(self) -> None:
         """Readers may POST /api/v1/themes/preview. A missing source is 404."""
 
