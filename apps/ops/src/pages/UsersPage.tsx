@@ -147,11 +147,15 @@ export function UsersPage(): ReactElement {
 
   return (
     <section>
-      <h1>Users</h1>
-      <p className="lede">
-        Admin-only. Create operators and assign <code>admin</code> (full) or{" "}
-        <code>reader</code> (GET-only). Passwords are never listed.
-      </p>
+      <div className="page-header-row">
+        <div>
+          <h1>Users</h1>
+          <p className="lede">
+            Admin-only. Create operators and assign <code>admin</code> (full) or{" "}
+            <code>reader</code> (GET-only). Passwords are never listed.
+          </p>
+        </div>
+      </div>
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}

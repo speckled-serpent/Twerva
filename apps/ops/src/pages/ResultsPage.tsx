@@ -162,10 +162,14 @@ export function ResultsPage(): ReactElement {
 
   return (
     <section>
-      <h1>Results</h1>
-      <p className="lede">
-        Cluster median views and the agent-summary. Stub metrics only work on mock-published jobs.
-      </p>
+      <div className="page-header-row">
+        <div>
+          <h1>Results</h1>
+          <p className="lede">
+            Cluster median views and the agent-summary. Stub metrics only work on mock-published jobs.
+          </p>
+        </div>
+      </div>
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />

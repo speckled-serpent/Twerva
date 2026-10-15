@@ -98,7 +98,7 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
     <section>
       <div className="page-header-row">
         <div>
-          <h1>Create Theme</h1>
+          <h1>Create theme</h1>
           <p className="lede">
             Set the name, frame, and elements, then create the theme in one save.
             Defaults stay paper color, spacing 96 / 0 / 0, and no elements.
@@ -172,7 +172,7 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
       <ErrorBanner error={actionError} />
       <div className="button-row">
         <button type="submit" form="create-theme-form" disabled={!canCreate}>
-          {isBusy ? "Saving…" : "Create Theme"}
+          {isBusy ? "Saving…" : "Create theme"}
         </button>
         <button type="button" onClick={onCancel} disabled={isBusy}>
           Cancel
