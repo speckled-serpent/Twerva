@@ -1299,6 +1299,42 @@ class ThemeElementApiTests(unittest.TestCase):
         )
         self.assertEqual(paper_theme.elements, [])
 
+    def test_text_element_may_omit_text_source(self) -> None:
+        """A text row can be stored with a null text source."""
+
+        created_at: datetime = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        element_session: _ElementMemorySession = _ElementMemorySession(paper_theme)
+        text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+            name="Headline",
+            band=ThemeElementBand.TOP,
+            content_kind=ThemeElementContentKind.TEXT,
+            font_family="DejaVu Sans",
+            font_size=32,
+            font_color="#112233",
+            alignment=ThemeElementAlignment.LEFT,
+        )
+
+        with patch(
+            "app.api.v1.theme_elements.commit_database_session_or_raise_conflict",
+        ):
+            created_element: ThemeElementReadResponse = create_theme_element(
+                paper_theme.id,
+                text_request,
+                element_session,
+                None,
+            )
+
+        self.assertEqual(created_element.name, "Headline")
+        self.assertIsNone(created_element.text_source)
+        self.assertEqual(created_element.content_kind, ThemeElementContentKind.TEXT)
+        self.assertEqual(len(paper_theme.elements), 1)
+
     def test_delete_compacts_the_band(self) -> None:
         """Deleting the first element renumbers the remaining one to 0."""
 

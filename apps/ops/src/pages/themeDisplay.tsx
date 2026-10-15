@@ -1,12 +1,7 @@
-import type { AdvertisementType, ThemeStatus } from "../api/types";
+import type { AdvertisementType } from "../api/types";
 
 const ADVERTISEMENT_TYPE_LABELS: Record<AdvertisementType, string> = {
   carousel: "Carousel",
-};
-
-const THEME_STATUS_LABELS: Record<ThemeStatus, string> = {
-  draft: "Draft",
-  live: "Live",
 };
 
 /**
@@ -20,19 +15,6 @@ export function advertisementTypeLabel(advertisementType: AdvertisementType): st
   const typeLabel: string = ADVERTISEMENT_TYPE_LABELS[advertisementType];
 
   return typeLabel;
-}
-
-/**
- * Return the operator-facing label for a stored theme status.
- *
- * @param themeStatus - Stored draft or live status
- * @returns Draft or Live
- */
-export function themeStatusLabel(themeStatus: ThemeStatus): string {
-
-  const statusLabel: string = THEME_STATUS_LABELS[themeStatus];
-
-  return statusLabel;
 }
 
 /**

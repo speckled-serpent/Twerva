@@ -287,7 +287,6 @@ function previewRequestFromDraft(
   const framePatch: ThemePatchRequest = themePatchFromFrameDraft(frameDraft);
   const previewRequest: ThemePreviewRequest = {
     source_item_id: sourceItemId,
-    status: framePatch.status ?? "draft",
     page_margin: framePatch.page_margin ?? 96,
     element_gap: framePatch.element_gap ?? 0,
     element_margin: framePatch.element_margin ?? 0,

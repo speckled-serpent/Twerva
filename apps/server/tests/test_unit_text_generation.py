@@ -94,7 +94,7 @@ class UnitTextDraftTests(unittest.TestCase):
         self.assertEqual(drafted.texts[0].value, "Fog on the water")
         self.assertEqual(
             drafted.draft_texts[0].value,
-            "title. Harbor fog. Keep it short",
+            "Title. Harbor fog. Keep it short",
         )
         self.assertEqual(drafted.name, "Harbor")
         self.assertEqual(live_units(list(source.units)), [])
@@ -108,7 +108,7 @@ class UnitTextDraftTests(unittest.TestCase):
                 texts=[
                     UnitElementTextWrite(
                         theme_element_id=text_element.id,
-                        value="title. Harbor fog. Keep it short",
+                        value="Title. Harbor fog. Keep it short",
                     ),
                 ],
             ),
@@ -118,7 +118,7 @@ class UnitTextDraftTests(unittest.TestCase):
 
         self.assertEqual(accepted.text_status, UnitTextStatus.LIVE)
         self.assertEqual(accepted.draft_texts, [])
-        self.assertEqual(accepted.texts[0].value, "title. Harbor fog. Keep it short")
+        self.assertEqual(accepted.texts[0].value, "Title. Harbor fog. Keep it short")
         self.assertEqual(len(live_units(list(source.units))), 1)
 
     def test_generating_a_unit_leaves_the_image_empty(self) -> None:
@@ -140,7 +140,7 @@ class UnitTextDraftTests(unittest.TestCase):
         self.assertEqual(drafted.text_status, UnitTextStatus.DRAFT)
         self.assertEqual(drafted.images, [])
         self.assertEqual(drafted.texts[0].value, "")
-        self.assertEqual(drafted.draft_texts[0].value, "title. Phase four harbor")
+        self.assertEqual(drafted.draft_texts[0].value, "Title. Phase four harbor")
         stored_source: ContentSource | None = session.get(ContentSource, created.id)
 
         assert stored_source is not None

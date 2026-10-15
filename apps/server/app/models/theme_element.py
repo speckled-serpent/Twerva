@@ -53,7 +53,6 @@ THEME_ELEMENT_CONTENT_CHECK_SQL: str = (
     "("
     "("
     "content_kind = 'text'::theme_element_content_kind"
-    " AND text_source IS NOT NULL"
     " AND font_family IS NOT NULL"
     " AND btrim(font_family) <> ''"
     " AND font_size > 0"
@@ -82,11 +81,13 @@ class ThemeElement(Base, UuidPrimaryKeyMixin, TimestampMixin):
     Every element is the full content width of its theme. There is no
     ``x``, ``y``, or ``width`` column. ``name`` is the operator's label
     for the element and cannot be blank. ``rectangle_color`` null means
-    the rectangle is clear. ``text`` requires a Spotmu ``text_source``, a
-    non-blank family and color, a positive ``font_size``, and an
-    ``alignment``. ``image`` requires ``image_asset_ref`` (relative path,
-    no ``..``, no scheme, suffix ``.svg`` / ``.png`` / ``.jpg`` /
-    ``.jpeg``) and forbids ``text_source``. Style booleans default false.
+    the rectangle is clear. ``text`` requires a non-blank family and
+    color, a positive ``font_size``, and an ``alignment``. ``text_source``
+    may be null: unit text is stored by element id and labeled by
+    ``name``. Spotmu preview still reads ``text_source`` when it is set.
+    ``image`` requires ``image_asset_ref`` (relative path, no ``..``, no
+    scheme, suffix ``.svg`` / ``.png`` / ``.jpg`` / ``.jpeg``) and forbids
+    ``text_source``. Style booleans default false.
     ``font_weight`` is optional, from 1 through 1000.
     ``rectangle_opacity`` is 0 through 100 and defaults to 100.
     ``rectangle_radius`` is pixels from 0 through 10000 and defaults to 0.
