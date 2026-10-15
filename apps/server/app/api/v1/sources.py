@@ -9,15 +9,16 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.lookups import fetch_content_source_by_id_or_raise
+from app.api.v1.source_preview import register_source_preview_routes
 from app.api.v1.schemas import (
     SourceListItemResponse,
     SourceReadResponse,
-    UnitFieldReadResponse,
+    UnitElementTextReadResponse,
     UnitImageReadResponse,
     UnitReadResponse,
 )
 from app.db import get_our_database_session
-from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
+from app.models.content_source import ContentSource, Unit, UnitElementText, UnitImage
 
 
 sources_router: APIRouter = APIRouter(prefix="/sources", tags=["sources"])
@@ -34,7 +35,7 @@ def content_sources_list_statement() -> Select[tuple[ContentSource]]:
         select(ContentSource)
         .options(
             selectinload(ContentSource.units).selectinload(Unit.images),
-            selectinload(ContentSource.units).selectinload(Unit.fields),
+            selectinload(ContentSource.units).selectinload(Unit.element_texts),
         )
         .order_by(ContentSource.name.asc(), ContentSource.slug.asc())
     )
@@ -126,10 +127,10 @@ def _unit_position(unit: Unit) -> int:
 
 
 def serialize_unit(unit: Unit) -> UnitReadResponse:
-    """Return one unit with fields and images in position order."""
+    """Return one unit with theme text and images in position order."""
 
-    field_responses: list[UnitFieldReadResponse] = [
-        _serialize_field(field) for field in _fields_in_position_order(unit)
+    text_responses: list[UnitElementTextReadResponse] = [
+        _serialize_element_text(element_text) for element_text in list(unit.element_texts)
     ]
     image_responses: list[UnitImageReadResponse] = [
         serialize_image(image) for image in _images_in_position_order(unit)
@@ -138,29 +139,22 @@ def serialize_unit(unit: Unit) -> UnitReadResponse:
         id=unit.id,
         position=unit.position,
         name=unit.name,
-        free_text=unit.free_text,
-        tags=list(unit.tags),
-        fields=field_responses,
+        texts=text_responses,
         images=image_responses,
     )
 
     return unit_response
 
 
-def _fields_in_position_order(unit: Unit) -> list[UnitField]:
-    """Return fields sorted by position."""
+def _serialize_element_text(element_text: UnitElementText) -> UnitElementTextReadResponse:
+    """Return one stored theme-element value."""
 
-    ordered_fields: list[UnitField] = sorted(list(unit.fields), key=_field_position)
+    text_response: UnitElementTextReadResponse = UnitElementTextReadResponse(
+        theme_element_id=element_text.theme_element_id,
+        value=element_text.value,
+    )
 
-    return ordered_fields
-
-
-def _field_position(field: UnitField) -> int:
-    """Return the sort key for a field."""
-
-    position: int = field.position
-
-    return position
+    return text_response
 
 
 def _images_in_position_order(unit: Unit) -> list[UnitImage]:
@@ -177,19 +171,6 @@ def _image_position(image: UnitImage) -> int:
     position: int = image.position
 
     return position
-
-
-def _serialize_field(field: UnitField) -> UnitFieldReadResponse:
-    """Return one labeled field."""
-
-    field_response: UnitFieldReadResponse = UnitFieldReadResponse(
-        id=field.id,
-        position=field.position,
-        label=field.label,
-        value=field.value,
-    )
-
-    return field_response
 
 
 def serialize_image(image: UnitImage) -> UnitImageReadResponse:
@@ -220,3 +201,4 @@ from app.api.v1.source_writes import register_source_write_routes
 
 register_source_write_routes(sources_router)
 register_source_intake_routes(sources_router)
+register_source_preview_routes(sources_router)

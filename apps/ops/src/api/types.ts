@@ -524,10 +524,8 @@ export type UnitImageMediaType = "svg" | "png" | "jpeg";
 
 export type UnitImageIntake = "upload" | "url";
 
-export interface UnitFieldReadResponse {
-  id: string;
-  position: number;
-  label: string;
+export interface UnitElementTextReadResponse {
+  theme_element_id: string;
   value: string;
 }
 
@@ -551,9 +549,7 @@ export interface UnitReadResponse {
   id: string;
   position: number;
   name: string;
-  free_text: string | null;
-  tags: string[];
-  fields: UnitFieldReadResponse[];
+  texts: UnitElementTextReadResponse[];
   images: UnitImageReadResponse[];
 }
 
@@ -586,16 +582,19 @@ export interface SourcePatchRequest {
   name: string;
 }
 
-export interface UnitFieldWrite {
-  label: string;
+export interface UnitElementTextWrite {
+  theme_element_id: string;
   value: string;
 }
 
 export interface UnitWriteRequest {
   name: string;
-  free_text: string | null;
-  tags: string[];
-  fields: UnitFieldWrite[];
+  texts: UnitElementTextWrite[];
+}
+
+export interface UnitPreviewRequest {
+  texts: UnitElementTextWrite[];
+  unit_id: string | null;
 }
 
 export interface UnitImageMetadataPatch {

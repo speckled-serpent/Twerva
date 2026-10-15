@@ -1,6 +1,6 @@
 import type {
   SourceReadResponse,
-  UnitFieldReadResponse,
+  UnitElementTextReadResponse,
   UnitImageReadResponse,
   UnitReadResponse,
 } from "../api/types";
@@ -30,24 +30,23 @@ export interface ThemeImageAlbum {
 }
 
 /**
- * Caption beside a unit's images. Free text wins. Otherwise the first field.
+ * Caption beside a unit's images. The first non-empty text value wins.
  * The caption is not stored on the theme.
  *
- * @param freeText - Unit free text
- * @param firstFieldValue - Value of the first field, or null
+ * @param textValues - Theme text stored on the unit, in display order
  * @returns Display text, possibly empty
  */
-export function captionForUnit(freeText: string | null, firstFieldValue: string | null): string {
+export function captionForUnit(textValues: readonly string[]): string {
 
-  const trimmedFreeText: string = (freeText ?? "").trim();
+  for (const textValue of textValues) {
+    const trimmedValue: string = textValue.trim();
 
-  if (trimmedFreeText !== "") {
-    return trimmedFreeText;
+    if (trimmedValue !== "") {
+      return trimmedValue;
+    }
   }
 
-  const trimmedField: string = (firstFieldValue ?? "").trim();
-
-  return trimmedField;
+  return "";
 }
 
 /**
@@ -75,12 +74,9 @@ export function themeAlbumFromSource(source: SourceReadResponse): ThemeImageAlbu
       continue;
     }
 
-    const orderedFields: UnitFieldReadResponse[] = [...unit.fields].sort(
-      (left: UnitFieldReadResponse, right: UnitFieldReadResponse): number => (
-        left.position - right.position
-      ),
+    const textValues: string[] = unit.texts.map(
+      (elementText: UnitElementTextReadResponse): string => elementText.value,
     );
-    const firstFieldValue: string | null = orderedFields[0]?.value ?? null;
     const pickerImages: ThemePickerImage[] = orderedImages.map((image) => {
       assetRefs.push(image.relative_path);
 
@@ -95,7 +91,7 @@ export function themeAlbumFromSource(source: SourceReadResponse): ThemeImageAlbu
     });
     const pickerUnit: ThemePickerUnit = {
       unitId: unit.id,
-      caption: captionForUnit(unit.free_text, firstFieldValue),
+      caption: captionForUnit(textValues),
       images: pickerImages,
     };
     pickerUnits.push(pickerUnit);

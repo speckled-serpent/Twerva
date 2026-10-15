@@ -64,6 +64,7 @@ from app.themes.overlap import (
     PlacedElement,
     find_band_overlaps,
 )
+from app.sources.unit_theme import UnitThemeFill
 from app.themes.sources import resolve_theme_text
 
 
@@ -108,8 +109,9 @@ class _ParsedGradient:
 
 def render_theme_sample(
     theme: Theme,
-    source_item: SourceItem,
+    source_item: SourceItem | None,
     artifact_storage_directory: Path,
+    unit_fill: UnitThemeFill | None = None,
 ) -> ThemeSampleRender:
     """Resolve, measure, place, overlap-check, and draw one frame.
 
@@ -123,7 +125,10 @@ def render_theme_sample(
     Args:
         theme: Draft or Live carousel theme. Status is not changed.
         source_item: Spotmu interest whose text fields fill text elements.
+            Ignored when ``unit_fill`` is set.
         artifact_storage_directory: Root for background and image files.
+        unit_fill: This unit's text and image. Picture backgrounds and
+            image elements use the unit image. No artifact row is written.
 
     Returns:
         PNG bytes, whether the frame is blocked, the reason and detail,
@@ -134,7 +139,7 @@ def render_theme_sample(
     resolved_storage_directory: Path = artifact_storage_directory.expanduser().resolve()
     ordered_elements: list[ThemeElement] = ordered_theme_elements(theme.elements)
     measure_elements: list[ThemeMeasureElement] = [
-        _measure_element(element, source_item) for element in ordered_elements
+        _measure_element(element, source_item, unit_fill) for element in ordered_elements
     ]
     measurement: ThemeMeasurement = measure_theme_elements(
         THEME_FRAME_WIDTH_PIXELS,
@@ -176,6 +181,7 @@ def render_theme_sample(
         canvas,
         theme,
         resolved_storage_directory,
+        unit_fill,
     )
     canvas_draw: ImageDraw.ImageDraw = ImageDraw.Draw(canvas)
     draw_problems: list[MeasureProblem] = []
@@ -190,6 +196,7 @@ def render_theme_sample(
             theme.element_margin,
             resolved_storage_directory,
             draw_problems,
+            unit_fill,
         )
 
     block_reason: ThemeSampleBlockReason | None
@@ -301,24 +308,32 @@ def resolve_theme_preview_file(
 
 def _measure_element(
     element: ThemeElement,
-    source_item: SourceItem,
+    source_item: SourceItem | None,
+    unit_fill: UnitThemeFill | None,
 ) -> ThemeMeasureElement:
     """Copy one stored element into the measure input, with text resolved."""
 
     if element.content_kind == ThemeElementContentKind.IMAGE:
+        image_asset_ref: str | None = element.image_asset_ref
+
+        if unit_fill is not None:
+            image_asset_ref = unit_fill.unit_image_relative_path
+
         image_element: ThemeMeasureElement = ThemeMeasureElement(
             element_id=element.id,
             band=element.band,
             sort_order=element.sort_order,
             content_kind=element.content_kind,
-            image_asset_ref=element.image_asset_ref,
+            image_asset_ref=image_asset_ref,
         )
 
         return image_element
 
     resolved_text: str = ""
 
-    if element.text_source is not None:
+    if unit_fill is not None:
+        resolved_text = unit_fill.text_by_element_id.get(element.id, "")
+    elif source_item is not None and element.text_source is not None:
         resolved_text = resolve_theme_text(source_item, element.text_source)
 
     text_element: ThemeMeasureElement = ThemeMeasureElement(
@@ -344,6 +359,7 @@ def _draw_background(
     canvas: Image.Image,
     theme: Theme,
     resolved_storage_directory: Path,
+    unit_fill: UnitThemeFill | None = None,
 ) -> tuple[ThemeSampleBlockReason, str] | None:
     """Fill the frame. A missing picture leaves it transparent."""
 
@@ -356,10 +372,14 @@ def _draw_background(
         return _draw_gradient_background(canvas, theme.background_gradient)
 
     if theme.background_kind == BackgroundKind.PICTURE:
+        picture_ref: str | None = theme.background_asset_ref
+
+        if unit_fill is not None:
+            picture_ref = unit_fill.unit_image_relative_path
 
         return _draw_asset_background(
             canvas,
-            theme.background_asset_ref,
+            picture_ref,
             resolved_storage_directory,
         )
 
@@ -484,6 +504,7 @@ def _draw_element(
     element_margin: int,
     resolved_storage_directory: Path,
     draw_problems: list[MeasureProblem],
+    unit_fill: UnitThemeFill | None = None,
 ) -> None:
     """Draw one rectangle, then the content inset by ``element_margin``."""
 
@@ -513,10 +534,15 @@ def _draw_element(
     content_height: int = content_box[3]
 
     if element.content_kind == ThemeElementContentKind.IMAGE:
+        image_asset_ref: str | None = element.image_asset_ref
+
+        if unit_fill is not None:
+            image_asset_ref = unit_fill.unit_image_relative_path
+
         _draw_image_content(
             canvas,
             element.id,
-            element.image_asset_ref,
+            image_asset_ref,
             (content_x, content_y),
             (content_width, content_height),
             resolved_storage_directory,

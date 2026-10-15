@@ -356,10 +356,14 @@ Check `ck_theme_elements_content`:
 ## Content sources (`sources`)
 
 Alembic `sources_default_album`, then `sources_resource_files`, then
-`sources_theme_bound`. A source requires `theme_id`. `kind` and
-`resource_files` are gone. A unit keeps its id and has a required
-`name`. `unit_images` allows one row per unit. The Default album,
-slug `default`, stays and is bound to Spotmu Paper v1 when that theme
+`sources_theme_bound`, then `unit_element_texts`. A source requires
+`theme_id`. `kind` and `resource_files` are gone. A unit keeps its id
+and has a required `name`. `unit_images` allows one row per unit.
+`unit_element_texts` stores one value per theme text element
+(`unit_id`, `theme_element_id`, `value`), unique on that pair, and
+cascades when the unit or the element is deleted. `units.free_text`,
+`units.tags`, and `unit_fields` are gone. The Default album, slug
+`default`, stays and is bound to Spotmu Paper v1 when that theme
 exists.
 
 | Enum | Values |
@@ -368,13 +372,18 @@ exists.
 | `unit_image_license` | `cc0`, `public_domain`, `owned`, `licensed` |
 | `unit_image_intake` | `upload`, `url` |
 
-`units.tags` is a text array, default empty. `unit_images.license_note`
-is empty unless `license` is `licensed`, in which case it is required.
-`relative_path` is unique. SVG rows have null width, height, and
-thumbnail. Readers may GET a source, the original file, and a
-thumbnail when one exists. Admins may create, rename, and delete
-sources and units, edit the unit name, free text, fields, and tags, edit license
-metadata, upload SVG/PNG/JPEG (8 MB), and import one http(s) URL.
+`unit_images.license_note` is empty unless `license` is `licensed`, in
+which case it is required. `relative_path` is unique. SVG rows have
+null width, height, and thumbnail. Readers may GET a source, the
+original file, and a thumbnail when one exists. They may also
+`POST /api/v1/sources/{id}/units/preview`, which returns one inline
+PNG of the source theme filled with the submitted text and, when the
+theme uses an image, the unit's saved file. That route writes no unit,
+artifact, post job, or preview file. Admins may create, rename, and
+delete sources and units, edit the unit name and one text value per
+theme text element, edit license metadata, upload SVG/PNG/JPEG (8 MB),
+and import one http(s) URL. An image is required when the theme has a
+picture background or an image element, and refused when it does not.
 New bytes go under `ARTIFACT_STORAGE_DIR` at
 `albums/<source_id>/<unit_id>/<image_id>.<ext>`. A failure writes no
 row and no file. Delete of an image, unit, or album is 409 while a
@@ -382,10 +391,5 @@ theme or artifact stores that path, including an uploaded
 `albums/…` path and a packaged `theme-defaults/…` path. The theme
 picture and image controls list those albums, then units that have an
 image, then the images. Pick and Shuffle store one concrete path.
-Samples and live preview read that path from the package for
+Samples and theme live preview read that path from the package for
 `theme-defaults/` and from `ARTIFACT_STORAGE_DIR` otherwise.
-Admins may also create a resource by uploading
-a Markdown or TXT file (2 MB) with a provenance note, replace that
-file, edit the note, and delete the resource. The bytes stay at
-`resources/<source_id>/body.md` or `body.txt` under `ARTIFACT_STORAGE_DIR`.
-Readers may open the text and download the file. They cannot upload.

@@ -28,9 +28,15 @@ from app.api.v1.source_intake import (
     import_unit_image,
     parse_unit_with_images_json,
 )
-from app.sources.editing import EMPTY_UNIT_DETAIL, LICENSE_NOTE_DETAIL, ONE_IMAGE_DETAIL
+from app.sources.editing import LICENSE_NOTE_DETAIL, ONE_IMAGE_DETAIL
+from app.sources.unit_theme import IMAGE_REQUIRED_DETAIL
 from app.api.v1.source_writes import delete_unit_image
-from app.models.enums import UnitImageIntake, UnitImageLicense, UnitImageMediaType
+from app.models.enums import (
+    BackgroundKind,
+    UnitImageIntake,
+    UnitImageLicense,
+    UnitImageMediaType,
+)
 from app.models.content_source import Unit
 from app.sources.image_intake import (
     IMAGE_TOO_LARGE_DETAIL,
@@ -277,7 +283,7 @@ class AlbumImageIntakeTests(unittest.TestCase):
         self.assertIn("not allowed", str(raised.exception))
 
     def test_delete_removes_album_files_and_leaves_package_defaults(self) -> None:
-        """An uploaded file is unlinked. A theme-defaults path is not."""
+        """A picture theme keeps its last image. A color theme unlinks the upload."""
 
         session, source_id, unit_id, store, directory = _text_unit_store()
         created = add_images_from_payloads(
@@ -303,6 +309,13 @@ class AlbumImageIntakeTests(unittest.TestCase):
             "app.sources.image_store.configured_album_image_store",
             return_value=store,
         ):
+            with self.assertRaises(HTTPException) as raised:
+                delete_unit_image(source_id, unit_id, created[0].id, session, None)
+
+            self.assertEqual(raised.exception.status_code, 400)
+            self.assertEqual(raised.exception.detail, IMAGE_REQUIRED_DETAIL)
+            self.assertTrue(image_path.exists())
+            session.theme.background_kind = BackgroundKind.COLOR
             delete_unit_image(source_id, unit_id, created[0].id, session, None)
 
         self.assertFalse(image_path.exists())
@@ -334,7 +347,7 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
         session, source_id, store, directory = _empty_album_store()
         created = create_unit_with_images(
             source_id,
-            UnitWriteRequest(name="Desk", free_text=None, tags=[], fields=[]),
+            UnitWriteRequest(name="Desk"),
             [
                 UnitImageAttachment(
                     payload=_jpeg_bytes(24, 12),
@@ -350,7 +363,7 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
         )
 
         self.assertEqual(created.name, "Desk")
-        self.assertIsNone(created.free_text)
+        self.assertEqual(created.texts, [])
         self.assertEqual(len(created.images), 1)
         self.assertEqual(created.images[0].license, UnitImageLicense.OWNED)
         self.assertEqual(created.images[0].source, "Desk photo")
@@ -417,13 +430,13 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as raised:
             create_unit_with_images(
                 source_id,
-                UnitWriteRequest(name="Empty", free_text="  ", tags=[], fields=[]),
+                UnitWriteRequest(name="Empty"),
                 [],
                 session,
                 store,
             )
 
-        self.assertEqual(raised.exception.detail, EMPTY_UNIT_DETAIL)
+        self.assertEqual(raised.exception.detail, IMAGE_REQUIRED_DETAIL)
         self.assertEqual(_unit_count(session, source_id), 0)
         self.assertEqual(list(directory.rglob("*")), [])
 
@@ -517,23 +530,28 @@ def _text_unit_store() -> tuple[_MemorySourceSession, uuid.UUID, uuid.UUID, Loca
     """Create an album with a text unit and a temp artifact directory."""
 
     from app.api.v1.schemas import SourceCreateRequest
-    from app.api.v1.source_writes import create_content_source, create_unit
+    from app.api.v1.source_writes import create_content_source
     session: _MemorySourceSession = _MemorySourceSession()
     created = create_content_source(
         SourceCreateRequest(name="Intake", theme_id=session.theme.id),
         session,
         None,
     )
-    unit = create_unit(
-        created.id,
-        UnitWriteRequest(name="Notes", free_text="Notes", tags=[], fields=[]),
-        session,
-        None,
+    session.theme.background_kind = BackgroundKind.PICTURE
+    unit_id: uuid.UUID = uuid.uuid4()
+    text_unit: Unit = Unit(
+        id=unit_id,
+        source_id=created.id,
+        position=0,
+        name="Notes",
     )
+    text_unit.images = []
+    text_unit.element_texts = []
+    session.add(text_unit)
     directory: Path = Path(tempfile.mkdtemp(prefix="twerva-albums-"))
     store: LocalAlbumImageStore = LocalAlbumImageStore(directory)
 
-    return session, created.id, unit.id, store, directory
+    return session, created.id, unit_id, store, directory
 
 
 def _empty_album_store() -> tuple[_MemorySourceSession, uuid.UUID, LocalAlbumImageStore, Path]:
@@ -542,6 +560,7 @@ def _empty_album_store() -> tuple[_MemorySourceSession, uuid.UUID, LocalAlbumIma
     from app.api.v1.schemas import SourceCreateRequest
     from app.api.v1.source_writes import create_content_source
     session: _MemorySourceSession = _MemorySourceSession()
+    session.theme.background_kind = BackgroundKind.PICTURE
     created = create_content_source(
         SourceCreateRequest(name="Image only", theme_id=session.theme.id),
         session,

@@ -110,6 +110,98 @@ class SourceThemeMigrationTests(unittest.TestCase):
         self._upgrade("head")
         self._assert_theme_bound_shape()
 
+    def test_free_text_and_fields_land_on_theme_text_elements(self) -> None:
+        """Free text then field values fill text elements. Downgrade keeps the first."""
+
+        self._upgrade("sources_theme_bound")
+        theme_id: str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        top_element_id: str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+        bottom_element_id: str = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        source_id: str = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        unit_id: str = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        self._insert_text_unit(
+            theme_id,
+            top_element_id,
+            bottom_element_id,
+            source_id,
+            unit_id,
+        )
+        self._upgrade("head")
+
+        with self._engine().connect() as connection:
+            stored_rows = connection.execute(
+                text(
+                    """
+                    SELECT theme_element_id::text, value
+                    FROM unit_element_texts
+                    WHERE unit_id = CAST(:unit_id AS uuid)
+                    """
+                ),
+                {"unit_id": unit_id},
+            ).fetchall()
+            free_text_columns: int = int(
+                connection.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM information_schema.columns
+                        WHERE table_name = 'units' AND column_name = 'free_text'
+                        """
+                    ),
+                ).scalar_one(),
+            )
+            field_tables: int = int(
+                connection.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM information_schema.tables
+                        WHERE table_name = 'unit_fields'
+                        """
+                    ),
+                ).scalar_one(),
+            )
+
+        stored_by_element: dict[str, str] = {
+            str(stored_row[0]): str(stored_row[1]) for stored_row in stored_rows
+        }
+
+        self.assertEqual(stored_by_element[top_element_id], "Fog line")
+        self.assertEqual(stored_by_element[bottom_element_id], "Field one")
+        self.assertEqual(len(stored_by_element), 2)
+        self.assertEqual(free_text_columns, 0)
+        self.assertEqual(field_tables, 0)
+
+        self._downgrade("sources_theme_bound")
+
+        with self._engine().connect() as connection:
+            restored = connection.execute(
+                text(
+                    """
+                    SELECT free_text, tags::text
+                    FROM units
+                    WHERE id = CAST(:unit_id AS uuid)
+                    """
+                ),
+                {"unit_id": unit_id},
+            ).one()
+            field_count: int = int(
+                connection.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM unit_fields
+                        WHERE unit_id = CAST(:unit_id AS uuid)
+                        """
+                    ),
+                    {"unit_id": unit_id},
+                ).scalar_one(),
+            )
+
+        self.assertEqual(restored[0], "Fog line")
+        self.assertEqual(restored[1], "{}")
+        self.assertEqual(field_count, 0)
+
     def test_stored_path_blocks_deletion_then_unreferenced_rows_go(self) -> None:
         """A theme path stops the upgrade. Clearing it deletes the extra source."""
 
@@ -396,6 +488,166 @@ class SourceThemeMigrationTests(unittest.TestCase):
                 {
                     "relative_path": STORED_LAMP_PATH,
                     "theme_id": str(DEFAULT_ALBUM_THEME_ID),
+                },
+            )
+
+    def _insert_text_unit(
+        self,
+        theme_id: str,
+        top_element_id: str,
+        bottom_element_id: str,
+        source_id: str,
+        unit_id: str,
+    ) -> None:
+        """Add a theme with two text elements and a unit that still has free text."""
+
+        with self._engine().begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO themes (
+                        id,
+                        name,
+                        slug,
+                        advertisement_type,
+                        template_key,
+                        status,
+                        page_margin,
+                        element_gap,
+                        element_margin,
+                        background_kind,
+                        background_color,
+                        background_gradient,
+                        background_asset_ref,
+                        created_by
+                    )
+                    SELECT
+                        CAST(:theme_id AS uuid),
+                        'Copy theme',
+                        'copy-theme',
+                        advertisement_type,
+                        NULL,
+                        status,
+                        page_margin,
+                        element_gap,
+                        element_margin,
+                        background_kind,
+                        background_color,
+                        background_gradient,
+                        background_asset_ref,
+                        created_by
+                    FROM themes
+                    WHERE id = CAST(:paper_id AS uuid)
+                    """
+                ),
+                {
+                    "theme_id": theme_id,
+                    "paper_id": str(DEFAULT_ALBUM_THEME_ID),
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO theme_elements (
+                        id,
+                        theme_id,
+                        band,
+                        sort_order,
+                        content_kind,
+                        text_source,
+                        font_family,
+                        font_size,
+                        font_color,
+                        alignment
+                    )
+                    VALUES
+                        (
+                            CAST(:top_element_id AS uuid),
+                            CAST(:theme_id AS uuid),
+                            'top',
+                            0,
+                            'text',
+                            'interest_heading',
+                            'DejaVu Sans',
+                            48,
+                            '#112233',
+                            'left'
+                        ),
+                        (
+                            CAST(:bottom_element_id AS uuid),
+                            CAST(:theme_id AS uuid),
+                            'bottom',
+                            0,
+                            'text',
+                            'title',
+                            'DejaVu Sans',
+                            64,
+                            '#112233',
+                            'left'
+                        )
+                    """
+                ),
+                {
+                    "theme_id": theme_id,
+                    "top_element_id": top_element_id,
+                    "bottom_element_id": bottom_element_id,
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO sources (id, theme_id, name, slug)
+                    VALUES (
+                        CAST(:source_id AS uuid),
+                        CAST(:theme_id AS uuid),
+                        'Copy shelf',
+                        'copy-shelf'
+                    )
+                    """
+                ),
+                {"source_id": source_id, "theme_id": theme_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO units (id, source_id, position, name, free_text, tags)
+                    VALUES (
+                        CAST(:unit_id AS uuid),
+                        CAST(:source_id AS uuid),
+                        0,
+                        'Harbor note',
+                        'Fog line',
+                        ARRAY['dropped']::text[]
+                    )
+                    """
+                ),
+                {"unit_id": unit_id, "source_id": source_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO unit_fields (id, unit_id, position, label, value)
+                    VALUES
+                        (
+                            CAST(:first_field_id AS uuid),
+                            CAST(:unit_id AS uuid),
+                            0,
+                            'Line',
+                            'Field one'
+                        ),
+                        (
+                            CAST(:second_field_id AS uuid),
+                            CAST(:unit_id AS uuid),
+                            1,
+                            'Extra',
+                            'Dropped line'
+                        )
+                    """
+                ),
+                {
+                    "unit_id": unit_id,
+                    "first_field_id": "ffffffff-ffff-4fff-8fff-fffffffffff1",
+                    "second_field_id": "ffffffff-ffff-4fff-8fff-fffffffffff2",
                 },
             )
 

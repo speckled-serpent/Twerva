@@ -153,4 +153,28 @@ def ops_operator_may_perform_request(ops_operator: OpsUser, request: Request,
 
         return True
 
+    if request_method == "POST" and _is_unit_preview_path(request_path):
+
+        return True
+
     return False
+
+
+def _is_unit_preview_path(request_path: str) -> bool:
+    """True for the in-source unit preview. It writes nothing."""
+
+    path_parts: list[str] = [part for part in request_path.split("/") if part != ""]
+
+    if len(path_parts) != 6:
+
+        return False
+
+    is_preview: bool = (
+        path_parts[0] == "api"
+        and path_parts[1] == "v1"
+        and path_parts[2] == "sources"
+        and path_parts[4] == "units"
+        and path_parts[5] == "preview"
+    )
+
+    return is_preview

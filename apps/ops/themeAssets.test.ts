@@ -85,9 +85,9 @@ assert.equal(
   storedAfterShuffle,
 );
 
-assert.equal(captionForUnit("  Brass lamp  ", "ignored"), "Brass lamp");
-assert.equal(captionForUnit("  ", "First field"), "First field");
-assert.equal(captionForUnit(null, null), "");
+assert.equal(captionForUnit(["  Brass lamp  ", "ignored"]), "Brass lamp");
+assert.equal(captionForUnit(["  ", "First field"]), "First field");
+assert.equal(captionForUnit([]), "");
 
 const uploadedAlbum: SourceReadResponse = {
   id: "album-1",
@@ -101,20 +101,16 @@ const uploadedAlbum: SourceReadResponse = {
       id: "text-unit",
       position: 0,
       name: "Notes",
-      free_text: "Notes only",
-      tags: [],
-      fields: [],
+      texts: [{ theme_element_id: "title", value: "Notes only" }],
       images: [],
     },
     {
       id: "lamp-unit",
       position: 2,
       name: "Lamp",
-      free_text: null,
-      tags: ["brass"],
-      fields: [
-        { id: "field-1", position: 1, label: "Finish", value: "  Brass lamp  " },
-        { id: "field-0", position: 0, label: "Name", value: "Desk lamp" },
+      texts: [
+        { theme_element_id: "name", value: "Desk lamp" },
+        { theme_element_id: "finish", value: "  Brass lamp  " },
       ],
       images: [
         {

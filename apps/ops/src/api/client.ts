@@ -27,6 +27,7 @@ import type {
   UnitImageLicense,
   UnitImageMetadataPatch,
   UnitImageReadResponse,
+  UnitPreviewRequest,
   UnitReadResponse,
   UnitWriteRequest,
   CarouselGenerateRequest,
@@ -258,13 +259,12 @@ interface UnitImageCreateItemJson {
 }
 
 /**
- * Create a unit and its images in one multipart call. Disk storage.
- * An image-only unit is valid because the images travel with the unit.
+ * Create a unit and its image in one multipart call. Disk storage.
  *
- * @param sourceId - Album UUID
- * @param unitWriteRequest - Free text, tags, and fields. All may be empty
- * @param images - One entry per image, each with its own license fields
- * @returns The created unit, including the stored images
+ * @param sourceId - Source UUID
+ * @param unitWriteRequest - Name and one value per theme text element
+ * @param images - The one image when the theme requires one
+ * @returns The created unit, including the stored image
  */
 export async function createUnitWithImages(
   sourceId: string,
@@ -306,9 +306,7 @@ export async function createUnitWithImages(
 
   formData.append("unit_json", JSON.stringify({
     name: unitWriteRequest.name,
-    free_text: unitWriteRequest.free_text,
-    tags: unitWriteRequest.tags,
-    fields: unitWriteRequest.fields,
+    texts: unitWriteRequest.texts,
     images: imageItems,
   }));
 
@@ -550,6 +548,27 @@ export async function duplicateTheme(themeId: string): Promise<ThemeReadResponse
  * @param themePreviewRequest - Source, frame, and elements as they stand
  * @returns The PNG and any block reason
  */
+/**
+ * Draw the source theme with this unit's text and saved image.
+ *
+ * The PNG is inline. No unit, artifact, or preview file is written.
+ *
+ * @param sourceId - Source UUID
+ * @param previewRequest - Unsaved text and an optional saved unit id
+ * @returns The frame and any block reason
+ */
+export async function previewSourceUnit(
+  sourceId: string,
+  previewRequest: UnitPreviewRequest,
+): Promise<ThemePreviewResponse> {
+
+  return requestJson<ThemePreviewResponse>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units/preview`,
+    previewRequest,
+  );
+}
+
 export async function createThemePreview(
   themePreviewRequest: ThemePreviewRequest,
 ): Promise<ThemePreviewResponse> {
