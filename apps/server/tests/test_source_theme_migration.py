@@ -363,6 +363,79 @@ class SourceThemeMigrationTests(unittest.TestCase):
 
         self.assertEqual(inspiration_columns, 0)
 
+    def test_existing_campaigns_keep_a_null_theme_and_source(self) -> None:
+        """A campaign saved before this phase is kept, with both new columns empty."""
+
+        self._upgrade("head")
+        campaign_id: str = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+
+        with self._engine().begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO campaigns (
+                        id,
+                        name,
+                        slug,
+                        hashtag,
+                        campaign_type,
+                        advertisement_type,
+                        status,
+                        platforms
+                    )
+                    VALUES (
+                        CAST(:campaign_id AS uuid),
+                        'Old harbor',
+                        'old-harbor',
+                        '#old-harbor',
+                        'spotmu',
+                        'carousel',
+                        'ready',
+                        '[]'::jsonb
+                    )
+                    """
+                ),
+                {"campaign_id": campaign_id},
+            )
+            stored_theme_id: object | None = connection.execute(
+                text("SELECT theme_id FROM campaigns WHERE slug = 'old-harbor'"),
+            ).scalar_one()
+            stored_source_id: object | None = connection.execute(
+                text("SELECT source_id FROM campaigns WHERE slug = 'old-harbor'"),
+            ).scalar_one()
+
+        self.assertIsNone(stored_theme_id)
+        self.assertIsNone(stored_source_id)
+        self._downgrade("unit_text_drafts")
+
+        with self._engine().connect() as connection:
+            theme_columns: int = int(
+                connection.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM information_schema.columns
+                        WHERE table_name = 'campaigns'
+                          AND column_name = 'theme_id'
+                        """
+                    ),
+                ).scalar_one(),
+            )
+            carousel_tables: int = int(
+                connection.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM information_schema.tables
+                        WHERE table_name = 'campaign_carousels'
+                        """
+                    ),
+                ).scalar_one(),
+            )
+
+        self.assertEqual(theme_columns, 0)
+        self.assertEqual(carousel_tables, 0)
+
     def test_stored_path_blocks_deletion_then_unreferenced_rows_go(self) -> None:
         """A theme path stops the upgrade. Clearing it deletes the extra source."""
 

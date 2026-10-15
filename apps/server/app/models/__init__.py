@@ -19,7 +19,9 @@ text element. ``unit_exclusions`` stores the other unit ids a unit
 cannot be shown with. ``units.text_status`` is ``live`` or ``draft``.
 A draft is generated text that is not live until a person accepts it.
 ``sources.inspiration`` and ``sources.rules`` steer that draft.
-``unit_images`` holds at most one image per unit.
+``unit_images`` holds at most one image per unit. A campaign stores
+the theme and the source it runs. ``campaign_carousels`` is the
+latest assembly of live units on that theme.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -33,7 +35,13 @@ from app.models.account import Account
 from app.models.artifact import Artifact, ArtifactSlide
 from app.models.base import Base
 from app.models.brand import Brand
-from app.models.campaign import Campaign, CampaignAccount, CampaignInterest
+from app.models.campaign import (
+    Campaign,
+    CampaignAccount,
+    CampaignCarousel,
+    CampaignCarouselSlide,
+    CampaignInterest,
+)
 from app.models.cluster import Cluster, cluster_source_items
 from app.models.content_source import (
     ContentSource,
@@ -118,6 +126,8 @@ __all__ = [
     "CAMPAIGN_TYPE_ENUM",
     "Campaign",
     "CampaignAccount",
+    "CampaignCarousel",
+    "CampaignCarouselSlide",
     "CampaignInterest",
     "CampaignStatus",
     "CampaignType",

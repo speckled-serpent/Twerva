@@ -38,6 +38,8 @@ class CampaignCreateValidationTests(unittest.TestCase):
             name="Later",
             campaign_type=CampaignType.OTHER,
             advertisement_type=AdvertisementType.CAROUSEL,
+            theme_id=uuid.uuid4(),
+            source_id=uuid.uuid4(),
         )
 
         with self.assertRaises(HTTPException) as raised_http:
@@ -108,6 +110,9 @@ class CampaignCreateValidationTests(unittest.TestCase):
         )
 
         with patch(
+            "app.api.v1.campaigns.resolve_campaign_binding",
+            return_value=(MagicMock(), MagicMock()),
+        ), patch(
             "app.api.v1.campaigns._load_taken_campaign_slugs",
             return_value=set(),
         ), patch(
@@ -253,6 +258,8 @@ def _spotmu_create_request(
         name=name,
         campaign_type=campaign_type,
         advertisement_type=AdvertisementType.CAROUSEL,
+        theme_id=uuid.uuid4(),
+        source_id=uuid.uuid4(),
         platforms=selected_platforms,
         account_ids=selected_account_ids,
         interests=selected_interests,
@@ -290,6 +297,11 @@ def _campaign_reload_double(
     ]
     reloaded_campaign.account_links = []
     reloaded_campaign.interest_links = interest_links
+    reloaded_campaign.theme_id = campaign_create_request.theme_id
+    reloaded_campaign.source_id = campaign_create_request.source_id
+    reloaded_campaign.theme = None
+    reloaded_campaign.source = None
+    reloaded_campaign.carousels = []
     reloaded_campaign.created_at = now_timestamp
     reloaded_campaign.updated_at = now_timestamp
     reloaded_campaign.created_by = None
