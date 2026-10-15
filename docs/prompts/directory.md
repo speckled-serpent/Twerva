@@ -17,4 +17,4 @@ Adapted from Spotmu’s `directory.md`. Same discipline: separate apps, shared p
 4. **Local colocation.** Tests, scripts, and notes for a module live next to that module; global docs stay under `/docs`.
 5. **Root stays thin.** Only globally important files at repo root (README, lockfiles, workspace config, `.cursorrules`).
 
-Stack choices for Twerva apps are still open (see task sheet); structure comes first so we do not invent a second pattern from Spotmu.
+Stack for Twerva apps is FastAPI, React, Vite, TypeScript, and Postgres (see `.cursorrules`). Structure comes first so we do not invent a second pattern from Spotmu.

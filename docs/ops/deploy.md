@@ -475,5 +475,6 @@ detail:
   mock PublishAdapter, `POST /api/v1/publish/run/{post_job_id}`
 - [`docs/reports/task_ops_web_auth_report.md`](../reports/task_ops_web_auth_report.md)
   — `ops_users`, signed session cookie, public console nginx
-- [`docs/planning/task_sheet.md`](../planning/task_sheet.md) — §1.1 host
-  facts; parking lot for S3 and Secrets Manager
+- [`docs/planning/phase_map.md`](../planning/phase_map.md) — what's left.
+  S3 image storage is under Housekeeping. Host facts for this box stay
+  in this file.

@@ -96,7 +96,7 @@ Alembic revision).
   `test_measure_persist.py`, plus route / schema tests
 - `tools/smoke_1_7_measure_steer.sh`
 - `apps/server/README.md`, root `README.md`
-- `docs/planning/domain_statuses.md`, `docs/planning/task_sheet.md`,
+- `docs/planning/domain_statuses.md`, task sheet (later replaced by `docs/planning/phase_map.md`),
   `docs/prompts/product.md`
 - `docs/ops/deploy.md`, `docs/ops/README.md`
 - this file

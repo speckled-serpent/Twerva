@@ -68,7 +68,7 @@ against a local API.
 - `apps/ops/vite.config.ts`, `.env.example`, `README.md`
 - `apps/ops/src/api/`, `apps/ops/src/pages/`, `apps/ops/src/components/`
 - `apps/ops/src/App.tsx`, `apps/ops/src/index.css`, `apps/ops/src/vite-env.d.ts`
-- `README.md`, `docs/planning/task_sheet.md`, `docs/ops/README.md`,
+- `README.md`, task sheet (later replaced by `docs/planning/phase_map.md`), `docs/ops/README.md`,
   `docs/ops/deploy.md` (ops UI stays off public nginx)
 - this file
 

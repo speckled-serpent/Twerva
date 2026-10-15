@@ -74,7 +74,7 @@ Sync schedule create only.
   `test_approve_schedule_persist.py`, plus route / schema tests
 - `tools/smoke_1_5_approve_schedule.sh`
 - `apps/server/README.md`, root `README.md`
-- `docs/planning/domain_statuses.md`, `docs/planning/task_sheet.md`
+- `docs/planning/domain_statuses.md`, task sheet (later replaced by `docs/planning/phase_map.md`)
 - `docs/ops/deploy.md`, `docs/ops/README.md`
 - this file
 

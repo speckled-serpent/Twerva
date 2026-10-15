@@ -1,7 +1,7 @@
 # Twerva
 
 *Pronunciation: TWER-vuh*  
-*Status: Seed note — 2026-09-13. Strategic spine: `docs/prompts/project.md`. Product: `docs/prompts/product.md`. Tasks: `docs/planning/task_sheet.md`.*  
+*Status: Seed note — 2026-09-13. Strategic spine: `docs/prompts/project.md`. Product: `docs/prompts/product.md`. What's left: `docs/planning/phase_map.md`.*  
 *Relation: Sibling to Spotmu. Spotmu marketing owns the *what* to say; Twerva owns the *how* to package, push, and measure it across social platforms.*
 
 ---

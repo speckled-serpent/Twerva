@@ -87,7 +87,7 @@ public nginx `/api` change. `GET /health` still starts without
 - `tools/smoke_1_3_ingest.sh`
 - `apps/server/README.md`, root `README.md`
 - `docs/reports/task_1_3_ingest_spike.md`, this file
-- `docs/prompts/product.md`, `docs/planning/task_sheet.md`, `docs/ops/deploy.md`
+- `docs/prompts/product.md`, task sheet (later replaced by `docs/planning/phase_map.md`), `docs/ops/deploy.md`
 
 ## Next
 
