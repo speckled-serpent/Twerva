@@ -15,7 +15,8 @@ Closed vocabularies are native Postgres ENUM types. Allowed values and
 ``theme_elements`` stores band, content kind, Spotmu text source, and
 alignment the same way. ``sources`` require a theme. ``units`` keep a
 stable id and a name. ``unit_element_texts`` stores one value per theme
-text element. ``unit_images`` holds at most one image per unit.
+text element. ``unit_exclusions`` stores the other unit ids a unit
+cannot be shown with. ``unit_images`` holds at most one image per unit.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -31,7 +32,13 @@ from app.models.base import Base
 from app.models.brand import Brand
 from app.models.campaign import Campaign, CampaignAccount, CampaignInterest
 from app.models.cluster import Cluster, cluster_source_items
-from app.models.content_source import ContentSource, Unit, UnitElementText, UnitImage
+from app.models.content_source import (
+    ContentSource,
+    Unit,
+    UnitElementText,
+    UnitExclusion,
+    UnitImage,
+)
 from app.models.enums import (
     ACCOUNT_STATUS_ENUM,
     ADVERTISEMENT_TYPE_ENUM,
@@ -137,6 +144,7 @@ __all__ = [
     "SourceType",
     "Unit",
     "UnitElementText",
+    "UnitExclusion",
     "UnitImage",
     "UnitImageIntake",
     "UnitImageLicense",

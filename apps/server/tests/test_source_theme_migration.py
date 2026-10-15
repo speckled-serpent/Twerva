@@ -202,6 +202,97 @@ class SourceThemeMigrationTests(unittest.TestCase):
         self.assertEqual(restored[1], "{}")
         self.assertEqual(field_count, 0)
 
+    def test_deleting_a_unit_removes_exclusion_rows(self) -> None:
+        """Both directions disappear when either unit is deleted."""
+
+        self._upgrade("head")
+        source_id: str = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+        harbor_id: str = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        desert_id: str = "ffffffff-ffff-4fff-8fff-ffffffffffff"
+
+        with self._engine().begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO sources (id, theme_id, name, slug)
+                    VALUES (
+                        CAST(:source_id AS uuid),
+                        CAST(:theme_id AS uuid),
+                        'Pairs',
+                        'pairs'
+                    )
+                    """
+                ),
+                {
+                    "source_id": source_id,
+                    "theme_id": str(DEFAULT_ALBUM_THEME_ID),
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO units (id, source_id, position, name)
+                    VALUES
+                        (CAST(:harbor_id AS uuid), CAST(:source_id AS uuid), 0, 'Harbor'),
+                        (CAST(:desert_id AS uuid), CAST(:source_id AS uuid), 1, 'Desert')
+                    """
+                ),
+                {
+                    "source_id": source_id,
+                    "harbor_id": harbor_id,
+                    "desert_id": desert_id,
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO unit_exclusions (id, unit_id, excluded_unit_id)
+                    VALUES
+                        (
+                            CAST(:forward_id AS uuid),
+                            CAST(:harbor_id AS uuid),
+                            CAST(:desert_id AS uuid)
+                        ),
+                        (
+                            CAST(:backward_id AS uuid),
+                            CAST(:desert_id AS uuid),
+                            CAST(:harbor_id AS uuid)
+                        )
+                    """
+                ),
+                {
+                    "harbor_id": harbor_id,
+                    "desert_id": desert_id,
+                    "forward_id": "11111111-1111-4111-8111-111111111111",
+                    "backward_id": "22222222-2222-4222-8222-222222222222",
+                },
+            )
+            connection.execute(
+                text("DELETE FROM units WHERE id = CAST(:harbor_id AS uuid)"),
+                {"harbor_id": harbor_id},
+            )
+            remaining: int = int(
+                connection.execute(text("SELECT COUNT(*) FROM unit_exclusions")).scalar_one(),
+            )
+
+        self.assertEqual(remaining, 0)
+        self._downgrade("unit_element_texts")
+
+        with self._engine().connect() as connection:
+            exclusion_tables: int = int(
+                connection.execute(
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM information_schema.tables
+                        WHERE table_name = 'unit_exclusions'
+                        """
+                    ),
+                ).scalar_one(),
+            )
+
+        self.assertEqual(exclusion_tables, 0)
+
     def test_stored_path_blocks_deletion_then_unreferenced_rows_go(self) -> None:
         """A theme path stops the upgrade. Clearing it deletes the extra source."""
 

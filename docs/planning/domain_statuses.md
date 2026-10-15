@@ -356,15 +356,21 @@ Check `ck_theme_elements_content`:
 ## Content sources (`sources`)
 
 Alembic `sources_default_album`, then `sources_resource_files`, then
-`sources_theme_bound`, then `unit_element_texts`. A source requires
-`theme_id`. `kind` and `resource_files` are gone. A unit keeps its id
-and has a required `name`. `unit_images` allows one row per unit.
+`sources_theme_bound`, then `unit_element_texts`, then
+`unit_exclusions`. A source requires `theme_id`. `kind` and
+`resource_files` are gone. A unit keeps its id and has a required
+`name`. `unit_images` allows one row per unit.
 `unit_element_texts` stores one value per theme text element
 (`unit_id`, `theme_element_id`, `value`), unique on that pair, and
 cascades when the unit or the element is deleted. `units.free_text`,
-`units.tags`, and `unit_fields` are gone. The Default album, slug
-`default`, stays and is bound to Spotmu Paper v1 when that theme
-exists.
+`units.tags`, and `unit_fields` are gone. `unit_exclusions` stores
+the other unit ids a unit cannot be shown with. Each pair is written
+in both directions (`unit_id`, `excluded_unit_id`), unique on that
+pair, and both foreign keys cascade when either unit is deleted. A
+unit cannot exclude itself, and the other id must be a unit in the
+same source. A pick that contains either direction of a stored pair
+is refused. The Default album, slug `default`, stays and is bound to
+Spotmu Paper v1 when that theme exists.
 
 | Enum | Values |
 |---|---|
@@ -380,8 +386,9 @@ original file, and a thumbnail when one exists. They may also
 PNG of the source theme filled with the submitted text and, when the
 theme uses an image, the unit's saved file. That route writes no unit,
 artifact, post job, or preview file. Admins may create, rename, and
-delete sources and units, edit the unit name and one text value per
-theme text element, edit license metadata, upload SVG/PNG/JPEG (8 MB),
+delete sources and units, edit the unit name, one text value per
+theme text element, and the units in the same source it cannot be
+shown with, edit license metadata, upload SVG/PNG/JPEG (8 MB),
 and import one http(s) URL. An image is required when the theme has a
 picture background or an image element, and refused when it does not.
 New bytes go under `ARTIFACT_STORAGE_DIR` at

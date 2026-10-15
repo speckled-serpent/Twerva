@@ -102,6 +102,7 @@ const uploadedAlbum: SourceReadResponse = {
       position: 0,
       name: "Notes",
       texts: [{ theme_element_id: "title", value: "Notes only" }],
+      excluded_unit_ids: [],
       images: [],
     },
     {
@@ -112,6 +113,7 @@ const uploadedAlbum: SourceReadResponse = {
         { theme_element_id: "name", value: "Desk lamp" },
         { theme_element_id: "finish", value: "  Brass lamp  " },
       ],
+      excluded_unit_ids: [],
       images: [
         {
           id: "image-1",

@@ -1,7 +1,8 @@
 """Content sources: one kind of source, bound to a required theme.
 
 A unit keeps its id, has a name, and holds at most one image. Its text
-is one value per text element on that theme. Themes still store a
+is one value per text element on that theme. ``unit_exclusions`` stores
+the other unit ids it cannot be shown with. Themes still store a
 concrete image path. They do not reference these rows.
 """
 
@@ -146,6 +147,56 @@ class Unit(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="unit",
         cascade="all, delete-orphan",
         order_by="UnitImage.position",
+    )
+    exclusions: Mapped[list["UnitExclusion"]] = relationship(
+        "UnitExclusion",
+        foreign_keys="UnitExclusion.unit_id",
+        back_populates="unit",
+        cascade="all, delete-orphan",
+    )
+
+
+class UnitExclusion(Base, UuidPrimaryKeyMixin):
+    """One other unit this unit cannot be shown with.
+
+    The pair is stored in both directions. Deleting either unit removes
+    both rows because each foreign key cascades.
+    """
+
+    __tablename__ = "unit_exclusions"
+    __table_args__ = (
+        UniqueConstraint(
+            "unit_id",
+            "excluded_unit_id",
+            name="uq_unit_exclusions_unit_id_excluded_unit_id",
+        ),
+        CheckConstraint(
+            "unit_id <> excluded_unit_id",
+            name="ck_unit_exclusions_not_self",
+        ),
+    )
+
+    unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("units.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    excluded_unit_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("units.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    unit: Mapped[Unit] = relationship(
+        "Unit",
+        foreign_keys=[unit_id],
+        back_populates="exclusions",
+    )
+    excluded_unit: Mapped[Unit] = relationship(
+        "Unit",
+        foreign_keys=[excluded_unit_id],
     )
 
 

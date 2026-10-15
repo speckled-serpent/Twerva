@@ -498,6 +498,151 @@ class UsedPathCollectionTests(unittest.TestCase):
 
         self.assertEqual(used_paths, {background_path, element_path, slide_path})
 
+    def test_excluding_a_unit_is_stored_on_both(self) -> None:
+        """Saving an exclusion on one unit shows it on the other."""
+
+        session: _MemorySourceSession = _MemorySourceSession()
+        created: SourceReadResponse = create_content_source(
+            SourceCreateRequest(name="Pairs", theme_id=session.theme.id),
+            session,
+            None,
+        )
+        harbor: UnitReadResponse = create_unit(
+            created.id,
+            UnitWriteRequest(name="Harbor"),
+            session,
+            None,
+        )
+        desert: UnitReadResponse = create_unit(
+            created.id,
+            UnitWriteRequest(name="Desert", excluded_unit_ids=[harbor.id]),
+            session,
+            None,
+        )
+        loaded: SourceReadResponse = get_content_source(created.id, session)
+        loaded_harbor: UnitReadResponse = loaded.units[0]
+        loaded_desert: UnitReadResponse = loaded.units[1]
+
+        self.assertEqual(loaded_harbor.excluded_unit_ids, [desert.id])
+        self.assertEqual(loaded_desert.excluded_unit_ids, [harbor.id])
+
+    def test_self_exclusion_and_an_outside_unit_write_nothing(self) -> None:
+        """A unit cannot exclude itself or a unit from another source."""
+
+        session: _MemorySourceSession = _MemorySourceSession()
+        created: SourceReadResponse = create_content_source(
+            SourceCreateRequest(name="Pairs", theme_id=session.theme.id),
+            session,
+            None,
+        )
+        other: SourceReadResponse = create_content_source(
+            SourceCreateRequest(name="Other", theme_id=session.theme.id),
+            session,
+            None,
+        )
+        harbor: UnitReadResponse = create_unit(
+            created.id,
+            UnitWriteRequest(name="Harbor"),
+            session,
+            None,
+        )
+        desert: UnitReadResponse = create_unit(
+            created.id,
+            UnitWriteRequest(name="Desert"),
+            session,
+            None,
+        )
+        outsider: UnitReadResponse = create_unit(
+            other.id,
+            UnitWriteRequest(name="Outsider"),
+            session,
+            None,
+        )
+        commits_before: int = session.commit_count
+
+        with self.assertRaises(HTTPException) as self_error:
+            patch_unit(
+                created.id,
+                harbor.id,
+                UnitWriteRequest(name="Harbor", excluded_unit_ids=[harbor.id]),
+                session,
+                None,
+            )
+
+        with self.assertRaises(HTTPException) as outside_error:
+            patch_unit(
+                created.id,
+                harbor.id,
+                UnitWriteRequest(name="Harbor", excluded_unit_ids=[outsider.id]),
+                session,
+                None,
+            )
+
+        with self.assertRaises(HTTPException) as duplicate_error:
+            patch_unit(
+                created.id,
+                harbor.id,
+                UnitWriteRequest(
+                    name="Harbor",
+                    excluded_unit_ids=[desert.id, desert.id],
+                ),
+                session,
+                None,
+            )
+
+        self.assertEqual(self_error.exception.status_code, 400)
+        self.assertEqual(self_error.exception.detail, "A unit cannot exclude itself.")
+        self.assertEqual(outside_error.exception.status_code, 400)
+        self.assertEqual(
+            outside_error.exception.detail,
+            "That unit is not in this source.",
+        )
+        self.assertEqual(duplicate_error.exception.status_code, 400)
+        self.assertEqual(
+            duplicate_error.exception.detail,
+            "Each excluded unit is stored once.",
+        )
+        self.assertEqual(session.commit_count, commits_before)
+        self.assertEqual(
+            get_content_source(created.id, session).units[0].excluded_unit_ids,
+            [],
+        )
+
+    def test_deleting_a_unit_removes_its_exclusion_pairs(self) -> None:
+        """The surviving unit no longer names the deleted one."""
+
+        session: _MemorySourceSession = _MemorySourceSession()
+        created: SourceReadResponse = create_content_source(
+            SourceCreateRequest(name="Pairs", theme_id=session.theme.id),
+            session,
+            None,
+        )
+        harbor: UnitReadResponse = create_unit(
+            created.id,
+            UnitWriteRequest(name="Harbor"),
+            session,
+            None,
+        )
+        desert: UnitReadResponse = create_unit(
+            created.id,
+            UnitWriteRequest(name="Desert", excluded_unit_ids=[harbor.id]),
+            session,
+            None,
+        )
+        delete_unit(created.id, harbor.id, session, None)
+        source: ContentSource = session.get(ContentSource, created.id)
+        survivor: Unit | None = None
+
+        assert source is not None
+
+        for unit in list(source.units):
+
+            if unit.id == desert.id:
+                survivor = unit
+
+        assert survivor is not None
+        self.assertEqual(list(survivor.exclusions), [])
+
 
 def _title_element(theme_id: uuid.UUID) -> ThemeElement:
     """One text element the unit form can fill."""

@@ -547,6 +547,7 @@ def _text_unit_store() -> tuple[_MemorySourceSession, uuid.UUID, uuid.UUID, Loca
     )
     text_unit.images = []
     text_unit.element_texts = []
+    text_unit.exclusions = []
     session.add(text_unit)
     directory: Path = Path(tempfile.mkdtemp(prefix="twerva-albums-"))
     store: LocalAlbumImageStore = LocalAlbumImageStore(directory)

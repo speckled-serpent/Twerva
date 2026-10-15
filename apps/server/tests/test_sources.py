@@ -290,6 +290,7 @@ def _default_source_from_catalog() -> ContentSource:
         )
         unit.images = [image]
         unit.element_texts = []
+        unit.exclusions = []
         units.append(unit)
 
     source.units = units

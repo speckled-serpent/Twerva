@@ -550,6 +550,7 @@ export interface UnitReadResponse {
   position: number;
   name: string;
   texts: UnitElementTextReadResponse[];
+  excluded_unit_ids: string[];
   images: UnitImageReadResponse[];
 }
 
@@ -590,6 +591,7 @@ export interface UnitElementTextWrite {
 export interface UnitWriteRequest {
   name: string;
   texts: UnitElementTextWrite[];
+  excluded_unit_ids: string[];
 }
 
 export interface UnitPreviewRequest {

@@ -307,6 +307,7 @@ export async function createUnitWithImages(
   formData.append("unit_json", JSON.stringify({
     name: unitWriteRequest.name,
     texts: unitWriteRequest.texts,
+    excluded_unit_ids: unitWriteRequest.excluded_unit_ids,
     images: imageItems,
   }));
 

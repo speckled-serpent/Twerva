@@ -33,10 +33,12 @@ from app.api.v1.source_writes import (
     _fetch_image_or_raise,
     _fetch_unit_or_raise,
     _next_unit_position,
+    _parsed_exclusions,
     _parsed_texts,
     _replace_texts,
     _require_image_when_theme_needs_one,
     _require_name,
+    _store_exclusion_pairs,
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
@@ -210,6 +212,7 @@ def create_unit_with_images_upload(
     unit_write_request: UnitWriteRequest = UnitWriteRequest(
         name=create_request.name,
         texts=create_request.texts,
+        excluded_unit_ids=create_request.excluded_unit_ids,
     )
     created_unit: UnitReadResponse = create_unit_with_images(
         source_id,
@@ -306,7 +309,7 @@ def create_unit_with_images(
 
     Args:
         source_id: Album id.
-        unit_write_request: Free text, tags, and fields.
+        unit_write_request: Name, theme text, and excluded unit ids.
         attachments: Images for this unit. Empty is allowed when the
             text or a field gives the unit content.
         our_database_session: Open session.
@@ -374,6 +377,11 @@ def create_unit_with_images(
 
     _require_image_when_theme_needs_one(found_theme, len(staged_images))
     unit_id: uuid.UUID = new_row_id()
+    excluded_ids: list[uuid.UUID] = _parsed_exclusions(
+        unit_id,
+        unit_write_request.excluded_unit_ids,
+        found_source,
+    )
     next_position: int = _next_unit_position(found_source.id, our_database_session)
     saved_paths: list[str] = []
 
@@ -403,7 +411,14 @@ def create_unit_with_images(
     )
     created_unit.images = created_images
     created_unit.element_texts = []
+    created_unit.exclusions = []
     our_database_session.add(created_unit)
+    _store_exclusion_pairs(
+        created_unit,
+        excluded_ids,
+        found_source,
+        our_database_session,
+    )
 
     for created_image in created_images:
         our_database_session.add(created_image)

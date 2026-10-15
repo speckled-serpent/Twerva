@@ -190,6 +190,20 @@ array, and an empty `unit_fields` table. The first stored value, in
 that same frame order, is written back to `free_text`. Later values
 are not restored.
 
+### Unit exclusion pairs
+
+From `apps/server`, run `alembic upgrade head`. The new revision is
+`unit_exclusions`. No new env var. Restart `twerva-api` and replace
+the ops `dist/` after sync.
+
+The upgrade adds `unit_exclusions`. Each saved pair is stored in both
+directions, so the unit editor on either unit lists the other by name.
+Deleting a unit removes both directions. A unit cannot exclude itself,
+and the other id has to be a unit in the same source.
+
+Downgrade to `unit_element_texts` drops `unit_exclusions`. It does not
+restore the pairs.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.
