@@ -26,6 +26,7 @@ from app.api.v1.themes import (
     list_themes,
     patch_theme_by_id,
     theme_delete_reference_blockers,
+    unexpected_theme_reference_tables,
     theme_spacing_negative_detail,
     theme_spacing_required_detail,
 )
@@ -46,6 +47,7 @@ from app.models.enums import (
     ThemeElementTextSource,
     ThemeStatus,
 )
+from app.models.content_source import ContentSource
 from app.models.theme_element import ThemeElement
 from app.themes.elements import (
     THEME_ELEMENT_IMAGE_REF_DETAIL,
@@ -1715,11 +1717,34 @@ class ThemeDeleteTests(unittest.TestCase):
         )
         fake_session: MagicMock = MagicMock()
         fake_session.get.return_value = paper_theme
+        fake_session.scalar.return_value = 0
 
         with patch("app.api.v1.themes.commit_database_session_or_raise_conflict"):
             delete_theme_by_id(paper_theme.id, fake_session, None)
 
         fake_session.delete.assert_called_once_with(paper_theme)
+
+    def test_source_reference_blocks_delete(self) -> None:
+        """A source that stores this theme refuses the delete."""
+
+        created_at: datetime = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
+        paper_theme: Theme = _theme_row(
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            template_key="spotmu_paper_v1",
+            created_at=created_at,
+        )
+        fake_session: MagicMock = MagicMock()
+        fake_session.get.return_value = paper_theme
+        fake_session.scalar.return_value = 1
+
+        with self.assertRaises(HTTPException) as delete_error:
+            delete_theme_by_id(paper_theme.id, fake_session, None)
+
+        self.assertEqual(delete_error.exception.status_code, 409)
+        self.assertIn("still referenced", delete_error.exception.detail)
+        self.assertIn("sources", delete_error.exception.detail)
+        fake_session.delete.assert_not_called()
 
     def test_missing_theme_delete_returns_404(self) -> None:
         """DELETE raises HTTP 404 when the row is absent."""
@@ -1734,11 +1759,22 @@ class ThemeDeleteTests(unittest.TestCase):
         self.assertEqual(delete_error.exception.status_code, 404)
         fake_session.delete.assert_not_called()
 
-    def test_only_cascaded_elements_reference_themes(self) -> None:
-        """Elements follow the theme. No other table may block or cascade."""
+    def test_only_elements_and_sources_reference_themes(self) -> None:
+        """Elements cascade. Sources restrict. No other table points at themes."""
 
         _ = app.models
-        self.assertEqual(theme_delete_reference_blockers(), [])
+        self.assertEqual(unexpected_theme_reference_tables(), [])
+        element_actions: set[str] = {
+            (foreign_key.ondelete or "").upper()
+            for foreign_key in ThemeElement.__table__.foreign_keys
+            if foreign_key.column.table.name == "themes"
+        }
+        source_actions: set[str] = {
+            (foreign_key.ondelete or "").upper()
+            for foreign_key in ContentSource.__table__.c.theme_id.foreign_keys
+        }
+        self.assertEqual(element_actions, {"CASCADE"})
+        self.assertEqual(source_actions, {"RESTRICT"})
 
     def test_other_reference_blocks_delete(self) -> None:
         """A non-cascade foreign key refuses the delete and leaves the row."""
