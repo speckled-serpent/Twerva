@@ -1,46 +1,21 @@
-export type CreateSourceKind = "album" | "resource";
-
-export const CREATE_SOURCE_NAME_ERROR: string = "Enter a name.";
-export const CREATE_SOURCE_PROVENANCE_ERROR: string = "A resource needs a provenance note.";
-export const CREATE_SOURCE_FILE_ERROR: string = "Choose a Markdown (.md) or plain text (.txt) file.";
-export const CREATE_SOURCE_TYPE_ERROR: string = "Resource files must be Markdown (.md) or plain text (.txt).";
+export const CREATE_SOURCE_NAME_ERROR: string = "Name is required.";
+export const CREATE_SOURCE_THEME_ERROR: string = "A source needs a theme.";
 
 /**
- * Client check before creating a source. The server repeats the file rules.
+ * Validate the create-source form. Name and theme are both required.
  *
- * @param kind - Album or resource
- * @param name - Name field
- * @param provenance - Provenance note, ignored for an album
- * @param fileName - Chosen file name, or null when no file is chosen
- * @returns An inline error, or null when the form can be submitted
+ * @param sourceName - Name field
+ * @param themeId - Selected theme id
+ * @returns An error message, or null when the fields are ready to submit
  */
-export function createSourceFieldError(
-  kind: CreateSourceKind,
-  name: string,
-  provenance: string,
-  fileName: string | null,
-): string | null {
+export function createSourceFieldError(sourceName: string, themeId: string): string | null {
 
-  if (name.trim() === "") {
+  if (sourceName.trim() === "") {
     return CREATE_SOURCE_NAME_ERROR;
   }
 
-  if (kind === "album") {
-    return null;
-  }
-
-  if (provenance.trim() === "") {
-    return CREATE_SOURCE_PROVENANCE_ERROR;
-  }
-
-  if (fileName === null || fileName.trim() === "") {
-    return CREATE_SOURCE_FILE_ERROR;
-  }
-
-  const loweredName: string = fileName.trim().toLowerCase();
-
-  if (!loweredName.endsWith(".md") && !loweredName.endsWith(".txt")) {
-    return CREATE_SOURCE_TYPE_ERROR;
+  if (themeId.trim() === "") {
+    return CREATE_SOURCE_THEME_ERROR;
   }
 
   return null;

@@ -28,7 +28,7 @@ from app.api.v1.source_intake import (
     import_unit_image,
     parse_unit_with_images_json,
 )
-from app.sources.editing import EMPTY_UNIT_DETAIL, LICENSE_NOTE_DETAIL
+from app.sources.editing import EMPTY_UNIT_DETAIL, LICENSE_NOTE_DETAIL, ONE_IMAGE_DETAIL
 from app.api.v1.source_writes import delete_unit_image
 from app.models.enums import UnitImageIntake, UnitImageLicense, UnitImageMediaType
 from app.models.content_source import Unit
@@ -102,7 +102,7 @@ class AlbumImageIntakeTests(unittest.TestCase):
     """Rows and files appear together, or not at all."""
 
     def test_upload_jpeg_and_png_records_license_and_source(self) -> None:
-        """Two files in one batch share the license and the provenance."""
+        """One file records the license and the provenance. A second file is refused."""
 
         session, source_id, unit_id, store, directory = _text_unit_store()
         jpeg_bytes: bytes = _jpeg_bytes(32, 16)
@@ -110,7 +110,7 @@ class AlbumImageIntakeTests(unittest.TestCase):
         created = add_images_from_payloads(
             source_id,
             unit_id,
-            [jpeg_bytes, png_bytes],
+            [jpeg_bytes],
             UnitImageLicense.OWNED,
             " desk photo ",
             "  ",
@@ -120,7 +120,7 @@ class AlbumImageIntakeTests(unittest.TestCase):
             store,
         )
 
-        self.assertEqual(len(created), 2)
+        self.assertEqual(len(created), 1)
         self.assertEqual(created[0].license, UnitImageLicense.OWNED)
         self.assertEqual(created[0].source, "desk photo")
         self.assertEqual(created[0].intake, UnitImageIntake.UPLOAD)
@@ -128,10 +128,25 @@ class AlbumImageIntakeTests(unittest.TestCase):
         self.assertTrue(created[0].relative_path.startswith(f"albums/{source_id}/{unit_id}/"))
         self.assertTrue(created[0].relative_path.endswith(".jpg"))
         self.assertIsNotNone(created[0].thumbnail_path)
-        self.assertEqual(created[1].media_type, UnitImageMediaType.PNG)
         self.assertTrue((directory / created[0].relative_path).is_file())
         self.assertTrue((directory / (created[0].thumbnail_path or "")).is_file())
-        self.assertTrue((directory / created[1].relative_path).is_file())
+
+        with self.assertRaises(HTTPException) as second_image:
+            add_images_from_payloads(
+                source_id,
+                unit_id,
+                [png_bytes],
+                UnitImageLicense.CC0,
+                "https://example.com/photo",
+                None,
+                "",
+                UnitImageIntake.UPLOAD,
+                session,
+                store,
+            )
+
+        self.assertEqual(second_image.exception.status_code, 400)
+        self.assertEqual(second_image.exception.detail, ONE_IMAGE_DETAIL)
 
     def test_missing_license_note_and_oversize_leave_no_row_or_file(self) -> None:
         """The license gate and the size gate write nothing."""
@@ -160,7 +175,7 @@ class AlbumImageIntakeTests(unittest.TestCase):
             add_images_from_payloads(
                 source_id,
                 unit_id,
-                [jpeg_bytes, oversize],
+                [oversize],
                 UnitImageLicense.CC0,
                 "https://example.com/photo",
                 None,
@@ -181,12 +196,12 @@ class AlbumImageIntakeTests(unittest.TestCase):
         self.assertEqual(list(stored_unit.images), [])
 
     def test_second_bad_file_does_not_keep_the_first(self) -> None:
-        """One GIF in the batch rejects the JPEG beside it."""
+        """Two files in one call are refused and write nothing."""
 
         session, source_id, unit_id, store, directory = _text_unit_store()
         commits_before: int = session.commit_count
 
-        with self.assertRaises(HTTPException):
+        with self.assertRaises(HTTPException) as raised:
             add_images_from_payloads(
                 source_id,
                 unit_id,
@@ -199,6 +214,8 @@ class AlbumImageIntakeTests(unittest.TestCase):
                 session,
                 store,
             )
+
+        self.assertEqual(raised.exception.detail, ONE_IMAGE_DETAIL)
 
         self.assertEqual(list(directory.rglob("*")), [])
         self.assertEqual(session.commit_count, commits_before)
@@ -312,12 +329,12 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
     """Add unit can store images in the same step as the unit."""
 
     def test_image_only_unit_keeps_each_license_on_disk(self) -> None:
-        """No free text. Two images, two licenses, files under albums/."""
+        """No free text. One image, its license, and a file under albums/."""
 
         session, source_id, store, directory = _empty_album_store()
         created = create_unit_with_images(
             source_id,
-            UnitWriteRequest(free_text=None, tags=[], fields=[]),
+            UnitWriteRequest(name="Desk", free_text=None, tags=[], fields=[]),
             [
                 UnitImageAttachment(
                     payload=_jpeg_bytes(24, 12),
@@ -327,27 +344,17 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
                     license_note="",
                     alt_text=None,
                 ),
-                UnitImageAttachment(
-                    payload=_png_bytes(12, 12),
-                    intake=UnitImageIntake.URL,
-                    image_license=UnitImageLicense.LICENSED,
-                    source="https://example.com/rights",
-                    license_note="Invoice 12",
-                    alt_text=None,
-                ),
             ],
             session,
             store,
         )
 
+        self.assertEqual(created.name, "Desk")
         self.assertIsNone(created.free_text)
-        self.assertEqual(len(created.images), 2)
+        self.assertEqual(len(created.images), 1)
         self.assertEqual(created.images[0].license, UnitImageLicense.OWNED)
         self.assertEqual(created.images[0].source, "Desk photo")
         self.assertEqual(created.images[0].intake, UnitImageIntake.UPLOAD)
-        self.assertEqual(created.images[1].license, UnitImageLicense.LICENSED)
-        self.assertEqual(created.images[1].license_note, "Invoice 12")
-        self.assertEqual(created.images[1].intake, UnitImageIntake.URL)
         self.assertTrue((directory / created.images[0].relative_path).is_file())
         self.assertTrue((directory / (created.images[0].thumbnail_path or "")).is_file())
         self.assertTrue(created.images[0].relative_path.startswith("albums/"))
@@ -361,7 +368,7 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as note_error:
             create_unit_with_images(
                 source_id,
-                UnitWriteRequest(),
+                UnitWriteRequest(name="Desk"),
                 [
                     UnitImageAttachment(
                         payload=_jpeg_bytes(8, 8),
@@ -379,16 +386,8 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as type_error:
             create_unit_with_images(
                 source_id,
-                UnitWriteRequest(),
+                UnitWriteRequest(name="Desk"),
                 [
-                    UnitImageAttachment(
-                        payload=_jpeg_bytes(8, 8),
-                        intake=UnitImageIntake.UPLOAD,
-                        image_license=UnitImageLicense.CC0,
-                        source="https://example.com/photo",
-                        license_note="",
-                        alt_text=None,
-                    ),
                     UnitImageAttachment(
                         payload=b"GIF89ahello",
                         intake=UnitImageIntake.UPLOAD,
@@ -418,7 +417,7 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as raised:
             create_unit_with_images(
                 source_id,
-                UnitWriteRequest(free_text="  ", tags=[], fields=[]),
+                UnitWriteRequest(name="Empty", free_text="  ", tags=[], fields=[]),
                 [],
                 session,
                 store,
@@ -436,6 +435,7 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
 
         client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
         create_request: UnitWithImagesCreateRequest = UnitWithImagesCreateRequest(
+            name="Plate",
             images=[
                 UnitImageCreateItem(
                     kind="url",
@@ -457,7 +457,7 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
 
         with self.assertRaises(HTTPException) as raised:
             parse_unit_with_images_json(
-                '{"images":[{"kind":"file","license":"copyright","source":"desk"}]}',
+                '{"name":"Plate","images":[{"kind":"file","license":"copyright","source":"desk"}]}',
             )
 
         image_url: str = "https://example.com/plate.png"
@@ -471,6 +471,7 @@ class ImageOnlyUnitCreateTests(unittest.TestCase):
 
         client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
         create_request: UnitWithImagesCreateRequest = UnitWithImagesCreateRequest(
+            name="Plate",
             images=[
                 UnitImageCreateItem(
                     kind="url",
@@ -517,17 +518,15 @@ def _text_unit_store() -> tuple[_MemorySourceSession, uuid.UUID, uuid.UUID, Loca
 
     from app.api.v1.schemas import SourceCreateRequest
     from app.api.v1.source_writes import create_content_source, create_unit
-    from app.models.enums import ContentSourceKind
-
     session: _MemorySourceSession = _MemorySourceSession()
     created = create_content_source(
-        SourceCreateRequest(name="Intake", kind=ContentSourceKind.ALBUM),
+        SourceCreateRequest(name="Intake", theme_id=session.theme.id),
         session,
         None,
     )
     unit = create_unit(
         created.id,
-        UnitWriteRequest(free_text="Notes", tags=[], fields=[]),
+        UnitWriteRequest(name="Notes", free_text="Notes", tags=[], fields=[]),
         session,
         None,
     )
@@ -542,11 +541,9 @@ def _empty_album_store() -> tuple[_MemorySourceSession, uuid.UUID, LocalAlbumIma
 
     from app.api.v1.schemas import SourceCreateRequest
     from app.api.v1.source_writes import create_content_source
-    from app.models.enums import ContentSourceKind
-
     session: _MemorySourceSession = _MemorySourceSession()
     created = create_content_source(
-        SourceCreateRequest(name="Image only", kind=ContentSourceKind.ALBUM),
+        SourceCreateRequest(name="Image only", theme_id=session.theme.id),
         session,
         None,
     )

@@ -355,26 +355,25 @@ Check `ck_theme_elements_content`:
 
 ## Content sources (`sources`)
 
-Alembic `sources_default_album` (parent `themes_element_rectangle`),
-then `sources_resource_files` (parent `sources_default_album`).
-An album is a source with `kind = album` and has units. A resource has
-one row in `resource_files`. Phase 1 seeds one album, slug `default`,
-and does not update `themes`.
+Alembic `sources_default_album`, then `sources_resource_files`, then
+`sources_theme_bound`. A source requires `theme_id`. `kind` and
+`resource_files` are gone. A unit keeps its id and has a required
+`name`. `unit_images` allows one row per unit. The Default album,
+slug `default`, stays and is bound to Spotmu Paper v1 when that theme
+exists.
 
 | Enum | Values |
 |---|---|
-| `content_source_kind` | `album`, `resource` |
 | `unit_image_media_type` | `svg`, `png`, `jpeg` |
 | `unit_image_license` | `cc0`, `public_domain`, `owned`, `licensed` |
 | `unit_image_intake` | `upload`, `url` |
-| `resource_file_media_type` | `markdown`, `plain` |
 
 `units.tags` is a text array, default empty. `unit_images.license_note`
 is empty unless `license` is `licensed`, in which case it is required.
 `relative_path` is unique. SVG rows have null width, height, and
 thumbnail. Readers may GET a source, the original file, and a
 thumbnail when one exists. Admins may create, rename, and delete
-albums and units, edit free text, fields, and tags, edit license
+sources and units, edit the unit name, free text, fields, and tags, edit license
 metadata, upload SVG/PNG/JPEG (8 MB), and import one http(s) URL.
 New bytes go under `ARTIFACT_STORAGE_DIR` at
 `albums/<source_id>/<unit_id>/<image_id>.<ext>`. A failure writes no

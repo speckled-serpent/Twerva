@@ -13,10 +13,8 @@ from app.models.enums import (
     BackgroundKind,
     CampaignStatus,
     CampaignType,
-    ContentSourceKind,
     OpsUserRole,
     Platform,
-    ResourceFileMediaType,
     PostJobStatus,
     SourceType,
     SteerActionType,
@@ -867,10 +865,11 @@ class UnitImageReadResponse(BaseModel):
 
 
 class UnitReadResponse(BaseModel):
-    """One unit: free text, tags, fields, and images."""
+    """One unit: name, free text, tags, fields, and at most one image."""
 
     id: uuid.UUID
     position: int
+    name: str
     free_text: str | None
     tags: list[str]
     fields: list[UnitFieldReadResponse]
@@ -881,7 +880,7 @@ class SourceListItemResponse(BaseModel):
     """One source on `GET /api/v1/sources`. Units are on the detail route."""
 
     id: uuid.UUID
-    kind: ContentSourceKind
+    theme_id: uuid.UUID
     name: str
     slug: str
     unit_count: int
@@ -889,50 +888,33 @@ class SourceListItemResponse(BaseModel):
     updated_at: datetime
 
 
-class ResourceFileReadResponse(BaseModel):
-    """The file on a resource, plus a safe Markdown rendering when it is Markdown."""
-
-    relative_path: str
-    media_type: ResourceFileMediaType
-    byte_size: int
-    original_filename: str
-    provenance: str
-    body: str
-    rendered_html: str | None
-
-
 class SourceReadResponse(BaseModel):
-    """One source and its units, or one resource and its file."""
+    """One source and its units."""
 
     id: uuid.UUID
-    kind: ContentSourceKind
+    theme_id: uuid.UUID
     name: str
     slug: str
     created_at: datetime
     updated_at: datetime
     units: list[UnitReadResponse]
-    resource: ResourceFileReadResponse | None = None
 
 
 class SourceCreateRequest(BaseModel):
-    """JSON body for `POST /api/v1/sources`. Albums only.
-
-    A resource is `POST /api/v1/sources/resource` with the file.
-    """
+    """JSON body for `POST /api/v1/sources`. Name and theme are required."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    kind: ContentSourceKind
+    theme_id: uuid.UUID
 
 
 class SourcePatchRequest(BaseModel):
-    """Rename a source. A resource can also update its provenance note."""
+    """Rename a source."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    provenance: str | None = None
 
 
 class UnitFieldWrite(BaseModel):
@@ -945,10 +927,11 @@ class UnitFieldWrite(BaseModel):
 
 
 class UnitWriteRequest(BaseModel):
-    """Free text, tags, and fields for create or replace. Images stay put."""
+    """Name, free text, tags, and fields for create or replace. Images stay put."""
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str
     free_text: str | None = None
     tags: list[str] = Field(default_factory=list)
     fields: list[UnitFieldWrite] = Field(default_factory=list)
@@ -992,10 +975,11 @@ class UnitImageCreateItem(BaseModel):
 
 
 class UnitWithImagesCreateRequest(BaseModel):
-    """Free text plus the images that make an image-only unit valid."""
+    """Name, free text, and the one image that can make an image-only unit valid."""
 
     model_config = ConfigDict(extra="forbid")
 
+    name: str
     free_text: str | None = None
     tags: list[str] = Field(default_factory=list)
     fields: list[UnitFieldWrite] = Field(default_factory=list)

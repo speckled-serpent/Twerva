@@ -22,13 +22,13 @@ from app.api.v1.sources import (
 )
 from app.models.content_source import ContentSource, Unit, UnitImage
 from app.models.enums import (
-    ContentSourceKind,
     UnitImageIntake,
     UnitImageLicense,
     UnitImageMediaType,
 )
 from app.sources.default_album import (
     DEFAULT_ALBUM_SLUG,
+    DEFAULT_ALBUM_THEME_ID,
     default_album_source_id,
     default_unit_seeds,
 )
@@ -125,10 +125,11 @@ class ContentSourceReadApiTests(unittest.TestCase):
 
         self.assertEqual(response.slug, DEFAULT_ALBUM_SLUG)
         self.assertEqual(response.name, DEFAULT_ALBUM_NAME)
-        self.assertEqual(response.kind, ContentSourceKind.ALBUM)
+        self.assertEqual(response.theme_id, DEFAULT_ALBUM_THEME_ID)
         self.assertEqual(len(response.units), 6)
 
         for unit, filename in zip(response.units, DEFAULT_IMAGE_FILENAMES, strict=True):
+            self.assertEqual(unit.name, default_unit_seeds()[unit.position].name)
             self.assertIsNone(unit.free_text)
             self.assertEqual(unit.tags, [])
             self.assertEqual(unit.fields, [])
@@ -149,21 +150,21 @@ class ContentSourceReadApiTests(unittest.TestCase):
         )
 
     def test_list_kind_album_returns_the_default_count(self) -> None:
-        """The album filter query is used, and the list item counts units."""
+        """The list has no kind filter, and the list item counts units."""
 
         source: ContentSource = _default_source_from_catalog()
         fake_session: MagicMock = MagicMock()
         fake_session.scalars.return_value.all.return_value = [source]
 
-        list_items = list_content_sources(ContentSourceKind.ALBUM, fake_session)
+        list_items = list_content_sources(fake_session)
         statement = fake_session.scalars.call_args.args[0]
-        where_sql: str = str(statement.whereclause)
 
         self.assertEqual(len(list_items), 1)
         self.assertEqual(list_items[0].slug, DEFAULT_ALBUM_SLUG)
+        self.assertEqual(list_items[0].theme_id, DEFAULT_ALBUM_THEME_ID)
         self.assertEqual(list_items[0].unit_count, 6)
-        self.assertIn("kind", where_sql)
-        self.assertIsNone(content_sources_list_statement(None).whereclause)
+        self.assertIsNone(statement.whereclause)
+        self.assertIsNone(content_sources_list_statement().whereclause)
 
     def test_missing_source_is_not_found(self) -> None:
         """An unknown id is HTTP 404 and does not write."""
@@ -216,10 +217,8 @@ class ContentSourceReadApiTests(unittest.TestCase):
             "POST",
             methods_by_path["/sources/{source_id}/units/{unit_id}/images/import"],
         )
-        self.assertIn("POST", methods_by_path["/sources/resource"])
-        self.assertTrue(
-            {"GET", "PUT"}.issubset(methods_by_path["/sources/{source_id}/resource"]),
-        )
+        self.assertNotIn("/sources/resource", methods_by_path)
+        self.assertNotIn("/sources/{source_id}/resource", methods_by_path)
 
 
 class ThemeDefaultsRenderingUnchangedTests(unittest.TestCase):
@@ -256,7 +255,7 @@ def _default_source_from_catalog() -> ContentSource:
     now: datetime = datetime.now(timezone.utc)
     source: ContentSource = ContentSource(
         id=default_album_source_id(),
-        kind=ContentSourceKind.ALBUM,
+        theme_id=DEFAULT_ALBUM_THEME_ID,
         name=DEFAULT_ALBUM_NAME,
         slug=DEFAULT_ALBUM_SLUG,
         created_at=now,
@@ -269,6 +268,7 @@ def _default_source_from_catalog() -> ContentSource:
             id=seed.unit_id,
             source_id=source.id,
             position=seed.position,
+            name=seed.name,
             free_text=None,
             tags=[],
             created_at=now,

@@ -44,20 +44,29 @@ export function NewUnitImages({
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const addFiles = (fileList: FileList | null): void => {
-    const nextFiles: File[] = fileList === null ? [] : [...fileList];
-    const nextDrafts: UnitImageDraft[] = nextFiles.map((file: File): UnitImageDraft => ({
+    const nextFile: File | undefined = fileList === null ? undefined : fileList[0];
+
+    if (nextFile === undefined) {
+      return;
+    }
+
+    for (const draft of drafts) {
+      releaseUnitImageDraft(draft);
+    }
+
+    const nextDraft: UnitImageDraft = {
       clientId: crypto.randomUUID(),
       kind: "file",
-      file,
-      fileName: file.name,
+      file: nextFile,
+      fileName: nextFile.name,
       url: "",
-      previewUrl: URL.createObjectURL(file),
+      previewUrl: URL.createObjectURL(nextFile),
       imageLicense: "cc0",
       imageSource: "",
       licenseNote: "",
-    }));
+    };
 
-    onDraftsChange([...drafts, ...nextDrafts]);
+    onDraftsChange([nextDraft]);
   };
 
   const addUrl = (): void => {
@@ -75,6 +84,10 @@ export function NewUnitImages({
       return;
     }
 
+    for (const draft of drafts) {
+      releaseUnitImageDraft(draft);
+    }
+
     const urlDraft: UnitImageDraft = {
       clientId: crypto.randomUUID(),
       kind: "url",
@@ -89,7 +102,7 @@ export function NewUnitImages({
 
     setUrlError(null);
     setUrlText("");
-    onDraftsChange([...drafts, urlDraft]);
+    onDraftsChange([urlDraft]);
   };
 
   const updateDraft = (clientId: string, patch: Partial<UnitImageDraft>): void => {
@@ -122,8 +135,7 @@ export function NewUnitImages({
     <section id="unit-images" className="unit-images">
       <h2>Images</h2>
       <p className="field-hint">
-        Upload one or more files, or add a URL. Each image has its own license, source, and note.
-        A unit can be only images. Thumbnails show here before you save.
+        One image per unit. Upload a file or add a URL. The license, source, and note are saved with it.
       </p>
       <label>
         Files
@@ -131,7 +143,6 @@ export function NewUnitImages({
           id="new-unit-image-files"
           type="file"
           accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-          multiple
           onChange={(changeEvent): void => {
             addFiles(changeEvent.target.files);
             changeEvent.target.value = "";

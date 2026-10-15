@@ -32,14 +32,15 @@ from app.api.v1.source_writes import (
     _next_unit_position,
     _parsed_unit_write,
     _replace_fields,
+    _require_name,
     _require_unit_content,
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitImage
-from app.models.enums import ContentSourceKind, UnitImageIntake, UnitImageLicense
+from app.models.enums import UnitImageIntake, UnitImageLicense
 from app.models.ops_user import OpsUser
-from app.sources.editing import RESOURCE_NOT_IN_SLICE_DETAIL, new_row_id, normalize_image_metadata
+from app.sources.editing import ONE_IMAGE_DETAIL, new_row_id, normalize_image_metadata
 from app.sources.image_intake import (
     ImageIntakeError,
     PreparedUnitImage,
@@ -202,6 +203,7 @@ def create_unit_with_images_upload(
         )
 
     unit_write_request: UnitWriteRequest = UnitWriteRequest(
+        name=create_request.name,
         free_text=create_request.free_text,
         tags=create_request.tags,
         fields=create_request.fields,
@@ -320,10 +322,10 @@ def create_unit_with_images(
         our_database_session,
     )
 
-    if found_source.kind != ContentSourceKind.ALBUM:
+    if len(attachments) > 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=RESOURCE_NOT_IN_SLICE_DETAIL,
+            detail=ONE_IMAGE_DETAIL,
         )
 
     if len(attachments) > MAX_FILES_PER_UPLOAD:
@@ -332,6 +334,7 @@ def create_unit_with_images(
             detail=TOO_MANY_FILES_DETAIL,
         )
 
+    unit_name: str = _require_name(unit_write_request.name)
     free_text, tags, fields = _parsed_unit_write(unit_write_request)
     staged_images: list[tuple[PreparedUnitImage, UnitImageAttachment]] = []
 
@@ -380,6 +383,7 @@ def create_unit_with_images(
         id=unit_id,
         source_id=found_source.id,
         position=next_position,
+        name=unit_name,
         free_text=free_text,
         tags=tags,
     )
@@ -529,7 +533,12 @@ def add_images_from_payloads(
     """
 
     found_unit: Unit = _fetch_unit_or_raise(source_id, unit_id, our_database_session)
-    _require_album(our_database_session, source_id)
+
+    if len(payloads) != 1 or len(list(found_unit.images)) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ONE_IMAGE_DETAIL,
+        )
     image_source, cleaned_note, cleaned_alt = _metadata_or_400(
         image_license,
         source,
@@ -619,18 +628,6 @@ def get_unit_image_thumbnail(
     )
 
     return thumbnail_response
-
-
-def _require_album(our_database_session: Session, source_id: uuid.UUID) -> None:
-    """Units on a resource are not in this slice."""
-
-    found_source: ContentSource | None = our_database_session.get(ContentSource, source_id)
-
-    if found_source is not None and found_source.kind != ContentSourceKind.ALBUM:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=RESOURCE_NOT_IN_SLICE_DETAIL,
-        )
 
 
 def _metadata_or_400(

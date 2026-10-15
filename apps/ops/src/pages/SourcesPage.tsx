@@ -8,7 +8,6 @@ import {
   deleteUnitImage,
   fetchSourceById,
   listAlbums,
-  listResources,
   patchSourceUnit,
   patchUnitImageMetadata,
   renameSource,
@@ -27,7 +26,6 @@ import type {
   UnitWriteRequest,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { ResourceDetailView, ResourceListView, SourceTabBar, type SourceTab } from "./ResourceViews";
 import {
   NewUnitImages,
   releaseUnitImageDraft,
@@ -51,7 +49,6 @@ interface FieldDraft {
 
 export interface SourcesOpenRequest {
   sourceId: string;
-  kind: "album" | "resource";
   statusMessage: string;
 }
 
@@ -60,16 +57,13 @@ export interface SourcesPageProps {
 }
 
 /**
- * Sources: albums of units, and resource files beside them.
+ * Sources: one list of theme-bound sources, and a simple unit editor.
  *
  * @param props - Optional open request from Create Source
  * @returns The Sources page
  */
 export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
 
-  const [sourceTab, setSourceTab] = useState<SourceTab>(
-    openRequest?.kind === "resource" ? "resources" : "albums",
-  );
   const [listedSources, setListedSources] = useState<SourceListItemResponse[]>([]);
   const [openedSourceId, setOpenedSourceId] = useState<string | null>(
     openRequest?.sourceId ?? null,
@@ -88,9 +82,7 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
     const loadSources = async (): Promise<void> => {
 
       try {
-        const loadedSources: SourceListItemResponse[] = sourceTab === "albums"
-          ? await listAlbums()
-          : await listResources();
+        const loadedSources: SourceListItemResponse[] = await listAlbums();
 
         if (isCancelled) {
           return;
@@ -112,7 +104,7 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
     return (): void => {
       isCancelled = true;
     };
-  }, [reloadToken, sourceTab]);
+  }, [reloadToken]);
 
   useEffect((): (() => void) => {
     let isCancelled: boolean = false;
@@ -158,7 +150,6 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
       return;
     }
 
-    setSourceTab(openRequest.kind === "resource" ? "resources" : "albums");
     setOpenedSourceId(openRequest.sourceId);
     setOpenedUnitId(null);
     setIsCreatingUnit(false);
@@ -169,40 +160,6 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
   const requestReload = (): void => {
     setReloadToken((currentToken: number): number => currentToken + 1);
   };
-
-  const chooseTab = (nextTab: SourceTab): void => {
-    setSourceTab(nextTab);
-    setOpenedSourceId(null);
-    setOpenedUnitId(null);
-    setIsCreatingUnit(false);
-    setHeldUnit(null);
-    setStatusMessage("");
-  };
-
-  const sourceTabs: ReactElement = <SourceTabBar sourceTab={sourceTab} onTab={chooseTab} />;
-
-  if (openedSourceId !== null && sourceTab === "resources") {
-    return (
-      <ResourceDetailView
-        source={selectedSource !== null && selectedSource.kind === "resource" ? selectedSource : null}
-        loadError={loadError}
-        statusMessage={statusMessage}
-        onBack={(): void => {
-          setOpenedSourceId(null);
-          setStatusMessage("");
-        }}
-        onChanged={(message: string): void => {
-          setStatusMessage(message);
-          requestReload();
-        }}
-        onDeleted={(): void => {
-          setOpenedSourceId(null);
-          setStatusMessage("Deleted the resource.");
-          requestReload();
-        }}
-      />
-    );
-  }
 
   if (openedSourceId !== null && (openedUnitId !== null || isCreatingUnit)) {
     const loadedUnit: UnitReadResponse | null = findUnit(selectedSource, openedUnitId);
@@ -282,29 +239,9 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
     );
   }
 
-  if (sourceTab === "resources") {
-    return (
-      <ResourceListView
-        resources={listedSources}
-        tabs={sourceTabs}
-        loadError={loadError}
-        statusMessage={statusMessage}
-        onOpenResource={(sourceId: string): void => {
-          setOpenedSourceId(sourceId);
-          setStatusMessage("");
-        }}
-        onResourceDeleted={(resourceName: string): void => {
-          setStatusMessage(`Deleted resource ${resourceName}.`);
-          requestReload();
-        }}
-      />
-    );
-  }
-
   return (
     <AlbumListView
       albums={listedSources}
-      tabs={sourceTabs}
       loadError={loadError}
       statusMessage={statusMessage}
       onOpenAlbum={(sourceId: string): void => {
@@ -321,7 +258,6 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
 
 interface AlbumListViewProps {
   albums: SourceListItemResponse[];
-  tabs: ReactElement;
   loadError: unknown;
   statusMessage: string;
   onOpenAlbum: (sourceId: string) => void;
@@ -330,7 +266,6 @@ interface AlbumListViewProps {
 
 function AlbumListView({
   albums,
-  tabs,
   loadError,
   statusMessage,
   onOpenAlbum,
@@ -342,12 +277,11 @@ function AlbumListView({
 
   return (
     <section>
-      {tabs}
       <div className="page-header-row">
         <div>
           <h1>Sources</h1>
           <p className="lede">
-            Albums of units. Open one to edit text, images, and tags.
+            Each source has a theme. Open one to edit units.
             Create lives on Create Source.
           </p>
         </div>
@@ -356,7 +290,7 @@ function AlbumListView({
       <ErrorBanner error={loadError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
       {loadError !== null ? null : albums.length === 0 ? (
-        <p>No albums yet. Use Create Source to add one.</p>
+        <p>No sources yet. Use Create Source to add one.</p>
       ) : (
         <table>
           <thead>
@@ -614,6 +548,7 @@ function UnitCardBody({ sourceId, unit }: UnitCardBodyProps): ReactElement {
 
   return (
     <>
+      <p className="unit-card-excerpt">{unit.name}</p>
       {firstImage === undefined ? (
         <p className="unit-card-excerpt">{excerpt}</p>
       ) : (
@@ -651,6 +586,7 @@ function UnitEditorView({
 }: UnitEditorViewProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
+  const [unitName, setUnitName] = useState<string>(unit?.name ?? "");
   const [freeText, setFreeText] = useState<string>(unit?.free_text ?? "");
   const [tagsText, setTagsText] = useState<string>(unit === null ? "" : unit.tags.join(", "));
   const [fieldDrafts, setFieldDrafts] = useState<FieldDraft[]>(fieldDraftsFromUnit(unit));
@@ -671,6 +607,7 @@ function UnitEditorView({
   }, []);
 
   useEffect((): void => {
+    setUnitName(unit?.name ?? "");
     setFreeText(unit?.free_text ?? "");
     setTagsText(unit === null ? "" : unit.tags.join(", "));
     setFieldDrafts(fieldDraftsFromUnit(unit));
@@ -702,7 +639,14 @@ function UnitEditorView({
       return;
     }
 
+    if (unitName.trim() === "") {
+      setSaveError(new Error("Name is required."));
+
+      return;
+    }
+
     const unitWriteRequest: UnitWriteRequest = {
+      name: unitName.trim(),
       free_text: freeText,
       tags: tagsFromText(tagsText),
       fields: fieldsFromDrafts(fieldDrafts),
@@ -750,8 +694,8 @@ function UnitEditorView({
 
   const pageTitle: string = unit === null ? "New unit" : "Unit";
   const pageLede: string = unit === null
-    ? "Add images, free text, or a labeled field. Images can be the whole unit."
-    : "Images are listed first. Upload or import adds a file; the license is saved with it.";
+    ? "Give the unit a name. Add one image, free text, or a labeled field."
+    : "One image, free text, and labeled fields. The theme-shaped editor comes later.";
 
   return (
     <section>
@@ -796,7 +740,7 @@ function UnitEditorView({
                   }}
                 />
               ))}
-              {canWrite ? (
+              {canWrite && unit.images.length === 0 ? (
                 <ImageIntakeForm
                   sourceId={source.id}
                   unitId={unit.id}
@@ -820,6 +764,21 @@ function UnitEditorView({
                 onDraftsChange={setImageDrafts}
               />
             ) : null}
+            <label>
+              Name
+              <input
+                id="unit-name"
+                value={unitName}
+                disabled={!canWrite}
+                onChange={(changeEvent): void => {
+                  setUnitName(changeEvent.target.value);
+                }}
+              />
+            </label>
+            <p className="field-hint">The id stays the same. The name is what you call this unit.</p>
+            {unit === null ? null : (
+              <p className="field-hint">Id {unit.id}</p>
+            )}
             <label>
               Free text
               <textarea
@@ -1043,7 +1002,6 @@ function ImageIntakeForm({
               id="unit-image-files"
               type="file"
               accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-              multiple
               onChange={(changeEvent): void => {
                 const fileList: FileList | null = changeEvent.target.files;
                 const nextFiles: File[] = fileList === null ? [] : [...fileList];

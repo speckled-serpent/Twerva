@@ -1,9 +1,8 @@
-"""Read content sources, and register album and unit writes."""
+"""Read content sources, and register source and unit writes."""
 
 from __future__ import annotations
 
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import Select, select
@@ -11,7 +10,6 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.lookups import fetch_content_source_by_id_or_raise
 from app.api.v1.schemas import (
-    ResourceFileReadResponse,
     SourceListItemResponse,
     SourceReadResponse,
     UnitFieldReadResponse,
@@ -20,22 +18,16 @@ from app.api.v1.schemas import (
 )
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
-from app.models.enums import ContentSourceKind
 
 
 sources_router: APIRouter = APIRouter(prefix="/sources", tags=["sources"])
 
 
-def content_sources_list_statement(
-    kind: ContentSourceKind | None,
-) -> Select[tuple[ContentSource]]:
-    """Return the list query, optionally limited to one kind.
-
-    Args:
-        kind: Album or resource. Null lists every source.
+def content_sources_list_statement() -> Select[tuple[ContentSource]]:
+    """Return every source, ordered by name.
 
     Returns:
-        A select of sources ordered by name, with units loaded.
+        A select of sources with units loaded.
     """
 
     statement: Select[tuple[ContentSource]] = (
@@ -47,20 +39,16 @@ def content_sources_list_statement(
         .order_by(ContentSource.name.asc(), ContentSource.slug.asc())
     )
 
-    if kind is not None:
-        statement = statement.where(ContentSource.kind == kind)
-
     return statement
 
 
 @sources_router.get("", response_model=list[SourceListItemResponse])
 def list_content_sources(
-    kind: ContentSourceKind | None = None,
     our_database_session: Session = Depends(get_our_database_session),
 ) -> list[SourceListItemResponse]:
-    """Return sources. Readers may call this. ``kind`` filters the list."""
+    """Return sources. Readers may call this."""
 
-    statement: Select[tuple[ContentSource]] = content_sources_list_statement(kind)
+    statement: Select[tuple[ContentSource]] = content_sources_list_statement()
     source_scalars = our_database_session.scalars(statement)
     sources: list[ContentSource] = list(source_scalars.all())
     list_items: list[SourceListItemResponse] = [
@@ -91,7 +79,7 @@ def serialize_content_source_list_item(source: ContentSource) -> SourceListItemR
 
     list_item: SourceListItemResponse = SourceListItemResponse(
         id=source.id,
-        kind=source.kind,
+        theme_id=source.theme_id,
         name=source.name,
         slug=source.slug,
         unit_count=len(list(source.units)),
@@ -110,13 +98,12 @@ def serialize_content_source(source: ContentSource) -> SourceReadResponse:
     ]
     source_read_response: SourceReadResponse = SourceReadResponse(
         id=source.id,
-        kind=source.kind,
+        theme_id=source.theme_id,
         name=source.name,
         slug=source.slug,
         created_at=source.created_at,
         updated_at=source.updated_at,
         units=unit_responses,
-        resource=_serialize_resource_file(source),
     )
 
     return source_read_response
@@ -150,6 +137,7 @@ def serialize_unit(unit: Unit) -> UnitReadResponse:
     unit_response: UnitReadResponse = UnitReadResponse(
         id=unit.id,
         position=unit.position,
+        name=unit.name,
         free_text=unit.free_text,
         tags=list(unit.tags),
         fields=field_responses,
@@ -204,53 +192,6 @@ def _serialize_field(field: UnitField) -> UnitFieldReadResponse:
     return field_response
 
 
-def _serialize_resource_file(source: ContentSource) -> ResourceFileReadResponse | None:
-    """Return the resource file and a safe rendering, or null for an album."""
-
-    from app.models.content_source import ResourceFile
-    from app.models.enums import ResourceFileMediaType
-    from app.sources.resource_markdown import render_markdown_document
-    from app.sources.resource_store import (
-        LocalResourceFileStore,
-        configured_resource_file_store,
-    )
-    from app.storage.artifacts import ArtifactAssetPathEscapeError
-
-    resource_file: ResourceFile | None = source.resource_file
-
-    if resource_file is None:
-
-        return None
-
-    file_store: LocalResourceFileStore = configured_resource_file_store()
-    body_text: str = ""
-
-    try:
-        stored_path: Path = file_store.open(resource_file.relative_path)
-
-        if stored_path.is_file():
-            body_text = stored_path.read_bytes().decode("utf-8")
-    except (ArtifactAssetPathEscapeError, UnicodeDecodeError, OSError):
-        body_text = ""
-
-    rendered_html: str | None = None
-
-    if resource_file.media_type == ResourceFileMediaType.MARKDOWN and body_text != "":
-        rendered_html = render_markdown_document(body_text)
-
-    resource_response: ResourceFileReadResponse = ResourceFileReadResponse(
-        relative_path=resource_file.relative_path,
-        media_type=resource_file.media_type,
-        byte_size=resource_file.byte_size,
-        original_filename=resource_file.original_filename,
-        provenance=resource_file.provenance,
-        body=body_text,
-        rendered_html=rendered_html,
-    )
-
-    return resource_response
-
-
 def serialize_image(image: UnitImage) -> UnitImageReadResponse:
     """Return one image, including license and the concrete path."""
 
@@ -274,10 +215,8 @@ def serialize_image(image: UnitImage) -> UnitImageReadResponse:
 
 
 from app.api.v1.source_intake import register_source_intake_routes
-from app.api.v1.source_resources import register_source_resource_routes
 from app.api.v1.source_writes import register_source_write_routes
 
 
 register_source_write_routes(sources_router)
-register_source_resource_routes(sources_router)
 register_source_intake_routes(sources_router)

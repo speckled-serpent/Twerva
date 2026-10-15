@@ -10,7 +10,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.v1.lookups import fetch_content_source_by_id_or_raise
+from app.api.v1.lookups import (
+    fetch_content_source_by_id_or_raise,
+    fetch_theme_by_id_or_raise,
+)
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
     SourceCreateRequest,
@@ -24,7 +27,7 @@ from app.api.v1.schemas import (
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
-from app.models.enums import ContentSourceKind, UnitImageMediaType
+from app.models.enums import UnitImageMediaType
 from app.models.ops_user import OpsUser
 from app.settings import get_settings
 from app.sources.editing import (
@@ -33,8 +36,6 @@ from app.sources.editing import (
     BLANK_NAME_DETAIL,
     EMPTY_UNIT_DETAIL,
     IMAGE_IN_USE_DETAIL,
-    RESOURCE_FILE_REQUIRED_DETAIL,
-    RESOURCE_NOT_IN_SLICE_DETAIL,
     UNIT_IN_USE_DETAIL,
     allocate_unique_source_slug,
     in_use_detail,
@@ -56,7 +57,7 @@ IMAGE_MEDIA_TYPES: dict[UnitImageMediaType, str] = {
     UnitImageMediaType.PNG: "image/png",
     UnitImageMediaType.SVG: "image/svg+xml",
 }
-SOURCE_SLUG_CONFLICT_DETAIL: str = "An album with that name already exists."
+SOURCE_SLUG_CONFLICT_DETAIL: str = "A source with that name already exists."
 
 
 def register_source_write_routes(sources_router: APIRouter) -> None:
@@ -124,16 +125,13 @@ def create_content_source(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> SourceReadResponse:
-    """Create an album. Resources are rejected. Readers cannot call this."""
+    """Create a source bound to a theme. Readers cannot call this."""
 
     _ = current_ops_operator
-
-    if source_create_request.kind != ContentSourceKind.ALBUM:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=RESOURCE_FILE_REQUIRED_DETAIL,
-        )
-
+    fetch_theme_by_id_or_raise(
+        source_create_request.theme_id,
+        our_database_session,
+    )
     album_name: str = _require_name(source_create_request.name)
     taken_slugs: set[str] = set(
         our_database_session.scalars(select(ContentSource.slug)).all(),
@@ -144,7 +142,7 @@ def create_content_source(
     )
     created_source: ContentSource = ContentSource(
         id=new_row_id(),
-        kind=ContentSourceKind.ALBUM,
+        theme_id=source_create_request.theme_id,
         name=album_name,
         slug=album_slug,
     )
@@ -167,7 +165,7 @@ def patch_content_source(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> SourceReadResponse:
-    """Rename a source. A resource can also update its provenance note."""
+    """Rename a source."""
 
     _ = current_ops_operator
     found_source: ContentSource = fetch_content_source_by_id_or_raise(
@@ -175,14 +173,7 @@ def patch_content_source(
         our_database_session,
     )
     updated_name: str = _require_name(source_patch_request.name)
-    updated_provenance: str | None = _provenance_for_patch(
-        found_source,
-        source_patch_request.provenance,
-    )
     found_source.name = updated_name
-
-    if updated_provenance is not None and found_source.resource_file is not None:
-        found_source.resource_file.provenance = updated_provenance
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail=SOURCE_SLUG_CONFLICT_DETAIL,
@@ -212,18 +203,12 @@ def delete_content_source(
         ALBUM_IN_USE_DETAIL,
     )
     stored_files: list[tuple[str, str | None]] = _stored_files_on_source(found_source)
-    resource_path: str | None = None
-
-    if found_source.resource_file is not None:
-        resource_path = found_source.resource_file.relative_path
-
     our_database_session.delete(found_source)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Source could not be deleted.",
     )
     _discard_stored_files(stored_files)
-    _discard_resource_file(resource_path)
 
 
 def create_unit(
@@ -232,20 +217,14 @@ def create_unit(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> UnitReadResponse:
-    """Add a unit to an album. An empty unit is 400 and is not stored."""
+    """Add a unit. An empty unit is 400 and is not stored."""
 
     _ = current_ops_operator
     found_source: ContentSource = fetch_content_source_by_id_or_raise(
         source_id,
         our_database_session,
     )
-
-    if found_source.kind != ContentSourceKind.ALBUM:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=RESOURCE_NOT_IN_SLICE_DETAIL,
-        )
-
+    unit_name: str = _require_name(unit_write_request.name)
     free_text, tags, fields = _parsed_unit_write(unit_write_request)
     _require_unit_content(free_text, len(fields), 0)
     next_position: int = _next_unit_position(found_source.id, our_database_session)
@@ -253,6 +232,7 @@ def create_unit(
         id=new_row_id(),
         source_id=found_source.id,
         position=next_position,
+        name=unit_name,
         free_text=free_text,
         tags=tags,
     )
@@ -278,12 +258,14 @@ def patch_unit(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> UnitReadResponse:
-    """Replace free text, tags, and fields. Images are not changed here."""
+    """Replace the name, free text, tags, and fields. Images are not changed here."""
 
     _ = current_ops_operator
     found_unit: Unit = _fetch_unit_or_raise(source_id, unit_id, our_database_session)
+    unit_name: str = _require_name(unit_write_request.name)
     free_text, tags, fields = _parsed_unit_write(unit_write_request)
     _require_unit_content(free_text, len(fields), len(list(found_unit.images)))
+    found_unit.name = unit_name
     found_unit.free_text = free_text
     found_unit.tags = tags
     _replace_fields(found_unit, fields, our_database_session)
@@ -609,60 +591,6 @@ def _fetch_image_or_raise(
         )
 
     return found_image
-
-
-def _provenance_for_patch(
-    found_source: ContentSource,
-    provenance: str | None,
-) -> str | None:
-    """Return a cleaned note, or null when the patch does not change it.
-
-    A blank note and a note on an album are 400. Nothing is assigned yet.
-    """
-
-    if provenance is None:
-
-        return None
-
-    from app.sources.resource_files import (
-        BLANK_PROVENANCE_DETAIL,
-        ResourceFileError,
-        require_provenance,
-    )
-
-    if found_source.kind != ContentSourceKind.RESOURCE:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provenance is only edited on a resource.",
-        )
-
-    if found_source.resource_file is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This resource has no file.",
-        )
-
-    try:
-        cleaned_provenance: str = require_provenance(provenance)
-    except ResourceFileError as provenance_error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=provenance_error.detail or BLANK_PROVENANCE_DETAIL,
-        ) from provenance_error
-
-    return cleaned_provenance
-
-
-def _discard_resource_file(relative_path: str | None) -> None:
-    """Delete a resource file after the row commit. Other paths stay."""
-
-    if relative_path is None:
-
-        return
-
-    from app.sources.resource_store import configured_resource_file_store
-
-    configured_resource_file_store().delete(relative_path)
 
 
 def _discard_stored_files(stored_files: list[tuple[str, str | None]]) -> None:

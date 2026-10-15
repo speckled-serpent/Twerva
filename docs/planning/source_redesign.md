@@ -23,6 +23,8 @@ Each phase can ship and be reviewed on its own. Later phases assume the earlier 
 
 ### 1. Model change
 
+**Status.** Done.
+
 **Scope.** A source requires a theme. Create asks for a name and that theme. Album and resource become one kind of source. A unit keeps its existing id and gains a name. A unit holds one image; further units can reuse that image when the operator wants text variants. Theme pickers list these sources and still store one concrete image path. Sources that cannot take this shape are removed: resource sources, and album sources left without a theme. When a theme or artifact still stores an image path from that source, deletion keeps the current in-use refusal until that path is cleared.
 
 **Out of scope.** The theme-shaped text inputs, in-source preview, exclusion rules, LLM text, the campaign theme-and-source run, and word-count warnings.

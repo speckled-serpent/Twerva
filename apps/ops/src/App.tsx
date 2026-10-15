@@ -266,11 +266,9 @@ function renderActivePage(
     return (
       <NewSourcePage
         onCreated={(createdSource: SourceReadResponse): void => {
-          const kindLabel: string = createdSource.kind === "album" ? "album" : "resource";
           onSourceOpenRequestChange({
             sourceId: createdSource.id,
-            kind: createdSource.kind,
-            statusMessage: `Created ${kindLabel} ${createdSource.name}.`,
+            statusMessage: `Created source ${createdSource.name}.`,
           });
           onNavigate("sources");
         }}

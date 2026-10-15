@@ -25,6 +25,7 @@ REPEATED_HYPHEN_PATTERN: re.Pattern[str] = re.compile(r"-{2,}")
 
 EMPTY_UNIT_DETAIL: str = "A unit needs an image, free text, or a labeled field."
 BLANK_NAME_DETAIL: str = "Name is required."
+ONE_IMAGE_DETAIL: str = "A unit holds one image."
 BLANK_FIELD_DETAIL: str = "A field needs a label and a value."
 BLANK_IMAGE_SOURCE_DETAIL: str = "Image source is required."
 LICENSE_NOTE_DETAIL: str = "A licensed image needs a license note."
