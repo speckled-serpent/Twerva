@@ -13,9 +13,8 @@ Closed vocabularies are native Postgres ENUM types. Allowed values and
 ``app.models.enums`` and ``docs/planning/domain_statuses.md``.
 ``ThemeStatus`` (``draft``, ``live``) is stored the same way.
 ``theme_elements`` stores band, content kind, Spotmu text source, and
-alignment the same way. ``sources`` stores album or resource.
-``units``, ``unit_fields``, and ``unit_images`` hang off an album.
-``resource_files`` is the one Markdown or TXT file on a resource.
+alignment the same way. ``sources`` require a theme. ``units`` keep a
+stable id and a name. ``unit_images`` holds at most one image per unit.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -31,7 +30,7 @@ from app.models.base import Base
 from app.models.brand import Brand
 from app.models.campaign import Campaign, CampaignAccount, CampaignInterest
 from app.models.cluster import Cluster, cluster_source_items
-from app.models.content_source import ContentSource, ResourceFile, Unit, UnitField, UnitImage
+from app.models.content_source import ContentSource, Unit, UnitField, UnitImage
 from app.models.enums import (
     ACCOUNT_STATUS_ENUM,
     ADVERTISEMENT_TYPE_ENUM,
@@ -41,7 +40,6 @@ from app.models.enums import (
     CAMPAIGN_STATUS_ENUM,
     CAMPAIGN_STATUS_TRANSITIONS,
     CAMPAIGN_TYPE_ENUM,
-    CONTENT_SOURCE_KIND_ENUM,
     OPS_USER_ROLE_ENUM,
     PLATFORM_ENUM,
     POST_JOB_STATUS_ENUM,
@@ -63,7 +61,6 @@ from app.models.enums import (
     BackgroundKind,
     CampaignStatus,
     CampaignType,
-    ContentSourceKind,
     OpsUserRole,
     ResourceFileMediaType,
     Platform,
@@ -106,7 +103,6 @@ __all__ = [
     "CAMPAIGN_STATUS_ENUM",
     "CAMPAIGN_STATUS_TRANSITIONS",
     "CAMPAIGN_TYPE_ENUM",
-    "CONTENT_SOURCE_KIND_ENUM",
     "Campaign",
     "CampaignAccount",
     "CampaignInterest",
@@ -114,9 +110,7 @@ __all__ = [
     "CampaignType",
     "Cluster",
     "ContentSource",
-    "ContentSourceKind",
     "RESOURCE_FILE_MEDIA_TYPE_ENUM",
-    "ResourceFile",
     "ResourceFileMediaType",
     "MetricSnapshot",
     "OPS_USER_ROLE_ENUM",

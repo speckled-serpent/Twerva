@@ -142,6 +142,36 @@ still comes from the package. An uploaded album file is read from
 `twerva-api` and the ops console after sync. `POST /api/v1/generate/carousel`
 stays on the text template.
 
+### Theme-bound sources (model change)
+
+From `apps/server`, run `alembic upgrade head`. The new revision is
+`sources_theme_bound`. No new env var. Restart `twerva-api` and replace
+the ops `dist/` after sync.
+
+The upgrade deletes resource sources and their `resource_files` rows.
+It deletes every other source except the Default album when none of
+that source's image paths are stored on a theme background, a theme
+image element, or an artifact slide. It also drops extra images on a
+unit down to one, keeping a stored path when only one of them is
+stored. If deleting a row would remove a path a theme or artifact
+still stores, the upgrade stops and changes nothing. Clear that path
+in the theme or artifact, then run the upgrade again.
+
+The Default album (slug `default`) is kept. It is bound to Spotmu
+Paper v1 when that seeded theme is still in the database, and
+otherwise to the oldest theme. Its six units keep their ids and gain
+names from the photo filenames. Theme pickers still list sources and
+still store one concrete image path. `theme-defaults/` bytes stay in
+the package.
+
+Rows that the upgrade deletes do not delete bytes under
+`ARTIFACT_STORAGE_DIR`. After a successful upgrade, leftover
+`resources/` files and `albums/` files for deleted sources can be
+removed by hand. Do not delete `theme-defaults/` in the package.
+
+Downgrade to `sources_resource_files` restores `kind` and an empty
+`resource_files` table. It does not restore rows the upgrade deleted.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.

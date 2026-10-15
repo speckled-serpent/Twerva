@@ -33,7 +33,9 @@ from app.api.v1.source_writes import (
 )
 from app.api.v1.sources import get_content_source
 from app.models.content_source import ContentSource, Unit, UnitImage
-from app.models.enums import ContentSourceKind, UnitImageLicense
+from app.models.enums import AdvertisementType, BackgroundKind, ThemeStatus, UnitImageLicense
+from app.models.theme import Theme
+from app.sources.default_album import DEFAULT_ALBUM_THEME_ID
 from app.sources.editing import (
     EMPTY_UNIT_DETAIL,
     LICENSE_NOTE_DETAIL,
@@ -59,6 +61,17 @@ class _MemorySourceSession:
         self.sources: list[ContentSource] = []
         self.deleted: list[object] = []
         self.commit_count: int = 0
+        self.theme: Theme = Theme(
+            id=DEFAULT_ALBUM_THEME_ID,
+            name="Spotmu Paper v1",
+            slug="spotmu-paper-v1",
+            advertisement_type=AdvertisementType.CAROUSEL,
+            status=ThemeStatus.DRAFT,
+            page_margin=96,
+            element_gap=0,
+            element_margin=0,
+            background_kind=BackgroundKind.COLOR,
+        )
 
     def add(self, row: object) -> None:
         if isinstance(row, ContentSource) and row not in self.sources:
@@ -86,6 +99,9 @@ class _MemorySourceSession:
             setattr(row, "updated_at", persisted_at)
 
     def get(self, model: type[object], row_id: uuid.UUID) -> object | None:
+        if model is Theme and row_id == self.theme.id:
+            return self.theme
+
         if model is ContentSource:
             return self._find_source(row_id)
 
@@ -155,13 +171,14 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
 
         session: _MemorySourceSession = _MemorySourceSession()
         created: SourceReadResponse = create_content_source(
-            SourceCreateRequest(name="Harbor notes", kind=ContentSourceKind.ALBUM),
+            SourceCreateRequest(name="Harbor notes", theme_id=session.theme.id),
             session,
             None,
         )
         unit: UnitReadResponse = create_unit(
             created.id,
             UnitWriteRequest(
+                name="Fog",
                 free_text="Fog on the water",
                 tags=[" coast ", "coast", ""],
                 fields=[{"label": " Place ", "value": " Harbor "}],
@@ -176,6 +193,8 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         self.assertEqual(created.units, [])
         self.assertEqual(len(loaded.units), 1)
         self.assertEqual(loaded_unit.id, unit.id)
+        self.assertEqual(loaded_unit.name, "Fog")
+        self.assertEqual(loaded.theme_id, session.theme.id)
         self.assertEqual(loaded_unit.free_text, "Fog on the water")
         self.assertEqual(loaded_unit.tags, ["coast"])
         self.assertEqual(loaded_unit.images, [])
@@ -188,12 +207,12 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
 
         session: _MemorySourceSession = _MemorySourceSession()
         first: SourceReadResponse = create_content_source(
-            SourceCreateRequest(name="Harbor", kind=ContentSourceKind.ALBUM),
+            SourceCreateRequest(name="Harbor", theme_id=session.theme.id),
             session,
             None,
         )
         second: SourceReadResponse = create_content_source(
-            SourceCreateRequest(name="Harbor", kind=ContentSourceKind.ALBUM),
+            SourceCreateRequest(name="Harbor", theme_id=session.theme.id),
             session,
             None,
         )
@@ -209,19 +228,19 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         self.assertEqual(renamed.name, "Outer harbor")
         self.assertEqual(renamed.slug, "harbor")
 
-    def test_resource_kind_is_rejected(self) -> None:
-        """JSON create does not store a resource. The file upload route does."""
+    def test_missing_theme_is_not_stored(self) -> None:
+        """A source without a real theme is 404 and writes nothing."""
 
         session: _MemorySourceSession = _MemorySourceSession()
 
         with self.assertRaises(HTTPException) as raised:
             create_content_source(
-                SourceCreateRequest(name="Notes", kind=ContentSourceKind.RESOURCE),
+                SourceCreateRequest(name="Notes", theme_id=uuid.uuid4()),
                 session,
                 None,
             )
 
-        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(raised.exception.status_code, 404)
         self.assertEqual(session.sources, [])
         self.assertEqual(session.commit_count, 0)
 
@@ -230,7 +249,7 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
 
         session: _MemorySourceSession = _MemorySourceSession()
         created: SourceReadResponse = create_content_source(
-            SourceCreateRequest(name="Empty check", kind=ContentSourceKind.ALBUM),
+            SourceCreateRequest(name="Empty check", theme_id=session.theme.id),
             session,
             None,
         )
@@ -238,7 +257,7 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as empty_error:
             create_unit(
                 created.id,
-                UnitWriteRequest(free_text="  ", tags=["  "], fields=[]),
+                UnitWriteRequest(name="Empty", free_text="  ", tags=["  "], fields=[]),
                 session,
                 None,
             )
@@ -251,6 +270,7 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
             create_unit(
                 created.id,
                 UnitWriteRequest(
+                    name="Empty",
                     free_text=None,
                     tags=[],
                     fields=[{"label": "Place", "value": "  "}],
@@ -267,13 +287,13 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
 
         session: _MemorySourceSession = _MemorySourceSession()
         created: SourceReadResponse = create_content_source(
-            SourceCreateRequest(name="Keep text", kind=ContentSourceKind.ALBUM),
+            SourceCreateRequest(name="Keep text", theme_id=session.theme.id),
             session,
             None,
         )
         unit: UnitReadResponse = create_unit(
             created.id,
-            UnitWriteRequest(free_text="Stay", tags=["keep"], fields=[]),
+            UnitWriteRequest(name="Stay", free_text="Stay", tags=["keep"], fields=[]),
             session,
             None,
         )
@@ -282,7 +302,7 @@ class AlbumAndUnitWriteTests(unittest.TestCase):
             patch_unit(
                 created.id,
                 unit.id,
-                UnitWriteRequest(free_text="", tags=[], fields=[]),
+                UnitWriteRequest(name="Stay", free_text="", tags=[], fields=[]),
                 session,
                 None,
             )

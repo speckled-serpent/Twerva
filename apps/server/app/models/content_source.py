@@ -1,8 +1,7 @@
-"""Content sources: an album of units, or one resource file.
+"""Content sources: one kind of source, bound to a required theme.
 
-Themes still store a concrete image path. They do not reference these
-rows. A resource file lives at ``resources/<source_id>/body.md`` or
-``body.txt`` under the artifact store.
+A unit keeps its id, has a name, and holds at most one image. Themes
+still store a concrete image path. They do not reference these rows.
 """
 
 from __future__ import annotations
@@ -15,13 +14,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UuidPrimaryKeyMixin
 from app.models.enums import (
-    CONTENT_SOURCE_KIND_ENUM,
     UNIT_IMAGE_INTAKE_ENUM,
     UNIT_IMAGE_LICENSE_ENUM,
-    RESOURCE_FILE_MEDIA_TYPE_ENUM,
     UNIT_IMAGE_MEDIA_TYPE_ENUM,
-    ContentSourceKind,
-    ResourceFileMediaType,
     UnitImageIntake,
     UnitImageLicense,
     UnitImageMediaType,
@@ -32,6 +27,7 @@ CONTENT_SOURCE_NAME_CHECK_SQL: str = (
     "btrim(name) <> '' AND btrim(slug) <> ''"
 )
 UNIT_POSITION_CHECK_SQL: str = "position >= 0"
+UNIT_NAME_CHECK_SQL: str = "btrim(name) <> ''"
 UNIT_FIELD_TEXT_CHECK_SQL: str = "btrim(label) <> '' AND btrim(value) <> ''"
 UNIT_IMAGE_SOURCE_CHECK_SQL: str = "btrim(source) <> ''"
 UNIT_IMAGE_BYTE_SIZE_CHECK_SQL: str = "byte_size > 0"
@@ -90,7 +86,7 @@ UNIT_IMAGE_PATH_CHECK_SQL: str = (
 
 
 class ContentSource(Base, UuidPrimaryKeyMixin, TimestampMixin):
-    """Row in ``sources``. An album is ``kind = album`` and has units."""
+    """Row in ``sources``. Every source requires one theme."""
 
     __tablename__ = "sources"
     __table_args__ = (
@@ -98,9 +94,11 @@ class ContentSource(Base, UuidPrimaryKeyMixin, TimestampMixin):
         CheckConstraint(CONTENT_SOURCE_NAME_CHECK_SQL, name="ck_sources_name"),
     )
 
-    kind: Mapped[ContentSourceKind] = mapped_column(
-        CONTENT_SOURCE_KIND_ENUM,
+    theme_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("themes.id", ondelete="RESTRICT"),
         nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False)
@@ -111,16 +109,10 @@ class ContentSource(Base, UuidPrimaryKeyMixin, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="Unit.position",
     )
-    resource_file: Mapped["ResourceFile | None"] = relationship(
-        "ResourceFile",
-        back_populates="source",
-        cascade="all, delete-orphan",
-        uselist=False,
-    )
 
 
 class Unit(Base, UuidPrimaryKeyMixin, TimestampMixin):
-    """One coupled piece of content inside an album."""
+    """One piece of content inside a source. The id stays; the name is set."""
 
     __tablename__ = "units"
     __table_args__ = (
@@ -130,6 +122,7 @@ class Unit(Base, UuidPrimaryKeyMixin, TimestampMixin):
             name="uq_units_source_id_position",
         ),
         CheckConstraint(UNIT_POSITION_CHECK_SQL, name="ck_units_position"),
+        CheckConstraint(UNIT_NAME_CHECK_SQL, name="ck_units_name"),
     )
 
     source_id: Mapped[uuid.UUID] = mapped_column(
@@ -139,6 +132,7 @@ class Unit(Base, UuidPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
     free_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     tags: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
@@ -195,6 +189,7 @@ class UnitImage(Base, UuidPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "unit_images"
     __table_args__ = (
         UniqueConstraint("relative_path", name="uq_unit_images_relative_path"),
+        UniqueConstraint("unit_id", name="uq_unit_images_unit_id"),
         UniqueConstraint(
             "unit_id",
             "position",
@@ -248,44 +243,3 @@ class UnitImage(Base, UuidPrimaryKeyMixin, TimestampMixin):
     thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     unit: Mapped[Unit] = relationship("Unit", back_populates="images")
-
-
-class ResourceFile(Base):
-    """The one file on a resource source. Bytes stay the upload."""
-
-    __tablename__ = "resource_files"
-    __table_args__ = (
-        UniqueConstraint("relative_path", name="uq_resource_files_relative_path"),
-        CheckConstraint(
-            RESOURCE_FILE_PROVENANCE_CHECK_SQL,
-            name="ck_resource_files_provenance",
-        ),
-        CheckConstraint(
-            RESOURCE_FILE_FILENAME_CHECK_SQL,
-            name="ck_resource_files_original_filename",
-        ),
-        CheckConstraint(
-            RESOURCE_FILE_BYTE_SIZE_CHECK_SQL,
-            name="ck_resource_files_byte_size",
-        ),
-        CheckConstraint(RESOURCE_FILE_PATH_CHECK_SQL, name="ck_resource_files_path"),
-    )
-
-    source_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("sources.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
-    media_type: Mapped[ResourceFileMediaType] = mapped_column(
-        RESOURCE_FILE_MEDIA_TYPE_ENUM,
-        nullable=False,
-    )
-    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
-    original_filename: Mapped[str] = mapped_column(Text, nullable=False)
-    provenance: Mapped[str] = mapped_column(Text, nullable=False)
-
-    source: Mapped[ContentSource] = relationship(
-        "ContentSource",
-        back_populates="resource_file",
-    )

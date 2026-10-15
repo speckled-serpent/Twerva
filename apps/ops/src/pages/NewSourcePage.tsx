@@ -1,15 +1,11 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
-import { createAlbum, createResource } from "../api/client";
-import type { SourceReadResponse } from "../api/types";
+import { createAlbum, listThemes } from "../api/client";
+import type { SourceReadResponse, ThemeReadResponse } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
-import {
-  CREATE_SOURCE_FILE_ERROR,
-  createSourceFieldError,
-  type CreateSourceKind,
-} from "./createSource";
+import { createSourceFieldError } from "./createSource";
 
 export interface NewSourcePageProps {
   onCreated: (createdSource: SourceReadResponse) => void;
@@ -17,7 +13,7 @@ export interface NewSourcePageProps {
 }
 
 /**
- * Create Source tab: pick Album or Resource, then save and open it.
+ * Create Source tab: a name and a required theme, then open the source.
  *
  * @param props - Success and cancel navigation callbacks
  * @returns The create-source form
@@ -25,12 +21,44 @@ export interface NewSourcePageProps {
 export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
-  const [kind, setKind] = useState<CreateSourceKind>("album");
   const [sourceName, setSourceName] = useState<string>("");
-  const [provenance, setProvenance] = useState<string>("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [themeId, setThemeId] = useState<string>("");
+  const [themes, setThemes] = useState<ThemeReadResponse[]>([]);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  useEffect((): (() => void) => {
+    let isCancelled: boolean = false;
+
+    const loadThemes = async (): Promise<void> => {
+
+      try {
+        const loadedThemes: ThemeReadResponse[] = await listThemes();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setThemes(loadedThemes);
+        setLoadError(null);
+      } catch (caughtError: unknown) {
+        if (isCancelled) {
+          return;
+        }
+
+        setLoadError(caughtError);
+      }
+    };
+
+    if (canWrite) {
+      void loadThemes();
+    }
+
+    return (): void => {
+      isCancelled = true;
+    };
+  }, [canWrite]);
 
   const handleCreate = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
     submitEvent.preventDefault();
@@ -39,12 +67,7 @@ export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): Reac
       return;
     }
 
-    const fieldError: string | null = createSourceFieldError(
-      kind,
-      sourceName,
-      provenance,
-      selectedFile === null ? null : selectedFile.name,
-    );
+    const fieldError: string | null = createSourceFieldError(sourceName, themeId);
 
     if (fieldError !== null) {
       setSaveError(new Error(fieldError));
@@ -56,17 +79,10 @@ export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): Reac
     setSaveError(null);
 
     try {
-      let createdSource: SourceReadResponse;
-
-      if (kind === "album") {
-        createdSource = await createAlbum({ name: sourceName.trim(), kind: "album" });
-      } else if (selectedFile === null) {
-        setSaveError(new Error(CREATE_SOURCE_FILE_ERROR));
-
-        return;
-      } else {
-        createdSource = await createResource(sourceName.trim(), provenance.trim(), selectedFile);
-      }
+      const createdSource: SourceReadResponse = await createAlbum({
+        name: sourceName.trim(),
+        theme_id: themeId,
+      });
 
       onCreated(createdSource);
     } catch (caughtError: unknown) {
@@ -82,7 +98,7 @@ export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): Reac
         <div>
           <h1>Create Source</h1>
           <p className="lede">
-            An album holds units. A resource is one Markdown or TXT file and a provenance note.
+            A source needs a name and a theme. After this, it opens so you can add units.
           </p>
         </div>
         <button type="button" onClick={onCancel}>
@@ -98,35 +114,7 @@ export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): Reac
             void handleCreate(submitEvent);
           }}
         >
-          <fieldset>
-            <legend>Kind</legend>
-            <label>
-              <input
-                id="create-source-kind-album"
-                type="radio"
-                name="create-source-kind"
-                checked={kind === "album"}
-                onChange={(): void => {
-                  setKind("album");
-                  setSaveError(null);
-                }}
-              />
-              Album
-            </label>
-            <label>
-              <input
-                id="create-source-kind-resource"
-                type="radio"
-                name="create-source-kind"
-                checked={kind === "resource"}
-                onChange={(): void => {
-                  setKind("resource");
-                  setSaveError(null);
-                }}
-              />
-              Resource
-            </label>
-          </fieldset>
+          <ErrorBanner error={loadError} />
           <label>
             Name
             <input
@@ -137,39 +125,27 @@ export function NewSourcePage({ onCreated, onCancel }: NewSourcePageProps): Reac
               }}
             />
           </label>
-          {kind === "resource" ? (
-            <>
-              <label>
-                Provenance
-                <textarea
-                  id="create-source-provenance"
-                  rows={3}
-                  value={provenance}
-                  onChange={(changeEvent): void => {
-                    setProvenance(changeEvent.target.value);
-                  }}
-                />
-              </label>
-              <label>
-                File
-                <input
-                  id="create-source-file"
-                  type="file"
-                  accept=".md,.txt,text/markdown,text/plain"
-                  onChange={(changeEvent): void => {
-                    const fileList: FileList | null = changeEvent.target.files;
-                    setSelectedFile(fileList === null || fileList.length === 0 ? null : fileList[0]);
-                  }}
-                />
-              </label>
-              <p className="field-hint">Markdown (.md) or plain text (.txt). 2 MB.</p>
-            </>
-          ) : (
-            <p className="field-hint">After this, the album opens so you can add units.</p>
-          )}
+          <label>
+            Theme
+            <select
+              id="create-source-theme"
+              value={themeId}
+              onChange={(changeEvent): void => {
+                setThemeId(changeEvent.target.value);
+              }}
+            >
+              <option value="">Choose a theme</option>
+              {themes.map((theme: ThemeReadResponse): ReactElement => (
+                <option key={theme.id} value={theme.id}>
+                  {theme.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="field-hint">The theme is required. Units stay in the simple editor for now.</p>
           <ErrorBanner error={saveError} />
           <div className="button-row">
-            <button id="create-source-submit" type="submit" disabled={isSaving}>
+            <button id="create-source-submit" type="submit" disabled={isSaving || themes.length === 0}>
               {isSaving ? "Creating…" : "Create source"}
             </button>
             <button type="button" onClick={onCancel} disabled={isSaving}>

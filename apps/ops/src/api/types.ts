@@ -518,10 +518,6 @@ export interface OpsUserResetPasswordRequest {
   new_password: string;
 }
 
-export type ContentSourceKind = "album" | "resource";
-
-export type ResourceFileMediaType = "markdown" | "plain";
-
 export type UnitImageLicense = "cc0" | "public_domain" | "owned" | "licensed";
 
 export type UnitImageMediaType = "svg" | "png" | "jpeg";
@@ -554,6 +550,7 @@ export interface UnitImageReadResponse {
 export interface UnitReadResponse {
   id: string;
   position: number;
+  name: string;
   free_text: string | null;
   tags: string[];
   fields: UnitFieldReadResponse[];
@@ -562,7 +559,7 @@ export interface UnitReadResponse {
 
 export interface SourceListItemResponse {
   id: string;
-  kind: ContentSourceKind;
+  theme_id: string;
   name: string;
   slug: string;
   unit_count: number;
@@ -570,35 +567,23 @@ export interface SourceListItemResponse {
   updated_at: string;
 }
 
-export interface ResourceFileReadResponse {
-  relative_path: string;
-  media_type: ResourceFileMediaType;
-  byte_size: number;
-  original_filename: string;
-  provenance: string;
-  body: string;
-  rendered_html: string | null;
-}
-
 export interface SourceReadResponse {
   id: string;
-  kind: ContentSourceKind;
+  theme_id: string;
   name: string;
   slug: string;
   created_at: string;
   updated_at: string;
   units: UnitReadResponse[];
-  resource: ResourceFileReadResponse | null;
 }
 
 export interface SourceCreateRequest {
   name: string;
-  kind: ContentSourceKind;
+  theme_id: string;
 }
 
 export interface SourcePatchRequest {
   name: string;
-  provenance?: string | null;
 }
 
 export interface UnitFieldWrite {
@@ -607,6 +592,7 @@ export interface UnitFieldWrite {
 }
 
 export interface UnitWriteRequest {
+  name: string;
   free_text: string | null;
   tags: string[];
   fields: UnitFieldWrite[];

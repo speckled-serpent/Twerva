@@ -22,6 +22,7 @@ THEMES_DROP_TEXTURE_REVISION_ID: str = "themes_drop_texture"
 THEMES_ELEMENT_RECTANGLE_REVISION_ID: str = "themes_element_rectangle"
 SOURCES_DEFAULT_ALBUM_REVISION_ID: str = "sources_default_album"
 SOURCES_RESOURCE_FILES_REVISION_ID: str = "sources_resource_files"
+SOURCES_THEME_BOUND_REVISION_ID: str = "sources_theme_bound"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -58,6 +59,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{OPS_USERS_REVISION_ID}.py",
                 f"{SOURCES_DEFAULT_ALBUM_REVISION_ID}.py",
                 f"{SOURCES_RESOURCE_FILES_REVISION_ID}.py",
+                f"{SOURCES_THEME_BOUND_REVISION_ID}.py",
                 f"{THEME_ELEMENTS_REVISION_ID}.py",
                 f"{THEMES_BACKGROUND_REVISION_ID}.py",
                 f"{THEMES_CREATE_REVISION_ID}.py",
@@ -505,6 +507,33 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("ck_resource_files_provenance", revision_source)
         self.assertIn("DROP TYPE resource_file_media_type", revision_source)
         self.assertNotIn("UPDATE themes", revision_source)
+
+    def test_theme_bound_sources_follow_resource_files(self) -> None:
+        """The theme-bound revision is the head after resource files."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{SOURCES_THEME_BOUND_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            SOURCES_THEME_BOUND_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            SOURCES_RESOURCE_FILES_REVISION_ID,
+        )
+        self.assertIn("fk_sources_theme_id_themes", revision_source)
+        self.assertIn("uq_unit_images_unit_id", revision_source)
+        self.assertIn("ck_units_name", revision_source)
+        self.assertIn("DROP TYPE content_source_kind", revision_source)
+        self.assertIn('op.drop_table("resource_files")', revision_source)
+        self.assertIn("Refusing to delete image paths", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

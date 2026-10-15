@@ -22,6 +22,10 @@ from app.themes.default_images import (
 
 DEFAULT_ALBUM_SLUG: str = "default"
 DEFAULT_ALBUM_NAMESPACE: uuid.UUID = uuid.UUID("c37b5a1e-4c0e-4a11-8d2e-6f0a8b4d1701")
+# Spotmu Paper v1, seeded by themes_create. The Default album is the
+# shared photo catalog. Binding it here keeps the required theme, and
+# theme pickers still list every source.
+DEFAULT_ALBUM_THEME_ID: uuid.UUID = uuid.UUID("e8700eea-c086-5ce2-859d-b3d689af5c25")
 
 _LICENSE_BY_FILENAME: dict[str, UnitImageLicense] = {
     "hong-kong-skyline.jpg": UnitImageLicense.CC0,
@@ -62,6 +66,7 @@ class DefaultUnitSeed:
     """One image-only unit in the seeded Default album."""
 
     filename: str
+    name: str
     unit_id: uuid.UUID
     image_id: uuid.UUID
     position: int
@@ -71,6 +76,22 @@ class DefaultUnitSeed:
     height: int
     image_license: UnitImageLicense
     source_url: str
+
+
+def default_unit_display_name(filename: str) -> str:
+    """Return a stable name for one packaged photo.
+
+    Args:
+        filename: Bundled JPEG name, such as ``hong-kong-skyline.jpg``.
+
+    Returns:
+        A title-cased name without the suffix.
+    """
+
+    stem: str = filename.rsplit(".", 1)[0]
+    display_name: str = " ".join(part.capitalize() for part in stem.split("-"))
+
+    return display_name
 
 
 def default_album_source_id() -> uuid.UUID:
@@ -104,6 +125,7 @@ def default_unit_seeds() -> tuple[DefaultUnitSeed, ...]:
 
         seed: DefaultUnitSeed = DefaultUnitSeed(
             filename=filename,
+            name=default_unit_display_name(filename),
             unit_id=uuid.uuid5(DEFAULT_ALBUM_NAMESPACE, f"unit:{filename}"),
             image_id=uuid.uuid5(DEFAULT_ALBUM_NAMESPACE, f"image:{filename}"),
             position=position,

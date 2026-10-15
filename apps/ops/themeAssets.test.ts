@@ -91,16 +91,16 @@ assert.equal(captionForUnit(null, null), "");
 
 const uploadedAlbum: SourceReadResponse = {
   id: "album-1",
-  kind: "album",
+  theme_id: "theme-1",
   name: "Lamps",
   slug: "lamps",
   created_at: "2026-10-14T00:00:00Z",
   updated_at: "2026-10-14T00:00:00Z",
-  resource: null,
   units: [
     {
       id: "text-unit",
       position: 0,
+      name: "Notes",
       free_text: "Notes only",
       tags: [],
       fields: [],
@@ -109,6 +109,7 @@ const uploadedAlbum: SourceReadResponse = {
     {
       id: "lamp-unit",
       position: 2,
+      name: "Lamp",
       free_text: null,
       tags: ["brass"],
       fields: [

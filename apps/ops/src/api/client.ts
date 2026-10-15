@@ -204,50 +204,7 @@ export async function createCampaign(
 
 export async function listAlbums(): Promise<SourceListItemResponse[]> {
 
-  return requestJson<SourceListItemResponse[]>("GET", "/api/v1/sources?kind=album");
-}
-
-export async function listResources(): Promise<SourceListItemResponse[]> {
-
-  return requestJson<SourceListItemResponse[]>("GET", "/api/v1/sources?kind=resource");
-}
-
-export async function createResource(
-  name: string,
-  provenance: string,
-  file: File,
-): Promise<SourceReadResponse> {
-
-  const formData: FormData = new FormData();
-  formData.append("name", name);
-  formData.append("provenance", provenance);
-  formData.append("file", file);
-
-  return requestForm<SourceReadResponse>("POST", "/api/v1/sources/resource", formData);
-}
-
-export async function replaceResourceFile(
-  sourceId: string,
-  file: File,
-): Promise<SourceReadResponse> {
-
-  const formData: FormData = new FormData();
-  formData.append("file", file);
-
-  return requestForm<SourceReadResponse>(
-    "PUT",
-    `/api/v1/sources/${sourceId}/resource`,
-    formData,
-  );
-}
-
-export function resourceFileUrl(sourceId: string, download: boolean): string {
-
-  const requestPath: string = download
-    ? `/api/v1/sources/${sourceId}/resource?download=1`
-    : `/api/v1/sources/${sourceId}/resource`;
-
-  return `${resolveApiBaseUrl()}${requestPath}`;
+  return requestJson<SourceListItemResponse[]>("GET", "/api/v1/sources");
 }
 
 export async function fetchSourceById(sourceId: string): Promise<SourceReadResponse> {
@@ -348,6 +305,7 @@ export async function createUnitWithImages(
   }
 
   formData.append("unit_json", JSON.stringify({
+    name: unitWriteRequest.name,
     free_text: unitWriteRequest.free_text,
     tags: unitWriteRequest.tags,
     fields: unitWriteRequest.fields,
