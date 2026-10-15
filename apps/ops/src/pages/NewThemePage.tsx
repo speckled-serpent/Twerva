@@ -75,7 +75,6 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
       const themeCreateRequest: ThemeCreateRequest = {
         name: trimmedThemeName,
         advertisement_type: advertisementType,
-        status: framePatch.status ?? undefined,
         page_margin: framePatch.page_margin ?? undefined,
         element_gap: framePatch.element_gap ?? undefined,
         element_margin: framePatch.element_margin ?? undefined,
@@ -102,7 +101,7 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
           <h1>Create Theme</h1>
           <p className="lede">
             Set the name, frame, and elements, then create the theme in one save.
-            Defaults stay Draft, paper color, spacing 96 / 0 / 0, and no elements.
+            Defaults stay paper color, spacing 96 / 0 / 0, and no elements.
           </p>
         </div>
         <button type="button" onClick={onCancel}>

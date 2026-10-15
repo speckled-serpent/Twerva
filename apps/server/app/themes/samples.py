@@ -311,7 +311,11 @@ def _measure_element(
     source_item: SourceItem | None,
     unit_fill: UnitThemeFill | None,
 ) -> ThemeMeasureElement:
-    """Copy one stored element into the measure input, with text resolved."""
+    """Copy one stored element into the measure input, with text resolved.
+
+    A unit fill wins. A Spotmu source item uses ``text_source`` when
+    that column is set, and the element name when it is null.
+    """
 
     if element.content_kind == ThemeElementContentKind.IMAGE:
         image_asset_ref: str | None = element.image_asset_ref
@@ -335,6 +339,8 @@ def _measure_element(
         resolved_text = unit_fill.text_by_element_id.get(element.id, "")
     elif source_item is not None and element.text_source is not None:
         resolved_text = resolve_theme_text(source_item, element.text_source)
+    elif source_item is not None:
+        resolved_text = element.name
 
     text_element: ThemeMeasureElement = ThemeMeasureElement(
         element_id=element.id,

@@ -15,6 +15,7 @@ export interface ThemeFontFamilyFieldProps {
   fontFamily: string;
   onFontFamilyChange: (nextFontFamily: string) => void;
   idPrefix: string;
+  compact?: boolean;
 }
 
 let familiesPromise: Promise<ThemeFontFamily[]> | null = null;
@@ -55,6 +56,7 @@ export function ThemeFontFamilyField({
   fontFamily,
   onFontFamilyChange,
   idPrefix,
+  compact = false,
 }: ThemeFontFamilyFieldProps): ReactElement {
 
   const [families, setFamilies] = useState<ThemeFontFamily[]>([]);
@@ -101,6 +103,50 @@ export function ThemeFontFamilyField({
       isCancelled = true;
     };
   }, []);
+
+  if (compact) {
+    return (
+      <label className="toolbar-field" htmlFor={selectId}>
+        <span className="toolbar-caption">Font</span>
+        <select
+          id={selectId}
+          className="toolbar-select"
+          value={trimmedFamily}
+          aria-label="Font family"
+          title="Font family"
+          onChange={(changeEvent): void => {
+            onFontFamilyChange(changeEvent.target.value);
+          }}
+        >
+          {showUnknownNote ? (
+            <option value={trimmedFamily}>{trimmedFamily}</option>
+          ) : null}
+          {!catalogLoaded && trimmedFamily !== "" ? (
+            <option value={trimmedFamily}>{trimmedFamily}</option>
+          ) : null}
+          {FONT_CATEGORIES.map((category: FontCategory): ReactElement | null => {
+            const members: ThemeFontFamily[] = families.filter(
+              (family: ThemeFontFamily): boolean => family.category === category.id,
+            );
+
+            if (members.length === 0) {
+              return null;
+            }
+
+            return (
+              <optgroup key={category.id} label={category.label}>
+                {members.map((family: ThemeFontFamily): ReactElement => (
+                  <option key={family.family_id} value={family.name}>
+                    {family.name}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
+        </select>
+      </label>
+    );
+  }
 
   return (
     <>

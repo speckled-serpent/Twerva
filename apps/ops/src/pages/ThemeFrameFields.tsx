@@ -5,7 +5,6 @@ import type {
   ThemeGradient,
   ThemePatchRequest,
   ThemeReadResponse,
-  ThemeStatus,
 } from "../api/types";
 import { ThemeAssetAlbumField } from "./ThemeAssetAlbumField";
 import {
@@ -23,7 +22,6 @@ export interface ThemeGradientStopDraft {
 }
 
 export interface ThemeFrameDraft {
-  status: ThemeStatus;
   backgroundKind: BackgroundKind;
   backgroundColor: string;
   gradientAngle: string;
@@ -47,10 +45,10 @@ const BACKGROUND_KIND_OPTIONS: { value: BackgroundKind; label: string }[] = [
 ];
 
 /**
- * Frame controls shared by Create Theme and the open theme.
+ * Background and margin controls shared by Create Theme and the open theme.
  *
  * @param props - Current draft, change handler, and disabled flag
- * @returns The frame fieldset
+ * @returns The background fieldset and the margins fieldset
  */
 export function ThemeFrameFields({
   frameDraft,
@@ -59,29 +57,13 @@ export function ThemeFrameFields({
 }: ThemeFrameFieldsProps): ReactElement {
 
   return (
+    <>
     <fieldset className="form-fieldset" disabled={disabled}>
-      <legend>Frame</legend>
+      <legend>Background</legend>
       <label>
-        Status
+        Type
         <select
-          value={frameDraft.status}
-          onChange={(changeEvent): void => {
-            const nextStatus: string = changeEvent.target.value;
-
-            if (!isThemeStatus(nextStatus)) {
-              return;
-            }
-
-            onDraftChange({ ...frameDraft, status: nextStatus });
-          }}
-        >
-          <option value="draft">Draft</option>
-          <option value="live">Live</option>
-        </select>
-      </label>
-      <label>
-        Background
-        <select
+          aria-label="Background type"
           value={frameDraft.backgroundKind}
           onChange={(changeEvent): void => {
             const nextKind: string = changeEvent.target.value;
@@ -146,55 +128,66 @@ export function ThemeFrameFields({
           }}
         />
       ) : null}
-      <label>
-        Page margin
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={frameDraft.pageMargin}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...frameDraft, pageMargin: changeEvent.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Element gap
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={frameDraft.elementGap}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...frameDraft, elementGap: changeEvent.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Element margin
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={frameDraft.elementMargin}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...frameDraft, elementMargin: changeEvent.target.value });
-          }}
-        />
-      </label>
     </fieldset>
+    <fieldset className="form-fieldset" disabled={disabled}>
+      <legend>Margins</legend>
+      <div className="margin-row">
+        <label>
+          Page margin
+          <input
+            className="margin-input"
+            type="number"
+            min={0}
+            step={1}
+            aria-label="Page margin"
+            value={frameDraft.pageMargin}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...frameDraft, pageMargin: changeEvent.target.value });
+            }}
+          />
+        </label>
+        <label>
+          Element gap
+          <input
+            className="margin-input"
+            type="number"
+            min={0}
+            step={1}
+            aria-label="Element gap"
+            value={frameDraft.elementGap}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...frameDraft, elementGap: changeEvent.target.value });
+            }}
+          />
+        </label>
+        <label>
+          Element margin
+          <input
+            className="margin-input"
+            type="number"
+            min={0}
+            step={1}
+            aria-label="Element margin"
+            value={frameDraft.elementMargin}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...frameDraft, elementMargin: changeEvent.target.value });
+            }}
+          />
+        </label>
+      </div>
+    </fieldset>
+    </>
   );
 }
 
 /**
- * Return the name-only defaults: Draft, paper color, spacing 96 / 0 / 0.
+ * Return the name-only defaults: paper color, spacing 96 / 0 / 0.
  *
  * @returns A frame draft that matches a name-only create
  */
 export function emptyThemeFrameDraft(): ThemeFrameDraft {
 
   const frameDraft: ThemeFrameDraft = {
-    status: "draft",
     backgroundKind: "color",
     backgroundColor: "#F6F1E8",
     gradientAngle: "",
@@ -241,7 +234,6 @@ export function frameDraftFromTheme(theme: ThemeReadResponse): ThemeFrameDraft {
     },
   );
   const frameDraft: ThemeFrameDraft = {
-    status: theme.status,
     backgroundKind: theme.background_kind,
     backgroundColor: theme.background_color ?? "",
     gradientAngle: storedGradient === null ? "" : String(storedGradient.angle_deg),
@@ -259,7 +251,7 @@ export function frameDraftFromTheme(theme: ThemeReadResponse): ThemeFrameDraft {
  * Build the frame payload for create or patch.
  *
  * @param frameDraft - Current frame fields
- * @returns Status, spacing, and the payload for the selected kind
+ * @returns Spacing and the payload for the selected kind
  */
 export function themePatchFromFrameDraft(frameDraft: ThemeFrameDraft): ThemePatchRequest {
 
@@ -274,7 +266,6 @@ export function themePatchFromFrameDraft(frameDraft: ThemeFrameDraft): ThemePatc
   }
 
   const themePatchRequest: ThemePatchRequest = {
-    status: frameDraft.status,
     background_kind: frameDraft.backgroundKind,
     page_margin: pageMargin,
     element_gap: elementGap,
@@ -600,11 +591,6 @@ function parseWholeNumber(rawValue: string): number | null {
   const parsedValue: number = Number(trimmedValue);
 
   return parsedValue;
-}
-
-function isThemeStatus(value: string): value is ThemeStatus {
-
-  return value === "draft" || value === "live";
 }
 
 function isBackgroundKind(value: string): value is BackgroundKind {

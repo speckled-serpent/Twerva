@@ -745,3 +745,176 @@ td {
   padding: 0.75rem;
   overflow: auto;
 }
+
+.theme-editor-layout {
+  --theme-stone: #f6f1e8;
+  --theme-stone-line: #d9d1c5;
+  --theme-teal: #0f766e;
+}
+
+.theme-editor-layout .form-fieldset {
+  background: var(--theme-stone);
+  border-color: var(--theme-stone-line);
+  border-radius: 0.85rem;
+}
+
+.theme-editor-layout button {
+  border: 1px solid var(--theme-stone-line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.28rem 0.85rem;
+  cursor: pointer;
+}
+
+.theme-editor-layout button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.theme-editor-layout button.danger {
+  color: #7a1010;
+}
+
+.margin-row,
+.compact-field-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.margin-row label,
+.compact-field-row label,
+.text-toolbar label.toolbar-field {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.margin-input,
+.compact-input,
+.toolbar-input {
+  width: 5.5rem;
+}
+
+.paired-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.theme-add-dialog {
+  position: relative;
+  max-width: 34rem;
+  background: var(--theme-stone, #f6f1e8);
+  border: 1px solid var(--theme-stone-line, #d9d1c5);
+  border-radius: 1rem;
+}
+
+.theme-editor-layout .dialog-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  line-height: 1;
+  font-size: 1.25rem;
+}
+
+.theme-band h3 {
+  margin: 1rem 0 0.4rem;
+}
+
+.theme-element-card {
+  border-color: var(--theme-stone-line, #d9d1c5);
+  border-radius: 0.85rem;
+  background: #fff;
+}
+
+.theme-editor-layout .theme-element-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  justify-content: flex-start;
+  border: none;
+  border-radius: 0.55rem;
+  background: transparent;
+  padding: 0.15rem 0.2rem;
+  font-weight: 600;
+  text-align: left;
+}
+
+.chevron {
+  display: inline-flex;
+  flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+
+.chevron.is-open {
+  transform: rotate(90deg);
+}
+
+.section-label {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+}
+
+.theme-subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.text-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.toolbar-caption {
+  font-size: 0.78rem;
+  color: #4a4a4a;
+}
+
+.toolbar-select {
+  max-width: 11rem;
+}
+
+.theme-editor-layout .toolbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+}
+
+.theme-editor-layout .toolbar-toggle.is-pressed {
+  background: var(--theme-teal);
+  border-color: var(--theme-teal);
+  color: #fff;
+}
+
+.toolbar-mark {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.toolbar-mark.is-bold {
+  font-weight: 700;
+}
+
+.toolbar-mark.is-italic {
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.toolbar-mark.is-underline {
+  text-decoration: underline;
+}
+
+.toolbar-mark.is-strike {
+  text-decoration: line-through;
+}

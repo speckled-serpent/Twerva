@@ -226,9 +226,9 @@ class ThemeElementCreateRequest(BaseModel):
     the label operators see when they edit a unit. Blank and
     whitespace-only names are rejected. ``sort_order`` is optional
     and 0-based within the band; omitted means append. ``rectangle_color``
-    null means the rectangle is clear. Text requires a Spotmu
-    ``text_source``, family, positive size, color, and alignment. Image
-    requires ``image_asset_ref`` and forbids ``text_source``. ``x``,
+    null means the rectangle is clear. Text requires a family, a
+    positive size, a color, and alignment. ``text_source`` may be null.
+    Image requires ``image_asset_ref`` and forbids ``text_source``. ``x``,
     ``y``, and ``width`` are rejected.
     """
 

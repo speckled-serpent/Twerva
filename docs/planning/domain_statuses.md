@@ -280,9 +280,11 @@ styling for carousels. Short video is not implemented. The table reuses
 | `background_asset_ref` | Nullable text. Relative path, no `..`, no scheme, suffix `.svg`, `.png`, `.jpg`, or `.jpeg` |
 | `created_by` | Nullable `ops_users` id |
 
-`draft` is the style the operator is editing. `live` is the style
-generation will use for posts that ship. Shipping
-`POST /api/v1/generate/carousel` does not read `status` yet.
+The ops console does not show or edit `status`. Campaign theme
+pickers, theme samples, and `POST /api/v1/generate/carousel` do not
+filter on it, so every saved theme stays usable. The column remains:
+a name-only create still stores `draft`, and a Live row still
+requires the background payload for its kind.
 
 `POST /api/v1/themes` requires a non-empty name. Omitted frame fields
 use the defaults. A name-only create stores `page_margin` 96,
@@ -352,8 +354,11 @@ same. The source row is not updated.
 
 Check `ck_theme_elements_content`:
 
-- `text` requires `text_source`, a non-blank `font_family`, `font_size`
-  greater than 0, a non-blank `font_color`, and `alignment`.
+- `text` requires a non-blank `font_family`, `font_size` greater than
+  0, a non-blank `font_color`, and `alignment`. `text_source` may be
+  null. Unit text is stored by element id. Generation labels the
+  element by `name`. Spotmu source-item preview reads `text_source`
+  when it is set, and uses the element name when it is null.
 - `bold`, `italic`, `underline`, and `strikethrough` are not null and
   default false.
 - `font_weight` is null or an integer from 1 through 1000.
