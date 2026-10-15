@@ -1066,13 +1066,14 @@ code {
   flex: 0 0 auto;
 }
 
-.margin-row label > .margin-input,
-.compact-field-row label > .compact-input,
-.text-toolbar label > .toolbar-input {
+.theme-editor-layout .margin-row label > input.margin-input,
+.theme-editor-layout .compact-field-row label > input.compact-input,
+.theme-editor-layout .text-toolbar label > input.toolbar-input {
   width: 5.5rem;
+  max-width: 5.5rem;
 }
 
-.text-toolbar label > select.toolbar-select {
+.theme-editor-layout .text-toolbar label > select.toolbar-select {
   width: 11rem;
   max-width: 11rem;
 }
