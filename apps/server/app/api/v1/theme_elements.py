@@ -23,6 +23,7 @@ from app.models.enums import (
     ThemeElementContentKind,
     ThemeElementTextSource,
 )
+from app.sources.unit_text_sync import sync_empty_texts_for_theme_element
 from app.themes.elements import (
     THEME_ELEMENT_BAND_REQUIRED_DETAIL,
     THEME_ELEMENT_SORT_ORDER_DETAIL,
@@ -112,6 +113,7 @@ def create_theme_element(
         theme_element_create_request.band,
         theme_element_create_request.sort_order,
     )
+    sync_empty_texts_for_theme_element(created_element, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Theme element could not be saved (conflict).",
@@ -140,6 +142,7 @@ def patch_theme_element(
         element_id,
         our_database_session,
     )
+    previous_content_kind: ThemeElementContentKind = found_element.content_kind
     assigned_fields: set[str] = theme_element_patch_request.model_fields_set
     _reject_patch_placement(theme_element_patch_request, assigned_fields)
     resolved_element: ResolvedThemeElement = _resolve_or_raise(
@@ -258,6 +261,14 @@ def patch_theme_element(
             resulting_band,
             requested_sort_order,
         )
+
+    became_text: bool = (
+        previous_content_kind != ThemeElementContentKind.TEXT
+        and found_element.content_kind == ThemeElementContentKind.TEXT
+    )
+
+    if became_text:
+        sync_empty_texts_for_theme_element(found_element, our_database_session)
 
     commit_database_session_or_raise_conflict(
         our_database_session,

@@ -564,6 +564,11 @@ class AlembicInitializationTests(unittest.TestCase):
             SOURCES_THEME_BOUND_REVISION_ID,
         )
         self.assertIn('op.create_table(\n        "unit_element_texts"', revision_source)
+        self.assertIn(
+            'name="fk_unit_element_texts_theme_element_id_theme_elements"',
+            revision_source,
+        )
+        self.assertIn('ondelete="CASCADE"', revision_source)
         self.assertIn('op.drop_column("units", "free_text")', revision_source)
         self.assertIn('op.drop_column("units", "tags")', revision_source)
         self.assertIn('op.drop_table("unit_fields")', revision_source)
