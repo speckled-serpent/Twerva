@@ -1520,6 +1520,15 @@ def _assign_new_row_identity(row: Theme | ThemeElement) -> None:
         row.updated_at = persisted_at
 
 
+class _EmptyQueryResult:
+    """Stand-in for ``session.execute(...).all()`` when the test has no units."""
+
+    def all(self) -> list[object]:
+        """Return no rows."""
+
+        return []
+
+
 class _ElementMemorySession:
     """In-memory theme lookup for element handlers. Not a database."""
 
@@ -1564,6 +1573,13 @@ class _ElementMemorySession:
         """The unique-key dance does not need a database in this test."""
 
         return None
+
+    def execute(self, statement: object) -> _EmptyQueryResult:
+        """Text sync finds no units. These tests do not store sources."""
+
+        _ = statement
+
+        return _EmptyQueryResult()
 
     def refresh(self, row: Theme | ThemeElement) -> None:
         """Fill id and timestamps the way a Postgres refresh would."""
