@@ -6,7 +6,7 @@ import copy
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,6 +30,7 @@ from app.models import (
     AdvertisementType,
     BackgroundKind,
     OpsUser,
+    ContentSource,
     Theme,
     ThemeElement,
     ThemeStatus,
@@ -254,15 +255,19 @@ def delete_theme_by_id(
 ) -> None:
     """Delete one theme and its elements.
 
-    ``theme_elements`` uses ``ON DELETE CASCADE``. Any other table that
-    references ``themes`` blocks the delete. Preview files on disk are
-    not rows and are left in place. ``template_key`` is a column on this
-    row, not a foreign key from campaigns or artifacts.
+    ``theme_elements`` uses ``ON DELETE CASCADE``. A source that stores
+    this theme blocks the delete. Any other table that references
+    ``themes`` blocks it too. Preview files on disk are not rows and are
+    left in place. ``template_key`` is a column on this row, not a
+    foreign key from campaigns or artifacts.
     """
 
     _ = current_ops_operator
     found_theme: Theme = fetch_theme_by_id_or_raise(theme_id, our_database_session)
-    reference_blockers: list[str] = theme_delete_reference_blockers()
+    reference_blockers: list[str] = theme_delete_reference_blockers(
+        our_database_session,
+        found_theme.id,
+    )
 
     if len(reference_blockers) > 0:
         blocker_names: str = ", ".join(reference_blockers)
@@ -425,11 +430,36 @@ def theme_spacing_negative_detail(field_name: str) -> str:
     return negative_detail
 
 
-def theme_delete_reference_blockers() -> list[str]:
-    """Return tables, other than cascaded elements, that point at themes.
+def theme_delete_reference_blockers(
+    our_database_session: Session,
+    theme_id: uuid.UUID,
+) -> list[str]:
+    """Return tables that still make deleting this theme unsafe.
+
+    ``theme_elements`` cascade with the theme. ``sources`` block only
+    when a row stores this theme. Any other foreign key to ``themes``
+    blocks the delete, because that table is not counted row by row.
 
     Returns:
         Sorted table names that would make a silent delete unsafe.
+    """
+
+    blocker_names: list[str] = unexpected_theme_reference_tables()
+    source_count: int = _source_count_for_theme(our_database_session, theme_id)
+
+    if source_count > 0:
+        blocker_names.append("sources")
+
+    unique_blockers: list[str] = sorted(set(blocker_names))
+
+    return unique_blockers
+
+
+def unexpected_theme_reference_tables() -> list[str]:
+    """Return tables other than elements and sources that point at themes.
+
+    Returns:
+        Sorted table names. An empty list means only the known references.
     """
 
     blocker_names: list[str] = []
@@ -441,9 +471,7 @@ def theme_delete_reference_blockers() -> list[str]:
             if foreign_key.column.table.name != "themes":
                 continue
 
-            ondelete_action: str = (foreign_key.ondelete or "").upper()
-
-            if table.name == "theme_elements" and ondelete_action == "CASCADE":
+            if table.name in {"theme_elements", "sources"}:
                 continue
 
             blocker_names.append(table.name)
@@ -451,6 +479,26 @@ def theme_delete_reference_blockers() -> list[str]:
     unique_blockers: list[str] = sorted(set(blocker_names))
 
     return unique_blockers
+
+
+def _source_count_for_theme(
+    our_database_session: Session,
+    theme_id: uuid.UUID,
+) -> int:
+    """Count sources that store this theme."""
+
+    counted: int | None = our_database_session.scalar(
+        select(func.count())
+        .select_from(ContentSource)
+        .where(ContentSource.theme_id == theme_id),
+    )
+
+    if counted is None:
+        return 0
+
+    source_count: int = int(counted)
+
+    return source_count
 
 
 def _frame_patch_for_create(
