@@ -9,16 +9,27 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.v1.lookups import fetch_account_by_id_or_raise, fetch_campaign_by_id_or_raise
+from app.api.v1.lookups import (
+    fetch_account_by_id_or_raise,
+    fetch_campaign_by_id_or_raise,
+    fetch_content_source_by_id_or_raise,
+    fetch_theme_by_id_or_raise,
+)
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
     CampaignAccountReadResponse,
+    CampaignCarouselRead,
+    CampaignCarouselUnitRead,
     CampaignCreateRequest,
     CampaignInterestReadResponse,
     CampaignInterestWrite,
     CampaignReadResponse,
 )
-from app.auth.dependencies import require_authenticated_ops_operator
+from app.auth.dependencies import (
+    require_admin_ops_operator,
+    require_authenticated_ops_operator,
+)
+from app.campaigns.assemble import assemble_carousels
 from app.campaigns.errors import CampaignLifecycleError
 from app.campaigns.lifecycle import (
     finish_campaign,
@@ -36,12 +47,19 @@ from app.models import (
     Account,
     Campaign,
     CampaignAccount,
+    CampaignCarousel,
+    CampaignCarouselSlide,
     CampaignInterest,
     CampaignStatus,
     CampaignType,
+    ContentSource,
     OpsUser,
     Platform,
+    Theme,
+    Unit,
 )
+from app.sources.editing import new_row_id
+from app.sources.unit_text_review import live_units
 
 
 CAMPAIGN_TYPE_OTHER_NOT_IMPLEMENTED: str = (
@@ -55,6 +73,10 @@ CAMPAIGN_INTERESTS_REQUIRED_DETAIL: str = (
 )
 DUPLICATE_ACCOUNT_PLATFORM_DETAIL: str = (
     "Account platform is not in the campaign platform list."
+)
+SOURCE_THEME_MISMATCH_DETAIL: str = "That source is not bound to this theme."
+CAMPAIGN_RUN_REQUIRES_BINDING_DETAIL: str = (
+    "Pick a theme and a source before running."
 )
 
 campaigns_router: APIRouter = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -108,6 +130,11 @@ def create_campaign(
         our_database_session,
     )
     _raise_if_account_platforms_mismatch(selected_accounts, platform_values)
+    resolve_campaign_binding(
+        campaign_create_request.theme_id,
+        campaign_create_request.source_id,
+        our_database_session,
+    )
 
     requested_slug: str = slugify_campaign_name(stripped_name)
     taken_slugs: set[str] = _load_taken_campaign_slugs(our_database_session)
@@ -123,7 +150,10 @@ def create_campaign(
         status=CampaignStatus.READY,
         platforms=platform_values,
         created_by=None if current_ops_operator is None else current_ops_operator.id,
+        theme_id=campaign_create_request.theme_id,
+        source_id=campaign_create_request.source_id,
     )
+    created_campaign.carousels = []
     our_database_session.add(created_campaign)
     our_database_session.flush()
 
@@ -168,10 +198,7 @@ def list_campaigns(
 
     campaign_selection = (
         select(Campaign)
-        .options(
-            selectinload(Campaign.account_links).selectinload(CampaignAccount.account),
-            selectinload(Campaign.interest_links),
-        )
+        .options(*_campaign_read_options())
         .order_by(Campaign.created_at.desc())
     )
     campaign_scalars = our_database_session.scalars(campaign_selection)
@@ -197,6 +224,53 @@ def get_campaign_by_id(
     )
     campaign_read_response: CampaignReadResponse = serialize_campaign(
         found_campaign,
+    )
+
+    return campaign_read_response
+
+
+@campaigns_router.post("/{campaign_id}/run", response_model=CampaignReadResponse)
+def run_campaign(
+    campaign_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CampaignReadResponse:
+    """Assemble live units from the campaign source into carousels.
+
+    Draft units stay out. Each carousel is a pick that
+    ``assert_unit_pick_allowed`` accepts. The theme on the campaign
+    is the frame. This does not call a text model.
+    """
+
+    _ = current_ops_operator
+    found_campaign: Campaign = fetch_campaign_by_id_or_raise(
+        campaign_id,
+        our_database_session,
+    )
+
+    if found_campaign.theme_id is None or found_campaign.source_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CAMPAIGN_RUN_REQUIRES_BINDING_DETAIL,
+        )
+
+    bound_theme, bound_source = resolve_campaign_binding(
+        found_campaign.theme_id,
+        found_campaign.source_id,
+        our_database_session,
+    )
+    _ = bound_theme
+    _replace_campaign_carousels(found_campaign, bound_source, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Campaign run could not be saved.",
+    )
+    reloaded_campaign: Campaign = _load_campaign_with_joins(
+        found_campaign.id,
+        our_database_session,
+    )
+    campaign_read_response: CampaignReadResponse = serialize_campaign(
+        reloaded_campaign,
     )
 
     return campaign_read_response
@@ -306,6 +380,11 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
     platform_values: list[Platform] = [
         Platform(platform_value) for platform_value in campaign.platforms
     ]
+    theme_name: str | None = None if campaign.theme is None else campaign.theme.name
+    source_name: str | None = None if campaign.source is None else campaign.source.name
+    carousel_responses: list[CampaignCarouselRead] = [
+        _serialize_carousel(carousel) for carousel in list(campaign.carousels)
+    ]
     campaign_read_response: CampaignReadResponse = CampaignReadResponse(
         id=campaign.id,
         name=campaign.name,
@@ -315,10 +394,15 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
         advertisement_type=campaign.advertisement_type,
         status=campaign.status,
         platforms=platform_values,
+        theme_id=campaign.theme_id,
+        source_id=campaign.source_id,
+        theme_name=theme_name,
+        source_name=source_name,
         account_count=len(account_responses),
         interest_count=len(interest_responses),
         accounts=account_responses,
         interests=interest_responses,
+        carousels=carousel_responses,
         created_at=campaign.created_at,
         updated_at=campaign.updated_at,
         created_by=campaign.created_by,
@@ -384,10 +468,7 @@ def _load_campaign_with_joins(
 
     campaign_selection = (
         select(Campaign)
-        .options(
-            selectinload(Campaign.account_links).selectinload(CampaignAccount.account),
-            selectinload(Campaign.interest_links),
-        )
+        .options(*_campaign_read_options())
         .where(Campaign.id == campaign_id)
     )
     found_campaign: Campaign | None = our_database_session.scalars(
@@ -401,6 +482,131 @@ def _load_campaign_with_joins(
         )
 
     return found_campaign
+
+
+def resolve_campaign_binding(
+    theme_id: uuid.UUID,
+    source_id: uuid.UUID,
+    our_database_session: Session,
+) -> tuple[Theme, ContentSource]:
+    """Load the theme and the source, and require that source's theme.
+
+    Args:
+        theme_id: Theme the operator picked.
+        source_id: Source the operator picked from that theme's list.
+        our_database_session: Request-scoped SQLAlchemy session.
+
+    Returns:
+        The theme and the source.
+
+    Raises:
+        HTTPException: 404 when either row is missing. 400 when the
+            source is bound to a different theme.
+    """
+
+    found_theme: Theme = fetch_theme_by_id_or_raise(theme_id, our_database_session)
+    found_source: ContentSource = fetch_content_source_by_id_or_raise(
+        source_id,
+        our_database_session,
+    )
+
+    if found_source.theme_id != found_theme.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=SOURCE_THEME_MISMATCH_DETAIL,
+        )
+
+    return found_theme, found_source
+
+
+def _campaign_read_options() -> tuple[object, ...]:
+    """Eager loads for a campaign read, including the latest carousels."""
+
+    read_options: tuple[object, ...] = (
+        selectinload(Campaign.account_links).selectinload(CampaignAccount.account),
+        selectinload(Campaign.interest_links),
+        selectinload(Campaign.theme),
+        selectinload(Campaign.source),
+        selectinload(Campaign.carousels)
+        .selectinload(CampaignCarousel.slides)
+        .selectinload(CampaignCarouselSlide.unit),
+    )
+
+    return read_options
+
+
+def _replace_campaign_carousels(
+    campaign: Campaign,
+    source: ContentSource,
+    our_database_session: Session,
+) -> None:
+    """Replace the stored carousels with a fresh assembly of live units."""
+
+    for existing_carousel in list(campaign.carousels):
+        our_database_session.delete(existing_carousel)
+
+    campaign.carousels = []
+    our_database_session.flush()
+    ordered_live_units: list[Unit] = sorted(
+        live_units(list(source.units)),
+        key=lambda unit: (unit.position, str(unit.id)),
+    )
+    exclusion_pairs: list[tuple[uuid.UUID, uuid.UUID]] = []
+
+    for source_unit in list(source.units):
+
+        for exclusion in list(source_unit.exclusions):
+            exclusion_pairs.append((exclusion.unit_id, exclusion.excluded_unit_id))
+
+    live_unit_ids: list[uuid.UUID] = [unit.id for unit in ordered_live_units]
+    carousel_groups: list[list[uuid.UUID]] = assemble_carousels(
+        live_unit_ids,
+        exclusion_pairs,
+    )
+    units_by_id: dict[uuid.UUID, Unit] = {unit.id: unit for unit in ordered_live_units}
+
+    for carousel_position, grouped_ids in enumerate(carousel_groups):
+        created_carousel: CampaignCarousel = CampaignCarousel(
+            id=new_row_id(),
+            campaign_id=campaign.id,
+            position=carousel_position,
+        )
+        created_slides: list[CampaignCarouselSlide] = []
+
+        for slide_position, unit_id in enumerate(grouped_ids):
+            created_slide: CampaignCarouselSlide = CampaignCarouselSlide(
+                id=new_row_id(),
+                carousel_id=created_carousel.id,
+                unit_id=unit_id,
+                position=slide_position,
+            )
+            created_slide.unit = units_by_id[unit_id]
+            created_slides.append(created_slide)
+            our_database_session.add(created_slide)
+
+        created_carousel.slides = created_slides
+        campaign.carousels.append(created_carousel)
+        our_database_session.add(created_carousel)
+
+
+def _serialize_carousel(carousel: CampaignCarousel) -> CampaignCarouselRead:
+    """Map one stored carousel to its slide names."""
+
+    unit_reads: list[CampaignCarouselUnitRead] = [
+        CampaignCarouselUnitRead(
+            unit_id=slide.unit_id,
+            name=slide.unit.name,
+            position=slide.position,
+        )
+        for slide in list(carousel.slides)
+    ]
+    carousel_read: CampaignCarouselRead = CampaignCarouselRead(
+        id=carousel.id,
+        position=carousel.position,
+        units=unit_reads,
+    )
+
+    return carousel_read
 
 
 def _load_taken_campaign_slugs(our_database_session: Session) -> set[str]:
