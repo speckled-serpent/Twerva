@@ -16,7 +16,10 @@ Closed vocabularies are native Postgres ENUM types. Allowed values and
 alignment the same way. ``sources`` require a theme. ``units`` keep a
 stable id and a name. ``unit_element_texts`` stores one value per theme
 text element. ``unit_exclusions`` stores the other unit ids a unit
-cannot be shown with. ``unit_images`` holds at most one image per unit.
+cannot be shown with. ``units.text_status`` is ``live`` or ``draft``.
+A draft is generated text that is not live until a person accepts it.
+``sources.inspiration`` and ``sources.rules`` steer that draft.
+``unit_images`` holds at most one image per unit.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -63,6 +66,7 @@ from app.models.enums import (
     UNIT_IMAGE_INTAKE_ENUM,
     UNIT_IMAGE_LICENSE_ENUM,
     UNIT_IMAGE_MEDIA_TYPE_ENUM,
+    UNIT_TEXT_STATUS_ENUM,
     AccountStatus,
     AdvertisementType,
     ArtifactStatus,
@@ -83,6 +87,7 @@ from app.models.enums import (
     UnitImageIntake,
     UnitImageLicense,
     UnitImageMediaType,
+    UnitTextStatus,
 )
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.ops_user import OpsUser
@@ -140,6 +145,7 @@ __all__ = [
     "UNIT_IMAGE_INTAKE_ENUM",
     "UNIT_IMAGE_LICENSE_ENUM",
     "UNIT_IMAGE_MEDIA_TYPE_ENUM",
+    "UNIT_TEXT_STATUS_ENUM",
     "SourceItem",
     "SourceType",
     "Unit",
@@ -149,6 +155,7 @@ __all__ = [
     "UnitImageIntake",
     "UnitImageLicense",
     "UnitImageMediaType",
+    "UnitTextStatus",
     "SteerAction",
     "SteerActionType",
     "Theme",

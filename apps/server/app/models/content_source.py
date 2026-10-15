@@ -1,9 +1,11 @@
 """Content sources: one kind of source, bound to a required theme.
 
 A unit keeps its id, has a name, and holds at most one image. Its text
-is one value per text element on that theme. ``unit_exclusions`` stores
-the other unit ids it cannot be shown with. Themes still store a
-concrete image path. They do not reference these rows.
+is one value per text element on that theme. Generated text stays a
+draft until a person accepts it. ``unit_exclusions`` stores the other
+unit ids it cannot be shown with. The source stores inspiration and
+rules for that draft. Themes still store a concrete image path. They
+do not reference these rows.
 """
 
 from __future__ import annotations
@@ -19,9 +21,11 @@ from app.models.enums import (
     UNIT_IMAGE_INTAKE_ENUM,
     UNIT_IMAGE_LICENSE_ENUM,
     UNIT_IMAGE_MEDIA_TYPE_ENUM,
+    UNIT_TEXT_STATUS_ENUM,
     UnitImageIntake,
     UnitImageLicense,
     UnitImageMediaType,
+    UnitTextStatus,
 )
 
 
@@ -104,6 +108,18 @@ class ContentSource(Base, UuidPrimaryKeyMixin, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False)
+    inspiration: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+    )
+    rules: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+    )
 
     units: Mapped[list["Unit"]] = relationship(
         "Unit",
@@ -135,6 +151,12 @@ class Unit(Base, UuidPrimaryKeyMixin, TimestampMixin):
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(Text, nullable=False)
+    text_status: Mapped[UnitTextStatus] = mapped_column(
+        UNIT_TEXT_STATUS_ENUM,
+        nullable=False,
+        default=UnitTextStatus.LIVE,
+        server_default="live",
+    )
 
     source: Mapped[ContentSource] = relationship("ContentSource", back_populates="units")
     element_texts: Mapped[list["UnitElementText"]] = relationship(
@@ -225,6 +247,7 @@ class UnitElementText(Base, UuidPrimaryKeyMixin):
         index=True,
     )
     value: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    draft_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     unit: Mapped[Unit] = relationship("Unit", back_populates="element_texts")
 

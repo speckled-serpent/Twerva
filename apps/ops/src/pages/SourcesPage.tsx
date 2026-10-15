@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 import {
+  acceptUnitText,
   createSourceUnit,
   createUnitWithImages,
   deleteSource,
+  fetchTextGenerationStatus,
+  generateSourceUnit,
+  generateUnitText,
+  patchSourceGuidance,
   deleteSourceUnit,
   deleteUnitImage,
   fetchSourceById,
@@ -19,6 +24,7 @@ import {
 import type {
   SourceListItemResponse,
   SourceReadResponse,
+  TextGenerationStatusResponse,
   ThemeElementReadResponse,
   ThemeReadResponse,
   UnitElementTextWrite,
@@ -80,6 +86,10 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
   const [statusMessage, setStatusMessage] = useState<string>(openRequest?.statusMessage ?? "");
   const [reloadToken, setReloadToken] = useState<number>(0);
   const [heldUnit, setHeldUnit] = useState<UnitReadResponse | null>(null);
+  const [textGeneration, setTextGeneration] = useState<TextGenerationStatusResponse>({
+    available: false,
+    detail: "",
+  });
 
   useEffect((): (() => void) => {
     let isCancelled: boolean = false;
@@ -110,6 +120,40 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
       isCancelled = true;
     };
   }, [reloadToken]);
+
+  useEffect((): (() => void) => {
+    let isCancelled: boolean = false;
+
+    const loadTextGeneration = async (): Promise<void> => {
+
+      try {
+        const loadedStatus: TextGenerationStatusResponse = await fetchTextGenerationStatus();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setTextGeneration(loadedStatus);
+      } catch (caughtError: unknown) {
+        if (isCancelled) {
+          return;
+        }
+
+        setTextGeneration({
+          available: false,
+          detail: caughtError instanceof Error
+            ? caughtError.message
+            : "Generate is off until OPENAI_API_KEY is set.",
+        });
+      }
+    };
+
+    void loadTextGeneration();
+
+    return (): void => {
+      isCancelled = true;
+    };
+  }, []);
 
   useEffect((): (() => void) => {
     let isCancelled: boolean = false;
@@ -180,6 +224,7 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
         unit={openedUnit}
         loadError={loadError}
         statusMessage={statusMessage}
+        textGeneration={textGeneration}
         onBack={(): void => {
           setOpenedUnitId(null);
           setIsCreatingUnit(false);
@@ -215,9 +260,17 @@ export function SourcesPage({ openRequest }: SourcesPageProps): ReactElement {
         source={selectedSource}
         loadError={loadError}
         statusMessage={statusMessage}
+        textGeneration={textGeneration}
         onBack={(): void => {
           setOpenedSourceId(null);
           setStatusMessage("");
+        }}
+        onUnitDrafted={(draftedUnit: UnitReadResponse): void => {
+          setHeldUnit(draftedUnit);
+          setOpenedUnitId(draftedUnit.id);
+          setIsCreatingUnit(false);
+          setStatusMessage("Drafted a unit. Accept the text to make it live.");
+          requestReload();
         }}
         onOpenUnit={(unitId: string): void => {
           setHeldUnit(null);
@@ -364,9 +417,11 @@ interface AlbumViewProps {
   source: SourceReadResponse | null;
   loadError: unknown;
   statusMessage: string;
+  textGeneration: TextGenerationStatusResponse;
   onBack: () => void;
   onOpenUnit: (unitId: string) => void;
   onCreateUnit: () => void;
+  onUnitDrafted: (draftedUnit: UnitReadResponse) => void;
   onSourceChanged: (message: string) => void;
   onSourceDeleted: () => void;
 }
@@ -375,22 +430,29 @@ function AlbumView({
   source,
   loadError,
   statusMessage,
+  textGeneration,
   onBack,
   onOpenUnit,
   onCreateUnit,
+  onUnitDrafted,
   onSourceChanged,
   onSourceDeleted,
 }: AlbumViewProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
   const [albumName, setAlbumName] = useState<string>(source?.name ?? "");
+  const [inspiration, setInspiration] = useState<string>(source?.inspiration ?? "");
+  const [rules, setRules] = useState<string>(source?.rules ?? "");
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [pendingUnitDelete, setPendingUnitDelete] = useState<UnitReadResponse | null>(null);
 
   useEffect((): void => {
     setAlbumName(source?.name ?? "");
+    setInspiration(source?.inspiration ?? "");
+    setRules(source?.rules ?? "");
   }, [source]);
 
   const handleRename = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -415,6 +477,47 @@ function AlbumView({
     }
   };
 
+  const handleSaveGuidance = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
+    submitEvent.preventDefault();
+
+    if (!canWrite || source === null) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      await patchSourceGuidance(source.id, {
+        inspiration,
+        rules,
+      });
+      onSourceChanged("Saved inspiration and rules.");
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGenerateUnit = async (): Promise<void> => {
+    if (!canWrite || source === null || !textGeneration.available) {
+      return;
+    }
+
+    setIsGenerating(true);
+    setSaveError(null);
+
+    try {
+      const draftedUnit: UnitReadResponse = await generateSourceUnit(source.id);
+      onUnitDrafted(draftedUnit);
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <section>
       <div className="page-header-row">
@@ -422,6 +525,7 @@ function AlbumView({
           <h1>{source === null ? "Album" : source.name}</h1>
           <p className="lede">
             Units in this album. A card shows the first image, or the text when there is none.
+            {source === null ? "" : ` ${source.live_unit_count} live.`}
           </p>
         </div>
         <button type="button" onClick={onBack}>
@@ -472,6 +576,65 @@ function AlbumView({
               </div>
             </form>
           ) : null}
+          {source === null ? null : (
+            <form
+              className="stack-form"
+              onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+                void handleSaveGuidance(submitEvent);
+              }}
+            >
+              <label>
+                Inspiration
+                <textarea
+                  id="source-inspiration"
+                  rows={3}
+                  value={inspiration}
+                  disabled={!canWrite}
+                  onChange={(changeEvent): void => {
+                    setInspiration(changeEvent.target.value);
+                  }}
+                />
+              </label>
+              <label>
+                Rules
+                <textarea
+                  id="source-rules"
+                  rows={3}
+                  value={rules}
+                  disabled={!canWrite}
+                  onChange={(changeEvent): void => {
+                    setRules(changeEvent.target.value);
+                  }}
+                />
+              </label>
+              <p className="field-hint">
+                Generate drafts theme text from this inspiration and these rules.
+                A draft stays off the live unit until you accept it. Images stay a manual upload.
+              </p>
+              {textGeneration.available ? null : (
+                <p className="field-hint" id="generate-unavailable">
+                  {textGeneration.detail}
+                </p>
+              )}
+              {canWrite ? (
+                <div className="button-row">
+                  <button id="save-source-guidance" type="submit" disabled={isSaving}>
+                    {isSaving ? "Saving…" : "Save inspiration"}
+                  </button>
+                  <button
+                    id="generate-unit"
+                    type="button"
+                    disabled={!textGeneration.available || isGenerating}
+                    onClick={(): void => {
+                      void handleGenerateUnit();
+                    }}
+                  >
+                    {isGenerating ? "Generating…" : "Generate unit"}
+                  </button>
+                </div>
+              ) : null}
+            </form>
+          )}
           {source.units.length === 0 ? (
             <p>No units yet.</p>
           ) : (
@@ -552,7 +715,10 @@ function UnitCardBody({ sourceId, unit }: UnitCardBodyProps): ReactElement {
 
   return (
     <>
-      <p className="unit-card-excerpt">{unit.name}</p>
+      <p className="unit-card-excerpt">
+        {unit.name}
+        {unit.text_status === "draft" ? <span className="draft-badge">Draft</span> : null}
+      </p>
       {firstImage === undefined ? (
         <p className="unit-card-excerpt">{excerpt}</p>
       ) : (
@@ -588,6 +754,7 @@ interface UnitEditorViewProps {
   unit: UnitReadResponse | null;
   loadError: unknown;
   statusMessage: string;
+  textGeneration: TextGenerationStatusResponse;
   onBack: () => void;
   onSaved: (savedUnit: UnitReadResponse, message: string) => void;
   onImagesChanged: (message: string) => void;
@@ -599,6 +766,7 @@ function UnitEditorView({
   unit,
   loadError,
   statusMessage,
+  textGeneration,
   onBack,
   onSaved,
   onImagesChanged,
@@ -614,6 +782,7 @@ function UnitEditorView({
   const [textValues, setTextValues] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [imageDrafts, setImageDrafts] = useState<UnitImageDraft[]>([]);
   const [showImageErrors, setShowImageErrors] = useState<boolean>(false);
@@ -684,6 +853,12 @@ function UnitEditorView({
     };
   }, [source?.id, source?.theme_id]);
 
+  const shownTextKey: string = unit === null
+    ? ""
+    : (unit.text_status === "draft" ? unit.draft_texts : unit.texts)
+      .map((elementText): string => `${elementText.theme_element_id}:${elementText.value}`)
+      .join("|");
+
   useEffect((): void => {
     setUnitName(unit?.name ?? "");
     setExcludedIds(unit?.excluded_unit_ids ?? []);
@@ -695,7 +870,7 @@ function UnitEditorView({
     }
 
     setTextValues(textDraftsForTheme(theme, unit));
-  }, [unit?.id, theme]);
+  }, [unit?.id, unit?.text_status, shownTextKey, theme]);
 
   useEffect((): void => {
     const imagesSection: HTMLElement | null = document.getElementById("unit-images");
@@ -788,6 +963,44 @@ function UnitEditorView({
     }
   };
 
+  const handleGenerateText = async (): Promise<void> => {
+    if (!canWrite || source === null || unit === null || !textGeneration.available) {
+      return;
+    }
+
+    setIsGenerating(true);
+    setSaveError(null);
+
+    try {
+      const draftedUnit: UnitReadResponse = await generateUnitText(source.id, unit.id);
+      onSaved(draftedUnit, "Drafted text. Accept it to make this unit live.");
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleAcceptText = async (): Promise<void> => {
+    if (!canWrite || source === null || unit === null || unit.text_status !== "draft") {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+
+    try {
+      const acceptedUnit: UnitReadResponse = await acceptUnitText(source.id, unit.id, {
+        texts: textWrites,
+      });
+      onSaved(acceptedUnit, "Accepted the text. This unit is live.");
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const pageTitle: string = unit === null ? "New unit" : "Unit";
   const pageLede: string = (
     "The fields follow this source's theme. Preview shows the unit on that theme."
@@ -866,6 +1079,11 @@ function UnitEditorView({
                   onDraftsChange={setImageDrafts}
                 />
               ) : null}
+              {unit?.text_status === "draft" ? (
+                <p className="status-banner" id="unit-draft-banner">
+                  This text is a draft. It stays off the live unit until you accept it.
+                </p>
+              ) : null}
               <label>
                 Name
                 <input
@@ -941,11 +1159,40 @@ function UnitEditorView({
                   </ul>
                 )}
               </fieldset>
+              {canWrite && unit !== null && !textGeneration.available ? (
+                <p className="field-hint" id="generate-unavailable">
+                  {textGeneration.detail}
+                </p>
+              ) : null}
               {canWrite ? (
                 <div className="button-row">
-                  <button id="save-unit" type="submit" disabled={isSaving}>
+                  <button id="save-unit" type="submit" disabled={isSaving || isGenerating}>
                     {isSaving ? "Saving…" : "Save unit"}
                   </button>
+                  {unit === null ? null : (
+                    <button
+                      id="generate-unit-text"
+                      type="button"
+                      disabled={!textGeneration.available || isGenerating || isSaving}
+                      onClick={(): void => {
+                        void handleGenerateText();
+                      }}
+                    >
+                      {isGenerating ? "Generating…" : "Generate text"}
+                    </button>
+                  )}
+                  {unit?.text_status === "draft" ? (
+                    <button
+                      id="accept-unit-text"
+                      type="button"
+                      disabled={isSaving || isGenerating}
+                      onClick={(): void => {
+                        void handleAcceptText();
+                      }}
+                    >
+                      Accept text
+                    </button>
+                  ) : null}
                   {unit === null ? null : (
                     <button
                       type="button"

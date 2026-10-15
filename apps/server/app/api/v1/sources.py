@@ -13,12 +13,20 @@ from app.api.v1.source_preview import register_source_preview_routes
 from app.api.v1.schemas import (
     SourceListItemResponse,
     SourceReadResponse,
+    TextGenerationStatusResponse,
     UnitElementTextReadResponse,
     UnitImageReadResponse,
     UnitReadResponse,
 )
+from app.settings import get_settings
+from app.sources.text_generation import (
+    TextGenerationAvailability,
+    text_generation_availability,
+)
 from app.db import get_our_database_session
 from app.models.content_source import ContentSource, Unit, UnitElementText, UnitImage
+from app.models.enums import UnitTextStatus
+from app.sources.unit_text_review import live_units, unit_counts_as_live
 
 
 sources_router: APIRouter = APIRouter(prefix="/sources", tags=["sources"])
@@ -58,6 +66,22 @@ def list_content_sources(
     ]
 
     return list_items
+
+
+@sources_router.get(
+    "/text-generation",
+    response_model=TextGenerationStatusResponse,
+)
+def read_text_generation_status() -> TextGenerationStatusResponse:
+    """Return whether Generate can run. Readers may call this."""
+
+    availability: TextGenerationAvailability = text_generation_availability(get_settings())
+    status_response: TextGenerationStatusResponse = TextGenerationStatusResponse(
+        available=availability.available,
+        detail=availability.detail,
+    )
+
+    return status_response
 
 
 @sources_router.get("/{source_id}", response_model=SourceReadResponse)
@@ -103,6 +127,9 @@ def serialize_content_source(source: ContentSource) -> SourceReadResponse:
         theme_id=source.theme_id,
         name=source.name,
         slug=source.slug,
+        inspiration=source.inspiration or "",
+        rules=source.rules or "",
+        live_unit_count=len(live_units(list(source.units))),
         created_at=source.created_at,
         updated_at=source.updated_at,
         units=unit_responses,
@@ -133,6 +160,10 @@ def serialize_unit(unit: Unit) -> UnitReadResponse:
     text_responses: list[UnitElementTextReadResponse] = [
         _serialize_element_text(element_text) for element_text in list(unit.element_texts)
     ]
+    text_status: UnitTextStatus = (
+        UnitTextStatus.LIVE if unit_counts_as_live(unit) else UnitTextStatus.DRAFT
+    )
+    draft_responses: list[UnitElementTextReadResponse] = _draft_texts(unit, text_status)
     excluded_unit_ids: list[uuid.UUID] = _excluded_unit_ids(unit)
     image_responses: list[UnitImageReadResponse] = [
         serialize_image(image) for image in _images_in_position_order(unit)
@@ -141,7 +172,9 @@ def serialize_unit(unit: Unit) -> UnitReadResponse:
         id=unit.id,
         position=unit.position,
         name=unit.name,
+        text_status=text_status,
         texts=text_responses,
+        draft_texts=draft_responses,
         excluded_unit_ids=excluded_unit_ids,
         images=image_responses,
     )
@@ -158,6 +191,29 @@ def _serialize_element_text(element_text: UnitElementText) -> UnitElementTextRea
     )
 
     return text_response
+
+
+def _draft_texts(
+    unit: Unit,
+    text_status: UnitTextStatus,
+) -> list[UnitElementTextReadResponse]:
+    """Return drafted strings. A live unit has none."""
+
+    if text_status != UnitTextStatus.DRAFT:
+
+        return []
+
+    draft_responses: list[UnitElementTextReadResponse] = []
+
+    for element_text in list(unit.element_texts):
+        draft_value: str = element_text.draft_value or ""
+        draft_response: UnitElementTextReadResponse = UnitElementTextReadResponse(
+            theme_element_id=element_text.theme_element_id,
+            value=draft_value,
+        )
+        draft_responses.append(draft_response)
+
+    return draft_responses
 
 
 def _excluded_unit_ids(unit: Unit) -> list[uuid.UUID]:
@@ -210,9 +266,11 @@ def serialize_image(image: UnitImage) -> UnitImageReadResponse:
 
 
 from app.api.v1.source_intake import register_source_intake_routes
+from app.api.v1.source_text import register_source_text_routes
 from app.api.v1.source_writes import register_source_write_routes
 
 
 register_source_write_routes(sources_router)
 register_source_intake_routes(sources_router)
 register_source_preview_routes(sources_router)
+register_source_text_routes(sources_router)

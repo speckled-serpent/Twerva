@@ -357,7 +357,8 @@ Check `ck_theme_elements_content`:
 
 Alembic `sources_default_album`, then `sources_resource_files`, then
 `sources_theme_bound`, then `unit_element_texts`, then
-`unit_exclusions`. A source requires `theme_id`. `kind` and
+`unit_exclusions`, then `unit_text_drafts`. A source requires
+`theme_id`. `kind` and
 `resource_files` are gone. A unit keeps its id and has a required
 `name`. `unit_images` allows one row per unit.
 `unit_element_texts` stores one value per theme text element
@@ -369,7 +370,18 @@ in both directions (`unit_id`, `excluded_unit_id`), unique on that
 pair, and both foreign keys cascade when either unit is deleted. A
 unit cannot exclude itself, and the other id must be a unit in the
 same source. A pick that contains either direction of a stored pair
-is refused. The Default album, slug `default`, stays and is bound to
+is refused. `sources.inspiration` and `sources.rules` are text the
+operator saves for drafting. `units.text_status` is `live` or
+`draft`. Existing units stay `live`. Generate writes
+`unit_element_texts.draft_value` and sets the unit to `draft`. The
+approved `value` stays until a person accepts the draft. A draft unit
+does not count as live. Accept copies the draft onto `value`, clears
+the draft, and sets `text_status` to `live`. A theme that needs an
+image still requires that image before accept. Images stay a manual
+upload. Generate uses `TEXT_GENERATION_PROVIDER` (`openai` or
+`fake`). `openai` calls api.openai.com when `OPENAI_API_KEY` is set.
+`OPENAI_MODEL` defaults to `gpt-4o-mini`. An empty key leaves Generate
+off. The Default album, slug `default`, stays and is bound to
 Spotmu Paper v1 when that theme exists.
 
 | Enum | Values |
@@ -377,6 +389,7 @@ Spotmu Paper v1 when that theme exists.
 | `unit_image_media_type` | `svg`, `png`, `jpeg` |
 | `unit_image_license` | `cc0`, `public_domain`, `owned`, `licensed` |
 | `unit_image_intake` | `upload`, `url` |
+| `unit_text_status` | `live`, `draft` |
 
 `unit_images.license_note` is empty unless `license` is `licensed`, in
 which case it is required. `relative_path` is unique. SVG rows have
@@ -388,7 +401,8 @@ theme uses an image, the unit's saved file. That route writes no unit,
 artifact, post job, or preview file. Admins may create, rename, and
 delete sources and units, edit the unit name, one text value per
 theme text element, and the units in the same source it cannot be
-shown with, edit license metadata, upload SVG/PNG/JPEG (8 MB),
+shown with, save inspiration and rules, generate a draft, accept
+that draft, edit license metadata, upload SVG/PNG/JPEG (8 MB),
 and import one http(s) URL. An image is required when the theme has a
 picture background or an image element, and refused when it does not.
 New bytes go under `ARTIFACT_STORAGE_DIR` at

@@ -512,6 +512,16 @@ td {
   padding: 0.35rem 0.5rem;
 }
 
+.draft-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid #8a7a3a;
+  background: #f7f3e2;
+  color: #5a4a10;
+  font-size: 0.75rem;
+}
+
 .checkbox-row {
   flex-direction: row;
   align-items: center;
