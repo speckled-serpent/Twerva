@@ -47,6 +47,7 @@ from app.models.enums import (
     ThemeElementTextSource,
     ThemeStatus,
 )
+from app.models.campaign import Campaign
 from app.models.content_source import ContentSource
 from app.models.theme_element import ThemeElement
 from app.themes.elements import (
@@ -1760,7 +1761,7 @@ class ThemeDeleteTests(unittest.TestCase):
         fake_session.delete.assert_not_called()
 
     def test_only_elements_and_sources_reference_themes(self) -> None:
-        """Elements cascade. Sources restrict. No other table points at themes."""
+        """Elements cascade. Sources and campaigns restrict by row. No other table points at themes."""
 
         _ = app.models
         self.assertEqual(unexpected_theme_reference_tables(), [])
@@ -1775,6 +1776,11 @@ class ThemeDeleteTests(unittest.TestCase):
         }
         self.assertEqual(element_actions, {"CASCADE"})
         self.assertEqual(source_actions, {"RESTRICT"})
+        campaign_actions: set[str] = {
+            (foreign_key.ondelete or "").upper()
+            for foreign_key in Campaign.__table__.c.theme_id.foreign_keys
+        }
+        self.assertEqual(campaign_actions, {"RESTRICT"})
 
     def test_other_reference_blocks_delete(self) -> None:
         """A non-cascade foreign key refuses the delete and leaves the row."""

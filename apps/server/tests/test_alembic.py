@@ -26,6 +26,7 @@ SOURCES_THEME_BOUND_REVISION_ID: str = "sources_theme_bound"
 UNIT_ELEMENT_TEXTS_REVISION_ID: str = "unit_element_texts"
 UNIT_EXCLUSIONS_REVISION_ID: str = "unit_exclusions"
 UNIT_TEXT_DRAFTS_REVISION_ID: str = "unit_text_drafts"
+CAMPAIGN_THEME_SOURCE_REVISION_ID: str = "campaign_theme_source"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -56,6 +57,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{DOMAIN_REVISION_ID}.py",
                 f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
                 f"{CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID}.py",
+                f"{CAMPAIGN_THEME_SOURCE_REVISION_ID}.py",
                 f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py",
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
@@ -615,6 +617,33 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("unit_text_status", revision_source)
         self.assertIn('sa.Column("draft_value"', revision_source)
         self.assertIn('op.drop_column("sources", "inspiration")', revision_source)
+
+    def test_campaign_theme_source_follows_unit_text_drafts(self) -> None:
+        """Theme and source on a campaign follow drafted unit text."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGN_THEME_SOURCE_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAMPAIGN_THEME_SOURCE_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            UNIT_TEXT_DRAFTS_REVISION_ID,
+        )
+        self.assertIn('sa.Column("theme_id"', revision_source)
+        self.assertIn('sa.Column("source_id"', revision_source)
+        self.assertIn('op.create_table(\n        "campaign_carousels"', revision_source)
+        self.assertIn("nullable=True", revision_source)
+        self.assertIn('op.drop_column("campaigns", "theme_id")', revision_source)
+        self.assertIn('op.drop_table("campaign_carousels")', revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

@@ -6,13 +6,21 @@ import {
   type ReactElement,
 } from "react";
 
-import { createCampaign, listAccounts, searchSpotmuInterests } from "../api/client";
+import {
+  createCampaign,
+  listAccounts,
+  listAlbums,
+  listThemes,
+  searchSpotmuInterests,
+} from "../api/client";
 import type {
   AccountReadResponse,
   CampaignReadResponse,
   CampaignType,
   Platform,
+  SourceListItemResponse,
   SpotmuInterestSearchHit,
+  ThemeReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
@@ -33,7 +41,7 @@ export interface NewCampaignPageProps {
 }
 
 /**
- * New Campaign tab: save a Ready definition. Does not start the campaign.
+ * New Campaign tab: pick a theme, then a source bound to it, then save.
  *
  * @param props - Success and cancel navigation callbacks
  * @returns The New Campaign form
@@ -46,6 +54,10 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
   const [actionError, setActionError] = useState<unknown>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
 
+  const [themes, setThemes] = useState<ThemeReadResponse[]>([]);
+  const [sources, setSources] = useState<SourceListItemResponse[]>([]);
+  const [selectedThemeId, setSelectedThemeId] = useState<string>("");
+  const [selectedSourceId, setSelectedSourceId] = useState<string>("");
   const [campaignName, setCampaignName] = useState<string>("");
   const [campaignType, setCampaignType] = useState<CampaignType>("spotmu");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
@@ -73,13 +85,19 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
     const loadPage = async (): Promise<void> => {
 
       try {
-        const loadedAccounts: AccountReadResponse[] = await listAccounts();
+        const [loadedAccounts, loadedThemes, loadedSources] = await Promise.all([
+          listAccounts(),
+          listThemes(),
+          listAlbums(),
+        ]);
 
         if (isCancelled) {
           return;
         }
 
         setAccounts(loadedAccounts);
+        setThemes(loadedThemes);
+        setSources(loadedSources);
         setLoadError(null);
       } catch (caughtError: unknown) {
         if (isCancelled) {
@@ -234,6 +252,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
     const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
       readCampaignCreateRequirements(
         campaignName,
+        selectedThemeId,
+        selectedSourceId,
         selectedPlatforms,
         selectedAccountIds,
         selectedInterests,
@@ -257,6 +277,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         name: campaignName,
         campaign_type: campaignType,
         advertisement_type: "carousel",
+        theme_id: selectedThemeId,
+        source_id: selectedSourceId,
         platforms: selectedPlatforms,
         account_ids: selectedAccountIds,
         interests: selectedInterests.map((selectedInterest: SelectedInterest) => {
@@ -279,9 +301,14 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
   const isOtherType: boolean = campaignType === "other";
   const isSpotmuTestType: boolean = campaignType === "spotmu_test";
   const accountsAreRequired: boolean = campaignTypeRequiresLinkedAccount(campaignType);
+  const sourcesForTheme: SourceListItemResponse[] = sources.filter(
+    (source: SourceListItemResponse): boolean => source.theme_id === selectedThemeId,
+  );
   const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
     readCampaignCreateRequirements(
       campaignName,
+      selectedThemeId,
+      selectedSourceId,
       selectedPlatforms,
       selectedAccountIds,
       selectedInterests,
@@ -297,8 +324,9 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         <div>
           <h1>New Campaign</h1>
           <p className="lede">
-            Save a Ready campaign definition. Start, generate, and schedule are
-            separate — this form does not run ingest or generate.
+            Pick a theme, then one source bound to that theme. Run, on the
+            campaign, assembles live units into carousels on that theme.
+            It does not generate text.
           </p>
         </div>
         <button type="button" onClick={onCancel}>
@@ -315,6 +343,60 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
           void handleCreateCampaign(formEvent);
         }}
       >
+        <label>
+          Theme
+          <select
+            id="campaign-theme"
+            value={selectedThemeId}
+            onChange={(changeEvent): void => {
+              const nextThemeId: string = changeEvent.target.value;
+
+              setSelectedThemeId(nextThemeId);
+              setSelectedSourceId("");
+            }}
+            required={!isOtherType}
+            disabled={!canWrite || isBusy || isOtherType}
+          >
+            <option value="">Choose a theme</option>
+            {themes.map((theme: ThemeReadResponse): ReactElement => (
+              <option key={theme.id} value={theme.id}>
+                {theme.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label>
+          Source
+          <select
+            id="campaign-source"
+            value={selectedSourceId}
+            onChange={(changeEvent): void => {
+              setSelectedSourceId(changeEvent.target.value);
+            }}
+            required={!isOtherType}
+            disabled={!canWrite || isBusy || isOtherType || selectedThemeId === ""}
+          >
+            <option value="">
+              {selectedThemeId === "" ? "Choose a theme first" : "Choose a source"}
+            </option>
+            {sourcesForTheme.map((source: SourceListItemResponse): ReactElement => (
+              <option key={source.id} value={source.id}>
+                {source.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedThemeId !== "" && sourcesForTheme.length === 0 ? (
+          <p className="field-hint" id="campaign-source-empty">
+            No sources are bound to this theme.
+          </p>
+        ) : (
+          <p className="field-hint">
+            The list is sources that store this theme. Run uses only accepted units.
+          </p>
+        )}
+
         <label>
           Campaign name
           <input
@@ -540,7 +622,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         )}
         <div className="button-row">
           {isOtherType ? null : (
-            <button type="submit" disabled={!canCreate}>
+            <button id="create-campaign" type="submit" disabled={!canCreate}>
               {isBusy ? "Saving…" : "Create Campaign"}
             </button>
           )}
@@ -555,6 +637,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
 
 interface CampaignCreateRequirements {
   hasName: boolean;
+  hasTheme: boolean;
+  hasSource: boolean;
   hasPlatform: boolean;
   hasAccount: boolean;
   hasInterest: boolean;
@@ -562,6 +646,8 @@ interface CampaignCreateRequirements {
 
 function readCampaignCreateRequirements(
   campaignName: string,
+  selectedThemeId: string,
+  selectedSourceId: string,
   selectedPlatforms: Platform[],
   selectedAccountIds: string[],
   selectedInterests: SelectedInterest[],
@@ -570,6 +656,8 @@ function readCampaignCreateRequirements(
 
   const campaignCreateRequirements: CampaignCreateRequirements = {
     hasName: campaignName.trim() !== "",
+    hasTheme: selectedThemeId !== "",
+    hasSource: selectedSourceId !== "",
     hasPlatform: selectedPlatforms.length > 0,
     hasAccount: !accountsAreRequired || selectedAccountIds.length > 0,
     hasInterest: selectedInterests.length > 0,
@@ -583,6 +671,14 @@ function listMissingCampaignCreateLabels(
 ): string[] {
 
   const missingLabels: string[] = [];
+
+  if (!campaignCreateRequirements.hasTheme) {
+    missingLabels.push("a theme");
+  }
+
+  if (!campaignCreateRequirements.hasSource) {
+    missingLabels.push("a source");
+  }
 
   if (!campaignCreateRequirements.hasName) {
     missingLabels.push("a campaign name");

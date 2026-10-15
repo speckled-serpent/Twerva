@@ -53,12 +53,15 @@ class CampaignCreateRequest(BaseModel):
     platform and interest after the handler strips and dedupes. Spotmu
     also requires at least one account; Spotmu-test may send an empty
     ``account_ids`` list. Empty lists stay allowed on the model so
-    ``other`` still parses.
+    ``other`` still parses. ``theme_id`` and ``source_id`` are required.
+    The source has to be bound to that theme.
     """
 
     name: str = Field(min_length=1)
     campaign_type: CampaignType
     advertisement_type: AdvertisementType = AdvertisementType.CAROUSEL
+    theme_id: uuid.UUID
+    source_id: uuid.UUID
     platforms: list[Platform] = Field(default_factory=list)
     account_ids: list[uuid.UUID] = Field(default_factory=list)
     interests: list[CampaignInterestWrite] = Field(default_factory=list)
@@ -82,6 +85,22 @@ class CampaignAccountReadResponse(BaseModel):
     handle: str
 
 
+class CampaignCarouselUnitRead(BaseModel):
+    """One live unit placed on a carousel frame."""
+
+    unit_id: uuid.UUID
+    name: str
+    position: int
+
+
+class CampaignCarouselRead(BaseModel):
+    """One carousel from the latest run, in theme frame order."""
+
+    id: uuid.UUID
+    position: int
+    units: list[CampaignCarouselUnitRead] = Field(default_factory=list)
+
+
 class CampaignReadResponse(BaseModel):
     """Serialized Campaign plus join counts and snapshots."""
 
@@ -95,10 +114,15 @@ class CampaignReadResponse(BaseModel):
     advertisement_type: AdvertisementType
     status: CampaignStatus
     platforms: list[Platform]
+    theme_id: uuid.UUID | None = None
+    source_id: uuid.UUID | None = None
+    theme_name: str | None = None
+    source_name: str | None = None
     account_count: int
     interest_count: int
     accounts: list[CampaignAccountReadResponse] = Field(default_factory=list)
     interests: list[CampaignInterestReadResponse] = Field(default_factory=list)
+    carousels: list[CampaignCarouselRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None
