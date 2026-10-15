@@ -22,6 +22,7 @@ import type {
   ThemeReadResponse,
   ThemeSampleRequest,
   ThemeSampleResponse,
+  UnitImageCreatePayload,
   UnitImageImportRequest,
   UnitImageLicense,
   UnitImageMetadataPatch,
@@ -287,6 +288,76 @@ export async function createSourceUnit(
     "POST",
     `/api/v1/sources/${sourceId}/units`,
     unitWriteRequest,
+  );
+}
+
+interface UnitImageCreateItemJson {
+  kind: "file" | "url";
+  file_index: number | null;
+  url: string | null;
+  license: UnitImageLicense;
+  source: string;
+  license_note: string;
+}
+
+/**
+ * Create a unit and its images in one multipart call. Disk storage.
+ * An image-only unit is valid because the images travel with the unit.
+ *
+ * @param sourceId - Album UUID
+ * @param unitWriteRequest - Free text, tags, and fields. All may be empty
+ * @param images - One entry per image, each with its own license fields
+ * @returns The created unit, including the stored images
+ */
+export async function createUnitWithImages(
+  sourceId: string,
+  unitWriteRequest: UnitWriteRequest,
+  images: UnitImageCreatePayload[],
+): Promise<UnitReadResponse> {
+
+  const formData: FormData = new FormData();
+  const imageItems: UnitImageCreateItemJson[] = [];
+  let fileIndex: number = 0;
+
+  for (const image of images) {
+    if (image.kind === "file") {
+      if (image.file === null) {
+        throw new Error("Choose an image file.");
+      }
+
+      formData.append("files", image.file);
+      imageItems.push({
+        kind: "file",
+        url: null,
+        license: image.license,
+        source: image.source,
+        license_note: image.license_note,
+        file_index: fileIndex,
+      });
+      fileIndex += 1;
+    } else {
+      imageItems.push({
+        kind: "url",
+        url: image.url,
+        license: image.license,
+        source: image.source,
+        license_note: image.license_note,
+        file_index: null,
+      });
+    }
+  }
+
+  formData.append("unit_json", JSON.stringify({
+    free_text: unitWriteRequest.free_text,
+    tags: unitWriteRequest.tags,
+    fields: unitWriteRequest.fields,
+    images: imageItems,
+  }));
+
+  return requestForm<UnitReadResponse>(
+    "POST",
+    `/api/v1/sources/${sourceId}/units/with-images`,
+    formData,
   );
 }
 

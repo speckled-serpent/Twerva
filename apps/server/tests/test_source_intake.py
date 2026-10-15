@@ -14,12 +14,24 @@ import httpx
 from fastapi import HTTPException
 from PIL import Image
 
-from app.api.v1.schemas import UnitImageImportRequest, UnitWriteRequest
-from app.api.v1.source_intake import add_images_from_payloads, import_unit_image
+from app.api.v1.schemas import (
+    UnitImageCreateItem,
+    UnitImageImportRequest,
+    UnitWithImagesCreateRequest,
+    UnitWriteRequest,
+)
+from app.api.v1.source_intake import (
+    UnitImageAttachment,
+    add_images_from_payloads,
+    attachments_for_new_unit,
+    create_unit_with_images,
+    import_unit_image,
+    parse_unit_with_images_json,
+)
+from app.sources.editing import EMPTY_UNIT_DETAIL, LICENSE_NOTE_DETAIL
 from app.api.v1.source_writes import delete_unit_image
 from app.models.enums import UnitImageIntake, UnitImageLicense, UnitImageMediaType
 from app.models.content_source import Unit
-from app.sources.editing import LICENSE_NOTE_DETAIL
 from app.sources.image_intake import (
     IMAGE_TOO_LARGE_DETAIL,
     IMAGE_TYPE_DETAIL,
@@ -296,6 +308,188 @@ class AlbumImageIntakeTests(unittest.TestCase):
             self.assertTrue(kept_path.is_file())
 
 
+class ImageOnlyUnitCreateTests(unittest.TestCase):
+    """Add unit can store images in the same step as the unit."""
+
+    def test_image_only_unit_keeps_each_license_on_disk(self) -> None:
+        """No free text. Two images, two licenses, files under albums/."""
+
+        session, source_id, store, directory = _empty_album_store()
+        created = create_unit_with_images(
+            source_id,
+            UnitWriteRequest(free_text=None, tags=[], fields=[]),
+            [
+                UnitImageAttachment(
+                    payload=_jpeg_bytes(24, 12),
+                    intake=UnitImageIntake.UPLOAD,
+                    image_license=UnitImageLicense.OWNED,
+                    source="Desk photo",
+                    license_note="",
+                    alt_text=None,
+                ),
+                UnitImageAttachment(
+                    payload=_png_bytes(12, 12),
+                    intake=UnitImageIntake.URL,
+                    image_license=UnitImageLicense.LICENSED,
+                    source="https://example.com/rights",
+                    license_note="Invoice 12",
+                    alt_text=None,
+                ),
+            ],
+            session,
+            store,
+        )
+
+        self.assertIsNone(created.free_text)
+        self.assertEqual(len(created.images), 2)
+        self.assertEqual(created.images[0].license, UnitImageLicense.OWNED)
+        self.assertEqual(created.images[0].source, "Desk photo")
+        self.assertEqual(created.images[0].intake, UnitImageIntake.UPLOAD)
+        self.assertEqual(created.images[1].license, UnitImageLicense.LICENSED)
+        self.assertEqual(created.images[1].license_note, "Invoice 12")
+        self.assertEqual(created.images[1].intake, UnitImageIntake.URL)
+        self.assertTrue((directory / created.images[0].relative_path).is_file())
+        self.assertTrue((directory / (created.images[0].thumbnail_path or "")).is_file())
+        self.assertTrue(created.images[0].relative_path.startswith("albums/"))
+
+    def test_missing_license_note_and_bad_type_leave_no_unit_or_file(self) -> None:
+        """The license gate and the type gate write nothing."""
+
+        session, source_id, store, directory = _empty_album_store()
+        commits_before: int = session.commit_count
+
+        with self.assertRaises(HTTPException) as note_error:
+            create_unit_with_images(
+                source_id,
+                UnitWriteRequest(),
+                [
+                    UnitImageAttachment(
+                        payload=_jpeg_bytes(8, 8),
+                        intake=UnitImageIntake.UPLOAD,
+                        image_license=UnitImageLicense.LICENSED,
+                        source="https://example.com/rights",
+                        license_note="  ",
+                        alt_text=None,
+                    ),
+                ],
+                session,
+                store,
+            )
+
+        with self.assertRaises(HTTPException) as type_error:
+            create_unit_with_images(
+                source_id,
+                UnitWriteRequest(),
+                [
+                    UnitImageAttachment(
+                        payload=_jpeg_bytes(8, 8),
+                        intake=UnitImageIntake.UPLOAD,
+                        image_license=UnitImageLicense.CC0,
+                        source="https://example.com/photo",
+                        license_note="",
+                        alt_text=None,
+                    ),
+                    UnitImageAttachment(
+                        payload=b"GIF89ahello",
+                        intake=UnitImageIntake.UPLOAD,
+                        image_license=UnitImageLicense.CC0,
+                        source="https://example.com/photo",
+                        license_note="",
+                        alt_text=None,
+                    ),
+                ],
+                session,
+                store,
+            )
+
+        self.assertEqual(note_error.exception.status_code, 400)
+        self.assertEqual(note_error.exception.detail, LICENSE_NOTE_DETAIL)
+        self.assertEqual(type_error.exception.status_code, 400)
+        self.assertEqual(type_error.exception.detail, IMAGE_TYPE_DETAIL)
+        self.assertEqual(session.commit_count, commits_before)
+        self.assertEqual(_unit_count(session, source_id), 0)
+        self.assertEqual(list(directory.rglob("*")), [])
+
+    def test_text_without_images_still_rejects_an_empty_unit(self) -> None:
+        """The multipart path keeps the empty-unit rule."""
+
+        session, source_id, store, directory = _empty_album_store()
+
+        with self.assertRaises(HTTPException) as raised:
+            create_unit_with_images(
+                source_id,
+                UnitWriteRequest(free_text="  ", tags=[], fields=[]),
+                [],
+                session,
+                store,
+            )
+
+        self.assertEqual(raised.exception.detail, EMPTY_UNIT_DETAIL)
+        self.assertEqual(_unit_count(session, source_id), 0)
+        self.assertEqual(list(directory.rglob("*")), [])
+
+    def test_license_failure_does_not_download_the_url(self) -> None:
+        """A missing note is rejected before the URL is fetched."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise AssertionError(request.url)
+
+        client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
+        create_request: UnitWithImagesCreateRequest = UnitWithImagesCreateRequest(
+            images=[
+                UnitImageCreateItem(
+                    kind="url",
+                    url="https://example.com/plate.png",
+                    license=UnitImageLicense.LICENSED,
+                    source="https://example.com/rights",
+                    license_note=" ",
+                ),
+            ],
+        )
+
+        with self.assertRaises(HTTPException) as raised:
+            attachments_for_new_unit(create_request, [], client)
+
+        self.assertEqual(raised.exception.detail, LICENSE_NOTE_DETAIL)
+
+    def test_url_item_is_downloaded_once_and_a_bad_license_json_is_400(self) -> None:
+        """The form parser rejects an unknown license. A good URL is fetched once."""
+
+        with self.assertRaises(HTTPException) as raised:
+            parse_unit_with_images_json(
+                '{"images":[{"kind":"file","license":"copyright","source":"desk"}]}',
+            )
+
+        image_url: str = "https://example.com/plate.png"
+        png_bytes: bytes = _png_bytes(8, 8)
+        calls: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(str(request.url))
+
+            return httpx.Response(200, content=png_bytes)
+
+        client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
+        create_request: UnitWithImagesCreateRequest = UnitWithImagesCreateRequest(
+            images=[
+                UnitImageCreateItem(
+                    kind="url",
+                    url=image_url,
+                    license=UnitImageLicense.CC0,
+                    source=image_url,
+                    license_note="",
+                ),
+            ],
+        )
+        attachments = attachments_for_new_unit(create_request, [], client)
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(calls, [image_url])
+        self.assertEqual(attachments[0].payload, png_bytes)
+        self.assertEqual(attachments[0].intake, UnitImageIntake.URL)
+        self.assertEqual(attachments[0].source, image_url)
+
+
 def _jpeg_bytes(width: int, height: int) -> bytes:
     """Return a small RGB JPEG."""
 
@@ -341,5 +535,35 @@ def _text_unit_store() -> tuple[_MemorySourceSession, uuid.UUID, uuid.UUID, Loca
     store: LocalAlbumImageStore = LocalAlbumImageStore(directory)
 
     return session, created.id, unit.id, store, directory
+
+
+def _empty_album_store() -> tuple[_MemorySourceSession, uuid.UUID, LocalAlbumImageStore, Path]:
+    """Create an album with no units and a temp artifact directory."""
+
+    from app.api.v1.schemas import SourceCreateRequest
+    from app.api.v1.source_writes import create_content_source
+    from app.models.enums import ContentSourceKind
+
+    session: _MemorySourceSession = _MemorySourceSession()
+    created = create_content_source(
+        SourceCreateRequest(name="Image only", kind=ContentSourceKind.ALBUM),
+        session,
+        None,
+    )
+    directory: Path = Path(tempfile.mkdtemp(prefix="twerva-albums-"))
+    store: LocalAlbumImageStore = LocalAlbumImageStore(directory)
+
+    return session, created.id, store, directory
+
+
+def _unit_count(session: _MemorySourceSession, source_id: uuid.UUID) -> int:
+    """Return how many units the memory session has on this album."""
+
+    from app.models.content_source import ContentSource
+
+    found = session.get(ContentSource, source_id)
+    assert isinstance(found, ContentSource)
+
+    return len(list(found.units))
 
 

@@ -975,3 +975,28 @@ class UnitImageImportRequest(BaseModel):
     license: UnitImageLicense
     source: str
     license_note: str = ""
+
+
+class UnitImageCreateItem(BaseModel):
+    """One image on a new unit. A file uses ``file_index`` into the upload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["file", "url"]
+    file_index: int | None = None
+    url: str | None = None
+    alt_text: str | None = None
+    license: UnitImageLicense
+    source: str
+    license_note: str = ""
+
+
+class UnitWithImagesCreateRequest(BaseModel):
+    """Free text plus the images that make an image-only unit valid."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    free_text: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    fields: list[UnitFieldWrite] = Field(default_factory=list)
+    images: list[UnitImageCreateItem] = Field(default_factory=list)
