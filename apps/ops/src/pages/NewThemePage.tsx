@@ -161,7 +161,8 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
           <h1>{persistedThemeId === null ? "Create theme" : themeName.trim()}</h1>
           <p className="lede">
             Add a name. The theme is created when you pause, then frame and
-            element edits save on their own.
+            element edits save on their own. Defaults stay paper color, spacing
+            96 / 0 / 0, and no elements.
           </p>
           <ThemeAutosaveStatus
             state={autosave.state}

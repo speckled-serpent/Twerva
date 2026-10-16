@@ -28,6 +28,7 @@ UNIT_EXCLUSIONS_REVISION_ID: str = "unit_exclusions"
 UNIT_TEXT_DRAFTS_REVISION_ID: str = "unit_text_drafts"
 CAMPAIGN_THEME_SOURCE_REVISION_ID: str = "campaign_theme_source"
 THEME_ELEMENT_NAMES_REVISION_ID: str = "theme_element_names"
+THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID: str = "theme_element_text_optional"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -67,6 +68,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{SOURCES_RESOURCE_FILES_REVISION_ID}.py",
                 f"{SOURCES_THEME_BOUND_REVISION_ID}.py",
                 f"{THEME_ELEMENT_NAMES_REVISION_ID}.py",
+                f"{THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID}.py",
                 f"{THEME_ELEMENTS_REVISION_ID}.py",
                 f"{THEMES_BACKGROUND_REVISION_ID}.py",
                 f"{THEMES_CREATE_REVISION_ID}.py",
@@ -683,6 +685,38 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("ck_theme_elements_name", revision_source)
         self.assertIn("THEME_ELEMENT_NAME_CHECK_SQL", revision_source)
         self.assertIn('op.drop_column("theme_elements", "name")', revision_source)
+
+    def test_theme_element_text_source_may_be_omitted(self) -> None:
+        """Text rows may store a null text_source. Downgrade requires one."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            THEME_ELEMENT_NAMES_REVISION_ID,
+        )
+        self.assertIn("THEME_ELEMENT_CONTENT_CHECK_SQL", revision_source)
+        self.assertIn('CONTENT_CHECK_LOGICAL_NAME: str = "content"', revision_source)
+        self.assertIn("ck_theme_elements_content", revision_source)
+        self.assertIn("ck_theme_elements_ck_theme_elements_content", revision_source)
+        self.assertIn("DROP CONSTRAINT IF EXISTS", revision_source)
+        self.assertIn("text_source IS NOT NULL", revision_source)
+        self.assertIn(
+            'op.create_check_constraint(\n        CONTENT_CHECK_LOGICAL_NAME,',
+            revision_source,
+        )
+        self.assertNotIn("op.drop_constraint(", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

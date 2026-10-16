@@ -53,11 +53,6 @@ export interface ThemeElementEditorProps {
   autosaveActionsRef?: { current: ThemeAutosaveActions | null };
 }
 
-interface TextSourceOption {
-  value: ThemeElementTextSource;
-  label: string;
-}
-
 interface BandOption {
   value: ThemeElementBand;
   label: string;
@@ -70,7 +65,7 @@ interface ElementDraft {
   rectangleColor: string;
   rectangleOpacity: string;
   rectangleRadius: string;
-  textSource: ThemeElementTextSource;
+  textSource: ThemeElementTextSource | null;
   fontFamily: string;
   fontSize: string;
   fontColor: string;
@@ -82,13 +77,6 @@ interface ElementDraft {
   alignment: ThemeElementAlignment;
   imageAssetRef: string;
 }
-
-const TEXT_SOURCE_OPTIONS: TextSourceOption[] = [
-  { value: "title", label: "Title" },
-  { value: "interest_heading", label: "Interest heading" },
-  { value: "overview_bullets", label: "Overview bullets" },
-  { value: "canonical_url", label: "Public URL" },
-];
 
 const BAND_OPTIONS: BandOption[] = [
   { value: "top", label: "Top" },
@@ -117,12 +105,15 @@ export function ThemeElementEditor({
 
   const canWrite: boolean = useCanWriteOps();
   const [addDraft, setAddDraft] = useState<ElementDraft>(emptyElementDraft());
+  const [isAddOpen, setIsAddOpen] = useState<boolean>(false);
+  const [expandedElementIds, setExpandedElementIds] = useState<Record<string, boolean>>({});
   const [cardDrafts, setCardDrafts] = useState<Record<string, ElementDraft>>({});
   const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
   const [cardAutosaveStates, setCardAutosaveStates] = useState<
     Record<string, ThemeAutosaveState>
   >({});
   const [actionError, setActionError] = useState<unknown>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const previewCallbackRef = useRef(onPreviewElementsChange);
   const lastPreviewKeyRef = useRef<string | null>(null);
@@ -276,6 +267,7 @@ export function ThemeElementEditor({
 
     setBusyKey("add");
     setActionError(null);
+    setStatusMessage("");
 
     try {
       const draftToAdd: ElementDraft = await draftReadyToAdd(addDraft);
@@ -290,10 +282,14 @@ export function ThemeElementEditor({
 
         publishLocalElements([...theme.elements, createdElement]);
         setAddDraft(emptyElementDraft());
+        setIsAddOpen(false);
+        setStatusMessage("Element added. It is stored when you pause.");
       } else {
         await createThemeElement(theme.id, createRequest);
         await reloadTheme();
         setAddDraft(emptyElementDraft());
+        setIsAddOpen(false);
+        setStatusMessage("Element added.");
       }
     } catch (caughtError: unknown) {
       setActionError(caughtError);
@@ -429,81 +425,156 @@ export function ThemeElementEditor({
     }
   }, [theme.id, theme.elements, cardDrafts]);
 
+  useEffect((): (() => void) => {
+
+    if (!isAddOpen) {
+      return (): void => {
+        return;
+      };
+    }
+
+    const handleKeyDown = (keyEvent: KeyboardEvent): void => {
+
+      if (keyEvent.key !== "Escape") {
+        return;
+      }
+
+      setIsAddOpen(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return (): void => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAddOpen]);
+
+  const closeAddDialog = (): void => {
+
+    setIsAddOpen(false);
+  };
+
   return (
     <section className="summary-block">
       <h2>Elements</h2>
-      <p className="field-hint">
-        Full-width rows in Top, Middle, or Bottom. A blank rectangle color is clear.
-        Pick an image from an album. This form does not upload a file.
-      </p>
-      <ErrorBanner error={actionError} />
+      {isAddOpen ? null : <ErrorBanner error={actionError} />}
+      {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
+      <div className="button-row">
+        <button
+          type="button"
+          disabled={fieldsDisabled}
+          onClick={(): void => {
+            setActionError(null);
+            setIsAddOpen(true);
+          }}
+        >
+          Add element
+        </button>
+      </div>
 
-      <form
-        className="stack-form"
-        onSubmit={(formEvent: FormEvent): void => {
-          void handleAddElement(formEvent);
-        }}
-      >
-        <fieldset className="form-fieldset" disabled={fieldsDisabled}>
-          <legend>Add element</legend>
-          <ElementFields
-            draft={addDraft}
-            onDraftChange={setAddDraft}
-            idPrefix="add-element"
-            showDetails={false}
-          />
-        </fieldset>
-        <div className="button-row">
-          <button type="submit" disabled={fieldsDisabled}>
-            {busyKey === "add" ? "Adding…" : "Add element"}
-          </button>
+      {isAddOpen ? (
+        <div
+          className="confirm-backdrop"
+          onClick={closeAddDialog}
+        >
+          <div
+            className="confirm-dialog theme-add-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-element-heading"
+            onClick={(clickEvent): void => {
+              clickEvent.stopPropagation();
+            }}
+          >
+            <button
+              type="button"
+              className="dialog-close"
+              aria-label="Close"
+              onClick={closeAddDialog}
+            >
+              ×
+            </button>
+            <h2 id="add-element-heading">Add element</h2>
+            <form
+              className="stack-form"
+              onSubmit={(formEvent: FormEvent): void => {
+                void handleAddElement(formEvent);
+              }}
+            >
+              <ErrorBanner error={actionError} />
+              <fieldset className="form-fieldset" disabled={fieldsDisabled}>
+                <ElementFields
+                  draft={addDraft}
+                  onDraftChange={setAddDraft}
+                  idPrefix="add-element"
+                  showDetails={false}
+                  autoFocusName={true}
+                />
+              </fieldset>
+              <div className="button-row">
+                <button type="submit" disabled={fieldsDisabled}>
+                  {busyKey === "add" ? "Adding…" : "Add"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
-      </form>
+      ) : null}
 
-      {BAND_OPTIONS.map((bandOption: BandOption): ReactElement => {
+      {BAND_OPTIONS.map((bandOption: BandOption): ReactElement | null => {
         const bandElements: ThemeElementReadResponse[] = elementsInBand(
           theme.elements,
           bandOption.value,
         );
 
-        return (
-          <div key={bandOption.value}>
-            <h3>{bandOption.label}</h3>
-            {bandElements.length === 0 ? (
-              <p className="empty-hint">No elements in this band.</p>
-            ) : (
-              bandElements.map(
-                (element: ThemeElementReadResponse, elementIndex: number): ReactElement => (
-                  <ThemeElementCard
-                    key={element.id}
-                    themeId={theme.id}
-                    element={element}
-                    elementIndex={elementIndex}
-                    bandLength={bandElements.length}
-                    fieldsDisabled={fieldsDisabled}
-                    onError={setActionError}
-                    onReload={async (): Promise<void> => {
+        if (bandElements.length === 0) {
+          return null;
+        }
 
-                      if (!isLocal) {
-                        await reloadTheme();
-                      }
-                    }}
-                    onBusy={(isBusy: boolean): void => {
-                      setBusyKey(isBusy ? element.id : null);
-                    }}
-                    onLocalSave={isLocal ? handleLocalSave : undefined}
-                    onLocalDelete={isLocal ? handleLocalDelete : undefined}
-                    onLocalMove={isLocal ? handleLocalMove : undefined}
-                    onDraftChange={handleCardDraftChange}
-                    onDraftError={handleDraftError}
-                    onAutosaveState={handleCardAutosaveState}
-                    onBindAutosave={handleBindAutosave}
-                    onElementPatched={(patchedElement: ThemeElementReadResponse): void => {
-                      onElementPatchedRef.current?.(patchedElement);
-                    }}
-                  />
-                ),
-              )
+        return (
+          <div className="theme-band" key={bandOption.value}>
+            <h3>{bandOption.label}</h3>
+            {bandElements.map(
+              (element: ThemeElementReadResponse, elementIndex: number): ReactElement => (
+                <ThemeElementCard
+                  key={element.id}
+                  themeId={theme.id}
+                  element={element}
+                  elementIndex={elementIndex}
+                  bandLength={bandElements.length}
+                  fieldsDisabled={fieldsDisabled}
+                  isExpanded={expandedElementIds[element.id] === true}
+                  onExpandedChange={(nextExpanded: boolean): void => {
+                    setExpandedElementIds(
+                      (currentIds: Record<string, boolean>): Record<string, boolean> => {
+
+                        return { ...currentIds, [element.id]: nextExpanded };
+                      },
+                    );
+                  }}
+                  onError={setActionError}
+                  onReload={async (message: string): Promise<void> => {
+                    setStatusMessage(message);
+
+                    if (!isLocal) {
+                      await reloadTheme();
+                    }
+                  }}
+                  onBusy={(isBusy: boolean): void => {
+                    setBusyKey(isBusy ? element.id : null);
+                  }}
+                  onLocalSave={isLocal ? handleLocalSave : undefined}
+                  onLocalDelete={isLocal ? handleLocalDelete : undefined}
+                  onLocalMove={isLocal ? handleLocalMove : undefined}
+                  onDraftChange={handleCardDraftChange}
+                  onDraftError={handleDraftError}
+                  onAutosaveState={handleCardAutosaveState}
+                  onBindAutosave={handleBindAutosave}
+                  onElementPatched={(patchedElement: ThemeElementReadResponse): void => {
+                    onElementPatchedRef.current?.(patchedElement);
+                  }}
+                />
+              ),
             )}
           </div>
         );
@@ -518,8 +589,10 @@ interface ThemeElementCardProps {
   elementIndex: number;
   bandLength: number;
   fieldsDisabled: boolean;
+  isExpanded: boolean;
+  onExpandedChange: (nextExpanded: boolean) => void;
   onError: (error: unknown) => void;
-  onReload: () => Promise<void>;
+  onReload: (message: string) => Promise<void>;
   onBusy: (isBusy: boolean) => void;
   onLocalSave?: (elementId: string, draft: ElementDraft) => void;
   onLocalDelete?: (elementId: string) => void;
@@ -537,6 +610,8 @@ function ThemeElementCard({
   elementIndex,
   bandLength,
   fieldsDisabled,
+  isExpanded,
+  onExpandedChange,
   onError,
   onReload,
   onBusy,
@@ -591,7 +666,7 @@ function ThemeElementCard({
       );
 
       if (nextDraft.band !== elementRef.current.band) {
-        await onReloadRef.current();
+        await onReloadRef.current("Element moved.");
 
         return;
       }
@@ -691,12 +766,13 @@ function ThemeElementCard({
 
       if (onLocalDelete !== undefined) {
         onLocalDelete(element.id);
+        await onReload("Element removed. It is stored when you pause.");
 
         return;
       }
 
       await deleteThemeElement(themeId, element.id);
-      await onReload();
+      await onReload("Element deleted.");
     } catch (caughtError: unknown) {
       onError(caughtError);
     } finally {
@@ -718,12 +794,13 @@ function ThemeElementCard({
 
       if (onLocalMove !== undefined) {
         onLocalMove(element.id, nextSortOrder);
+        await onReload("Element moved. It is stored when you pause.");
 
         return;
       }
 
       await patchThemeElement(themeId, element.id, { sort_order: nextSortOrder });
-      await onReload();
+      await onReload("Element moved.");
     } catch (caughtError: unknown) {
       onError(caughtError);
     } finally {
@@ -731,65 +808,77 @@ function ThemeElementCard({
     }
   };
 
+  const elementTitle: string = draft.name.trim() === "" ? "Untitled element" : draft.name;
+
   return (
-    <form
-      className="card stack-form"
-      onSubmit={(formEvent: FormEvent): void => {
-        formEvent.preventDefault();
-        void autosave.flush();
-      }}
-    >
-      <fieldset className="form-fieldset" disabled={fieldsDisabled}>
-        <legend>
-          {bandLabel(element.band)} {elementIndex + 1} of {bandLength}
-          {" · "}
-          {element.content_kind === "text" ? "Text" : "Image"}
-        </legend>
-        <ElementFields
-          draft={draft}
-          onDraftChange={setDraft}
-          idPrefix={`element-${element.id}`}
-          showDetails={true}
-        />
-      </fieldset>
-      {draftError !== null ? <p className="field-error">{draftError}</p> : null}
-      <div className="button-row">
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Move up"
-          title="Move up"
-          disabled={!canMoveEarlier || fieldsDisabled}
-          onClick={(): void => {
-            void handleMove(element.sort_order - 1);
+    <article className="card theme-element-card">
+      <button
+        type="button"
+        className="theme-element-summary"
+        aria-expanded={isExpanded}
+        onClick={(): void => {
+          onExpandedChange(!isExpanded);
+        }}
+      >
+        <ChevronIcon expanded={isExpanded} />
+        <span>{elementTitle}</span>
+      </button>
+      {isExpanded ? (
+        <form
+          className="stack-form"
+          onSubmit={(formEvent: FormEvent): void => {
+            formEvent.preventDefault();
+            void autosave.flush();
           }}
         >
-          <MoveUpIcon />
-        </button>
-        <button
-          type="button"
-          className="icon-button"
-          aria-label="Move down"
-          title="Move down"
-          disabled={!canMoveLater || fieldsDisabled}
-          onClick={(): void => {
-            void handleMove(element.sort_order + 1);
-          }}
-        >
-          <MoveDownIcon />
-        </button>
-        <button
-          type="button"
-          className="danger"
-          disabled={fieldsDisabled}
-          onClick={(): void => {
-            void handleDelete();
-          }}
-        >
-          Delete element
-        </button>
-      </div>
-    </form>
+          <fieldset className="form-fieldset" disabled={fieldsDisabled}>
+            <ElementFields
+              draft={draft}
+              onDraftChange={setDraft}
+              idPrefix={`element-${element.id}`}
+              showDetails={true}
+            />
+          </fieldset>
+          {draftError !== null ? <p className="field-error">{draftError}</p> : null}
+          <div className="button-row">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Move up"
+              title="Move up"
+              disabled={!canMoveEarlier || fieldsDisabled}
+              onClick={(): void => {
+                void handleMove(element.sort_order - 1);
+              }}
+            >
+              <MoveUpIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Move down"
+              title="Move down"
+              disabled={!canMoveLater || fieldsDisabled}
+              onClick={(): void => {
+                void handleMove(element.sort_order + 1);
+              }}
+            >
+              <MoveDownIcon />
+            </button>
+            <button
+              type="button"
+              className="danger"
+              disabled={fieldsDisabled}
+              onClick={(): void => {
+                void handleDelete();
+              }}
+            >
+              Delete element
+            </button>
+          </div>
+        </form>
+      ) : null}
+    </article>
   );
 }
 
@@ -822,6 +911,7 @@ interface ElementFieldsProps {
   onDraftChange: (nextDraft: ElementDraft) => void;
   idPrefix: string;
   showDetails: boolean;
+  autoFocusName?: boolean;
 }
 
 function ElementFields({
@@ -829,6 +919,7 @@ function ElementFields({
   onDraftChange,
   idPrefix,
   showDetails,
+  autoFocusName = false,
 }: ElementFieldsProps): ReactElement {
 
   return (
@@ -839,51 +930,56 @@ function ElementFields({
           id={`${idPrefix}-name`}
           value={draft.name}
           spellCheck={false}
+          autoFocus={autoFocusName}
           onChange={(changeEvent): void => {
             onDraftChange({ ...draft, name: changeEvent.target.value });
           }}
         />
       </label>
       <p className="field-hint">This name labels the field when you edit a unit.</p>
-      <label>
-        Band
-        <select
-          value={draft.band}
-          onChange={(changeEvent): void => {
-            const nextBand: string = changeEvent.target.value;
+      <div className="paired-fields">
+        <label>
+          Band
+          <select
+            aria-label="Band"
+            value={draft.band}
+            onChange={(changeEvent): void => {
+              const nextBand: string = changeEvent.target.value;
 
-            if (!isThemeElementBand(nextBand)) {
-              return;
-            }
+              if (!isThemeElementBand(nextBand)) {
+                return;
+              }
 
-            onDraftChange({ ...draft, band: nextBand });
-          }}
-        >
-          {BAND_OPTIONS.map((bandOption: BandOption): ReactElement => (
-            <option key={bandOption.value} value={bandOption.value}>
-              {bandOption.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Content
-        <select
-          value={draft.contentKind}
-          onChange={(changeEvent): void => {
-            const nextKind: string = changeEvent.target.value;
+              onDraftChange({ ...draft, band: nextBand });
+            }}
+          >
+            {BAND_OPTIONS.map((bandOption: BandOption): ReactElement => (
+              <option key={bandOption.value} value={bandOption.value}>
+                {bandOption.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Content
+          <select
+            aria-label="Content"
+            value={draft.contentKind}
+            onChange={(changeEvent): void => {
+              const nextKind: string = changeEvent.target.value;
 
-            if (!isContentKind(nextKind)) {
-              return;
-            }
+              if (!isContentKind(nextKind)) {
+                return;
+              }
 
-            onDraftChange({ ...draft, contentKind: nextKind });
-          }}
-        >
-          <option value="text">Text</option>
-          <option value="image">Image</option>
-        </select>
-      </label>
+              onDraftChange({ ...draft, contentKind: nextKind });
+            }}
+          >
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+          </select>
+        </label>
+      </div>
       {showDetails ? (
         <ElementDetailFields
           draft={draft}
@@ -903,24 +999,6 @@ function ElementDetailFields({
 
   return (
     <>
-      <label>
-        Rectangle color
-        <input
-          value={draft.rectangleColor}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, rectangleColor: changeEvent.target.value });
-          }}
-          onBlur={(blurEvent): void => {
-            onDraftChange({
-              ...draft,
-              rectangleColor: normalizeHexColor(blurEvent.currentTarget.value),
-            });
-          }}
-          placeholder="#AABBCC"
-          spellCheck={false}
-        />
-      </label>
-      <p className="field-hint">Blank means a clear rectangle.</p>
       <RectangleStyleFields draft={draft} onDraftChange={onDraftChange} />
       {draft.contentKind === "text" ? (
         <TextElementFields
@@ -955,143 +1033,197 @@ function TextElementFields({
   idPrefix,
 }: TextElementFieldsProps): ReactElement {
 
-  const sourceSelectId: string = `${idPrefix}-text-source`;
+  return (
+    <div className="theme-subsection">
+      <p className="section-label">Text</p>
+      <div className="text-toolbar">
+        <ThemeFontFamilyField
+          fontFamily={draft.fontFamily}
+          idPrefix={idPrefix}
+          compact={true}
+          onFontFamilyChange={(nextFontFamily: string): void => {
+            onDraftChange({ ...draft, fontFamily: nextFontFamily });
+          }}
+        />
+        <label className="toolbar-field">
+          <span className="toolbar-caption">Size</span>
+          <input
+            className="toolbar-input"
+            type="number"
+            min={1}
+            step={1}
+            value={draft.fontSize}
+            aria-label="Font size"
+            title="Font size"
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...draft, fontSize: changeEvent.target.value });
+            }}
+          />
+        </label>
+        <label className="toolbar-field">
+          <span className="toolbar-caption">Color</span>
+          <input
+            className="toolbar-input"
+            value={draft.fontColor}
+            aria-label="Font color"
+            title="Font color"
+            placeholder="#112233"
+            spellCheck={false}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...draft, fontColor: changeEvent.target.value });
+            }}
+            onBlur={(blurEvent): void => {
+              onDraftChange({
+                ...draft,
+                fontColor: normalizeHexColor(blurEvent.currentTarget.value),
+              });
+            }}
+          />
+        </label>
+        <label className="toolbar-field">
+          <span className="toolbar-caption">Weight</span>
+          <input
+            className="toolbar-input"
+            type="number"
+            min={1}
+            max={1000}
+            step={1}
+            value={draft.fontWeight}
+            aria-label="Font weight"
+            title="Font weight, 1 through 1000. Blank stores none."
+            placeholder="—"
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...draft, fontWeight: changeEvent.target.value });
+            }}
+          />
+        </label>
+      </div>
+      <div className="text-toolbar" role="toolbar" aria-label="Text style">
+        <AlignButton
+          alignment="left"
+          label="Align left"
+          pressed={draft.alignment === "left"}
+          onSelect={(): void => {
+            onDraftChange({ ...draft, alignment: "left" });
+          }}
+        />
+        <AlignButton
+          alignment="center"
+          label="Align center"
+          pressed={draft.alignment === "center"}
+          onSelect={(): void => {
+            onDraftChange({ ...draft, alignment: "center" });
+          }}
+        />
+        <AlignButton
+          alignment="right"
+          label="Align right"
+          pressed={draft.alignment === "right"}
+          onSelect={(): void => {
+            onDraftChange({ ...draft, alignment: "right" });
+          }}
+        />
+        <StyleToggle
+          label="Bold"
+          pressed={draft.bold}
+          markClassName="is-bold"
+          mark="B"
+          onToggle={(): void => {
+            onDraftChange({ ...draft, bold: !draft.bold });
+          }}
+        />
+        <StyleToggle
+          label="Italic"
+          pressed={draft.italic}
+          markClassName="is-italic"
+          mark="I"
+          onToggle={(): void => {
+            onDraftChange({ ...draft, italic: !draft.italic });
+          }}
+        />
+        <StyleToggle
+          label="Underline"
+          pressed={draft.underline}
+          markClassName="is-underline"
+          mark="U"
+          onToggle={(): void => {
+            onDraftChange({ ...draft, underline: !draft.underline });
+          }}
+        />
+        <StyleToggle
+          label="Strikethrough"
+          pressed={draft.strikethrough}
+          markClassName="is-strike"
+          mark="S"
+          onToggle={(): void => {
+            onDraftChange({ ...draft, strikethrough: !draft.strikethrough });
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface AlignButtonProps {
+  alignment: ThemeElementAlignment;
+  label: string;
+  pressed: boolean;
+  onSelect: () => void;
+}
+
+function AlignButton({
+  alignment,
+  label,
+  pressed,
+  onSelect,
+}: AlignButtonProps): ReactElement {
+
+  const pressedClass: string = pressed ? "toolbar-toggle is-pressed" : "toolbar-toggle";
 
   return (
-    <>
-      <label htmlFor={sourceSelectId}>
-        Text source
-      </label>
-      <select
-        id={sourceSelectId}
-        value={draft.textSource}
-        onChange={(changeEvent): void => {
-          const nextSource: string = changeEvent.target.value;
+    <button
+      type="button"
+      className={pressedClass}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+      onClick={onSelect}
+    >
+      <AlignIcon alignment={alignment} />
+    </button>
+  );
+}
 
-          if (!isTextSource(nextSource)) {
-            return;
-          }
+interface StyleToggleProps {
+  label: string;
+  pressed: boolean;
+  markClassName: string;
+  mark: string;
+  onToggle: () => void;
+}
 
-          onDraftChange({ ...draft, textSource: nextSource });
-        }}
-      >
-        {TEXT_SOURCE_OPTIONS.map((sourceOption: TextSourceOption): ReactElement => (
-          <option key={sourceOption.value} value={sourceOption.value}>
-            {sourceOption.label}
-          </option>
-        ))}
-      </select>
-      <ThemeFontFamilyField
-        fontFamily={draft.fontFamily}
-        idPrefix={idPrefix}
-        onFontFamilyChange={(nextFontFamily: string): void => {
-          onDraftChange({ ...draft, fontFamily: nextFontFamily });
-        }}
-      />
-      <label>
-        Font size
-        <input
-          type="number"
-          min={1}
-          step={1}
-          value={draft.fontSize}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, fontSize: changeEvent.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Font color
-        <input
-          value={draft.fontColor}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, fontColor: changeEvent.target.value });
-          }}
-          onBlur={(blurEvent): void => {
-            onDraftChange({
-              ...draft,
-              fontColor: normalizeHexColor(blurEvent.currentTarget.value),
-            });
-          }}
-          placeholder="#112233"
-          spellCheck={false}
-        />
-      </label>
-      <label>
-        Alignment
-        <select
-          value={draft.alignment}
-          onChange={(changeEvent): void => {
-            const nextAlignment: string = changeEvent.target.value;
+function StyleToggle({
+  label,
+  pressed,
+  markClassName,
+  mark,
+  onToggle,
+}: StyleToggleProps): ReactElement {
 
-            if (!isAlignment(nextAlignment)) {
-              return;
-            }
+  const pressedClass: string = pressed ? "toolbar-toggle is-pressed" : "toolbar-toggle";
+  const markClass: string = `toolbar-mark ${markClassName}`;
 
-            onDraftChange({ ...draft, alignment: nextAlignment });
-          }}
-        >
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-        </select>
-      </label>
-      <label>
-        Font weight
-        <input
-          type="number"
-          min={1}
-          max={1000}
-          step={1}
-          value={draft.fontWeight}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, fontWeight: changeEvent.target.value });
-          }}
-          placeholder="Optional"
-        />
-      </label>
-      <p className="field-hint">Optional. Blank stores no weight. 1 through 1000.</p>
-      <label>
-        <input
-          type="checkbox"
-          checked={draft.bold}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, bold: changeEvent.target.checked });
-          }}
-        />
-        Bold
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={draft.italic}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, italic: changeEvent.target.checked });
-          }}
-        />
-        Italic
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={draft.underline}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, underline: changeEvent.target.checked });
-          }}
-        />
-        Underline
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={draft.strikethrough}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, strikethrough: changeEvent.target.checked });
-          }}
-        />
-        Strikethrough
-      </label>
-    </>
+  return (
+    <button
+      type="button"
+      className={pressedClass}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+      onClick={onToggle}
+    >
+      <span className={markClass}>{mark}</span>
+    </button>
   );
 }
 
@@ -1121,7 +1253,7 @@ function emptyElementDraft(): ElementDraft {
     rectangleColor: "",
     rectangleOpacity: "100",
     rectangleRadius: "0",
-    textSource: "title",
+    textSource: null,
     fontFamily: DEFAULT_FONT_FAMILY,
     fontSize: "64",
     fontColor: "#112233",
@@ -1146,7 +1278,7 @@ function draftFromElement(element: ThemeElementReadResponse): ElementDraft {
     rectangleColor: element.rectangle_color ?? "",
     rectangleOpacity: String(element.rectangle_opacity),
     rectangleRadius: String(element.rectangle_radius),
-    textSource: element.text_source ?? "title",
+    textSource: element.text_source,
     fontFamily: element.font_family ?? "",
     fontSize: element.font_size === null ? "" : String(element.font_size),
     fontColor: element.font_color ?? "",
@@ -1362,7 +1494,6 @@ function elementRequestFromDraft(
 }
 
 const RECTANGLE_OPACITY_MAX: number = 100;
-const RECTANGLE_RADIUS_SLIDER_MAX: number = 540;
 const RECTANGLE_RADIUS_MAX: number = 10000;
 
 function RectangleStyleFields({
@@ -1373,80 +1504,64 @@ function RectangleStyleFields({
   onDraftChange: (nextDraft: ElementDraft) => void;
 }): ReactElement {
 
-  const opacityNumber: number = Number(draft.rectangleOpacity);
-  const radiusNumber: number = Number(draft.rectangleRadius);
-  const sliderOpacity: number = Number.isFinite(opacityNumber)
-    ? Math.min(RECTANGLE_OPACITY_MAX, Math.max(0, opacityNumber))
-    : RECTANGLE_OPACITY_MAX;
-  const sliderRadius: number = Number.isFinite(radiusNumber)
-    ? Math.min(RECTANGLE_RADIUS_SLIDER_MAX, Math.max(0, radiusNumber))
-    : 0;
-
   return (
-    <>
-      <div className="slider-field">
-        <label className="slider-number-label">
-          Rectangle opacity
+    <div className="theme-subsection">
+      <p className="section-label">Rectangle</p>
+      <div className="compact-field-row">
+        <label>
+          Color
           <input
-            className="slider-number"
+            className="compact-input"
+            value={draft.rectangleColor}
+            aria-label="Rectangle color"
+            title="Blank means a clear rectangle."
+            placeholder="#AABBCC"
+            spellCheck={false}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...draft, rectangleColor: changeEvent.target.value });
+            }}
+            onBlur={(blurEvent): void => {
+              onDraftChange({
+                ...draft,
+                rectangleColor: normalizeHexColor(blurEvent.currentTarget.value),
+              });
+            }}
+          />
+        </label>
+        <label>
+          Opacity
+          <input
+            className="compact-input"
             type="number"
             min={0}
             max={RECTANGLE_OPACITY_MAX}
             step={1}
             value={draft.rectangleOpacity}
-            aria-label="Rectangle opacity percent"
+            aria-label="Rectangle opacity"
+            title="0 is clear. 100 is solid."
             onChange={(changeEvent): void => {
               onDraftChange({ ...draft, rectangleOpacity: changeEvent.target.value });
             }}
           />
         </label>
-        <input
-          className="slider-range"
-          type="range"
-          min={0}
-          max={RECTANGLE_OPACITY_MAX}
-          step={1}
-          value={sliderOpacity}
-          aria-label="Rectangle opacity"
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, rectangleOpacity: changeEvent.target.value });
-          }}
-        />
-      </div>
-      <p className="field-hint">0% is clear. 100% is solid. A blank color still draws nothing.</p>
-      <div className="slider-field">
-        <label className="slider-number-label">
-          Corner radius
+        <label>
+          Radius
           <input
-            className="slider-number"
+            className="compact-input"
             type="number"
             min={0}
             max={RECTANGLE_RADIUS_MAX}
             step={1}
             value={draft.rectangleRadius}
-            aria-label="Rectangle corner radius pixels"
+            aria-label="Rectangle radius"
+            title="Corner radius in pixels."
             onChange={(changeEvent): void => {
               onDraftChange({ ...draft, rectangleRadius: changeEvent.target.value });
             }}
           />
         </label>
-        <input
-          className="slider-range"
-          type="range"
-          min={0}
-          max={RECTANGLE_RADIUS_SLIDER_MAX}
-          step={1}
-          value={sliderRadius}
-          aria-label="Rectangle corner radius"
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...draft, rectangleRadius: changeEvent.target.value });
-          }}
-        />
       </div>
-      <p className="field-hint">
-        Pixels. The preview clamps this to half the shorter side of the box.
-      </p>
-    </>
+    </div>
   );
 }
 
@@ -1555,19 +1670,6 @@ function elementsInBand(
   return orderedMembers;
 }
 
-function bandLabel(band: ThemeElementBand): string {
-
-  const matchingOption: BandOption | undefined = BAND_OPTIONS.find(
-    (bandOption: BandOption): boolean => bandOption.value === band,
-  );
-
-  if (matchingOption === undefined) {
-    return band;
-  }
-
-  return matchingOption.label;
-}
-
 function isThemeElementBand(value: string): value is ThemeElementBand {
 
   return value === "top" || value === "middle" || value === "bottom";
@@ -1576,18 +1678,6 @@ function isThemeElementBand(value: string): value is ThemeElementBand {
 function isContentKind(value: string): value is ThemeElementContentKind {
 
   return value === "text" || value === "image";
-}
-
-function isTextSource(value: string): value is ThemeElementTextSource {
-
-  return TEXT_SOURCE_OPTIONS.some(
-    (sourceOption: TextSourceOption): boolean => sourceOption.value === value,
-  );
-}
-
-function isAlignment(value: string): value is ThemeElementAlignment {
-
-  return value === "left" || value === "center" || value === "right";
 }
 
 function localElementFromRequest(
@@ -1812,4 +1902,54 @@ function emptyToNull(value: string | null | undefined): string | null {
   }
 
   return value;
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }): ReactElement {
+
+  const chevronClass: string = expanded ? "chevron is-open" : "chevron";
+
+  return (
+    <svg
+      className={chevronClass}
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 3.5 L11 8 L6 12.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function AlignIcon({ alignment }: { alignment: ThemeElementAlignment }): ReactElement {
+
+  const middleLine: string = alignment === "left"
+    ? "M3 10h8"
+    : alignment === "center"
+      ? "M5 10h10"
+      : "M8 10h9";
+  const bottomLine: string = alignment === "left"
+    ? "M3 14h11"
+    : alignment === "center"
+      ? "M4 14h12"
+      : "M6 14h11";
+
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+      <path
+        d={`M3 6h14 ${middleLine} ${bottomLine}`}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }

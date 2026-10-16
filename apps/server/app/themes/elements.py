@@ -14,7 +14,6 @@ from app.models.theme_element import ThemeElement
 from app.themes.background import ThemeBackgroundError, normalize_background_asset_ref
 
 
-THEME_ELEMENT_TEXT_SOURCE_REQUIRED_DETAIL: str = "A text element requires a text source."
 THEME_ELEMENT_TEXT_SOURCE_FORBIDDEN_DETAIL: str = (
     "An image element cannot set text_source."
 )
@@ -121,7 +120,7 @@ def resolve_theme_element(
     Args:
         content_kind: ``text`` or ``image``.
         rectangle_color: Rectangle fill, or null when the rectangle is clear.
-        text_source: Spotmu field for a text element.
+        text_source: Optional Spotmu field. Null is allowed on text.
         font_family: Type family for a text element.
         font_size: Positive size for a text element.
         font_color: Color text for a text element.
@@ -160,7 +159,6 @@ def resolve_theme_element(
 
     if content_kind == ThemeElementContentKind.TEXT:
         _require_text_payload(
-            text_source,
             stored_font_family,
             stored_font_size,
             stored_font_color,
@@ -293,16 +291,12 @@ def assign_temporary_sort_orders(members: list[ThemeElement]) -> None:
 
 
 def _require_text_payload(
-    text_source: ThemeElementTextSource | None,
     font_family: str | None,
     font_size: int | None,
     font_color: str | None,
     alignment: ThemeElementAlignment | None,
 ) -> None:
-    """Reject a text element that is missing a required field."""
-
-    if text_source is None:
-        raise ThemeElementError(THEME_ELEMENT_TEXT_SOURCE_REQUIRED_DETAIL)
+    """Reject a text element that is missing family, size, color, or alignment."""
 
     if font_family is None:
         raise ThemeElementError(THEME_ELEMENT_FONT_FAMILY_DETAIL)

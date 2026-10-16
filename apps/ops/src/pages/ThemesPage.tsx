@@ -31,7 +31,6 @@ import {
   advertisementTypeLabel,
   formatThemeTemplateKey,
   formatThemeTimestamp,
-  themeStatusLabel,
 } from "./themeDisplay";
 import { ThemeAutosaveStatus } from "./ThemeAutosaveStatus";
 import {
@@ -267,7 +266,6 @@ function ThemeListView({
           <thead>
             <tr>
               <th>Name</th>
-              <th>Status</th>
               <th>Advertisement type</th>
               <th>Created</th>
               <th>View</th>
@@ -284,7 +282,6 @@ function ThemeListView({
                 }}
               >
                 <td>{theme.name}</td>
-                <td>{themeStatusLabel(theme.status)}</td>
                 <td>{advertisementTypeLabel(theme.advertisement_type)}</td>
                 <td className="mono">{formatThemeTimestamp(theme.created_at)}</td>
                 <td>
@@ -549,7 +546,7 @@ function ThemeDetailView({
         <div>
           <h1>{selectedTheme === null ? "Theme" : selectedTheme.name}</h1>
           <p className="lede">
-            Draft or Live, background, spacing, and full-width elements.
+            Background, spacing, and full-width elements.
             Edits save on their own.
           </p>
           <ThemeAutosaveStatus state={autosaveState} onRetry={retryAutosave} />

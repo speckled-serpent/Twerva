@@ -433,7 +433,6 @@ function themeCreateRequestFromSnapshot(
   const themeCreateRequest: ThemeCreateRequest = {
     name: snapshot.name.trim(),
     advertisement_type: "carousel",
-    status: framePatch.status ?? undefined,
     page_margin: framePatch.page_margin ?? undefined,
     element_gap: framePatch.element_gap ?? undefined,
     element_margin: framePatch.element_margin ?? undefined,

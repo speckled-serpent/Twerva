@@ -307,15 +307,15 @@ def _draft_or_http(
 
 
 def _text_prompts(theme: Theme) -> list[TextElementPrompt]:
-    """Label each text element for the provider."""
+    """Label each text element by its name for the provider."""
 
     prompts: list[TextElementPrompt] = []
 
     for element in theme_text_elements(theme):
-        label: str = "text"
+        label: str = element.name.strip()
 
-        if element.text_source is not None:
-            label = element.text_source.value
+        if label == "":
+            label = "text"
 
         prompt: TextElementPrompt = TextElementPrompt(
             theme_element_id=element.id,

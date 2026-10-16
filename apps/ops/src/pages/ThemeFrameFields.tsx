@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 
-import type { BackgroundKind, ThemeStatus } from "../api/types";
+import type { BackgroundKind } from "../api/types";
 import { ThemeAssetAlbumField } from "./ThemeAssetAlbumField";
 import {
   gradientDefaultsIfEmpty,
@@ -32,10 +32,10 @@ const BACKGROUND_KIND_OPTIONS: { value: BackgroundKind; label: string }[] = [
 ];
 
 /**
- * Frame controls shared by Create Theme and the open theme.
+ * Background and margin controls shared by Create Theme and the open theme.
  *
  * @param props - Current draft, change handler, and disabled flag
- * @returns The frame fieldset
+ * @returns The background fieldset and the margins fieldset
  */
 export function ThemeFrameFields({
   frameDraft,
@@ -44,29 +44,13 @@ export function ThemeFrameFields({
 }: ThemeFrameFieldsProps): ReactElement {
 
   return (
+    <>
     <fieldset className="form-fieldset" disabled={disabled}>
-      <legend>Frame</legend>
+      <legend>Background</legend>
       <label>
-        Status
+        Type
         <select
-          value={frameDraft.status}
-          onChange={(changeEvent): void => {
-            const nextStatus: string = changeEvent.target.value;
-
-            if (!isThemeStatus(nextStatus)) {
-              return;
-            }
-
-            onDraftChange({ ...frameDraft, status: nextStatus });
-          }}
-        >
-          <option value="draft">Draft</option>
-          <option value="live">Live</option>
-        </select>
-      </label>
-      <label>
-        Background
-        <select
+          aria-label="Background type"
           value={frameDraft.backgroundKind}
           onChange={(changeEvent): void => {
             const nextKind: string = changeEvent.target.value;
@@ -131,43 +115,55 @@ export function ThemeFrameFields({
           }}
         />
       ) : null}
-      <label>
-        Page margin
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={frameDraft.pageMargin}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...frameDraft, pageMargin: changeEvent.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Element gap
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={frameDraft.elementGap}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...frameDraft, elementGap: changeEvent.target.value });
-          }}
-        />
-      </label>
-      <label>
-        Element margin
-        <input
-          type="number"
-          min={0}
-          step={1}
-          value={frameDraft.elementMargin}
-          onChange={(changeEvent): void => {
-            onDraftChange({ ...frameDraft, elementMargin: changeEvent.target.value });
-          }}
-        />
-      </label>
     </fieldset>
+    <fieldset className="form-fieldset" disabled={disabled}>
+      <legend>Margins</legend>
+      <div className="margin-row">
+        <label>
+          Page margin
+          <input
+            className="margin-input"
+            type="number"
+            min={0}
+            step={1}
+            aria-label="Page margin"
+            value={frameDraft.pageMargin}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...frameDraft, pageMargin: changeEvent.target.value });
+            }}
+          />
+        </label>
+        <label>
+          Element gap
+          <input
+            className="margin-input"
+            type="number"
+            min={0}
+            step={1}
+            aria-label="Element gap"
+            value={frameDraft.elementGap}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...frameDraft, elementGap: changeEvent.target.value });
+            }}
+          />
+        </label>
+        <label>
+          Element margin
+          <input
+            className="margin-input"
+            type="number"
+            min={0}
+            step={1}
+            aria-label="Element margin"
+            value={frameDraft.elementMargin}
+            onChange={(changeEvent): void => {
+              onDraftChange({ ...frameDraft, elementMargin: changeEvent.target.value });
+            }}
+          />
+        </label>
+      </div>
+    </fieldset>
+    </>
   );
 }
 
@@ -411,11 +407,6 @@ function replaceStop(
   );
 
   return nextStops;
-}
-
-function isThemeStatus(value: string): value is ThemeStatus {
-
-  return value === "draft" || value === "live";
 }
 
 function isBackgroundKind(value: string): value is BackgroundKind {

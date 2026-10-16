@@ -1,9 +1,8 @@
 import type {
+  BackgroundKind,
   ThemeGradient,
   ThemePatchRequest,
   ThemeReadResponse,
-  ThemeStatus,
-  BackgroundKind,
 } from "../api/types.ts";
 import { gradientProblem, normalizeHexColor } from "./themeColors.ts";
 
@@ -13,7 +12,6 @@ export interface ThemeGradientStopDraft {
 }
 
 export interface ThemeFrameDraft {
-  status: ThemeStatus;
   backgroundKind: BackgroundKind;
   backgroundColor: string;
   gradientAngle: string;
@@ -25,14 +23,13 @@ export interface ThemeFrameDraft {
 }
 
 /**
- * Return the name-only defaults: Draft, paper color, spacing 96 / 0 / 0.
+ * Return the name-only defaults: paper color, spacing 96 / 0 / 0.
  *
  * @returns A frame draft that matches a name-only create
  */
 export function emptyThemeFrameDraft(): ThemeFrameDraft {
 
   const frameDraft: ThemeFrameDraft = {
-    status: "draft",
     backgroundKind: "color",
     backgroundColor: "#F6F1E8",
     gradientAngle: "",
@@ -79,7 +76,6 @@ export function frameDraftFromTheme(theme: ThemeReadResponse): ThemeFrameDraft {
     },
   );
   const frameDraft: ThemeFrameDraft = {
-    status: theme.status,
     backgroundKind: theme.background_kind,
     backgroundColor: theme.background_color ?? "",
     gradientAngle: storedGradient === null ? "" : String(storedGradient.angle_deg),
@@ -97,7 +93,7 @@ export function frameDraftFromTheme(theme: ThemeReadResponse): ThemeFrameDraft {
  * Build the frame payload for create or patch.
  *
  * @param frameDraft - Current frame fields
- * @returns Status, spacing, and the payload for the selected kind
+ * @returns Spacing and the payload for the selected kind
  */
 export function themePatchFromFrameDraft(frameDraft: ThemeFrameDraft): ThemePatchRequest {
 
@@ -112,7 +108,6 @@ export function themePatchFromFrameDraft(frameDraft: ThemeFrameDraft): ThemePatc
   }
 
   const themePatchRequest: ThemePatchRequest = {
-    status: frameDraft.status,
     background_kind: frameDraft.backgroundKind,
     page_margin: pageMargin,
     element_gap: elementGap,
