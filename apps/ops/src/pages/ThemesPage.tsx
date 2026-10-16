@@ -8,7 +8,6 @@ import {
   patchTheme,
 } from "../api/client";
 import type {
-  ThemeElementCreateRequest,
   ThemeElementReadResponse,
   ThemeReadResponse,
 } from "../api/types";
@@ -18,6 +17,7 @@ import { useCanWriteOps } from "../session/OpsSessionContext";
 import {
   ThemeElementEditor,
   previewElementStateFromElements,
+  type ThemePreviewDraftElement,
   type ThemePreviewElementState,
 } from "./ThemeElementEditor";
 import { ThemeLivePreview } from "./ThemeLivePreview";
@@ -633,7 +633,7 @@ function ThemeDetailView({
             onAutosaveStateChange={setElementAutosaveState}
             autosaveActionsRef={elementActionsRef}
             onPreviewElementsChange={(
-              elements: ThemeElementCreateRequest[] | null,
+              elements: ThemePreviewDraftElement[] | null,
               draftError: string | null,
             ): void => {
               if (selectedTheme === null) {

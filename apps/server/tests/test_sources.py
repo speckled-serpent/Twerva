@@ -38,8 +38,8 @@ from app.themes.default_images import (
     THEME_DEFAULTS_PREFIX,
     default_image_directory,
 )
-from app.models import BackgroundKind, SourceType
-from tests.test_theme_preview import _decoded_image, _preview, _source_item
+from app.models import BackgroundKind
+from tests.test_theme_preview import _decoded_image, _preview
 
 
 LICENSES_PATH: Path = (
@@ -229,17 +229,12 @@ class ThemeDefaultsRenderingUnchangedTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item = _source_item(SourceType.SPOTMU_INTEREST)
-            from tests.test_theme_preview import _PreviewMemorySession
-
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.PICTURE,
                 background_asset_ref=stored_ref,
             )
 
-            response = _preview(preview_request, session, storage)
+            response = _preview(preview_request, storage)
             rendered: Image.Image = _decoded_image(response)
 
             self.assertEqual(preview_request.background_asset_ref, stored_ref)

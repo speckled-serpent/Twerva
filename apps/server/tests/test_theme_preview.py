@@ -5,7 +5,6 @@ import io
 import os
 import tempfile
 import unittest
-import uuid
 
 os.environ.setdefault("TWERVA_ENV", "test")
 from pathlib import Path
@@ -13,18 +12,16 @@ from unittest.mock import MagicMock, patch
 
 from fastapi import HTTPException
 from PIL import Image
+from pydantic import ValidationError
 
-from app.api.v1.schemas import ThemeElementCreateRequest, ThemePreviewRequest, ThemePreviewResponse
-from app.api.v1.theme_samples import create_theme_preview
-from app.models import (
-    Artifact,
-    BackgroundKind,
-    PostJob,
-    SourceItem,
-    SourceType,
-    Theme,
-    ThemeElement,
+from app.api.v1.schemas import (
+    ThemeElementCreateRequest,
+    ThemePreviewElementRequest,
+    ThemePreviewRequest,
+    ThemePreviewResponse,
 )
+from app.api.v1.theme_samples import create_theme_preview
+from app.models import BackgroundKind
 from app.models.enums import (
     ThemeElementAlignment,
     ThemeElementBand,
@@ -54,55 +51,46 @@ class ThemePreviewTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_color=DEFAULT_BACKGROUND_COLOR,
                 elements=[_text_element_request(ThemeElementBand.TOP, 64)],
             )
 
-            response: ThemePreviewResponse = _preview(preview_request, session, storage)
+            response: ThemePreviewResponse = _preview(preview_request, storage)
             image: Image.Image = _decoded_image(response)
 
             self.assertFalse(response.blocked)
             self.assertIsNone(response.block_reason)
             self.assertEqual(image.size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
             self.assertEqual(image.getpixel((0, 0)), PAPER)
-            self._assert_nothing_stored(session, storage)
+            self._assert_nothing_stored(storage)
 
     def test_missing_font_still_renders(self) -> None:
         """An unknown family uses the sample font fallback and is not an error."""
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             text_request: ThemeElementCreateRequest = _text_element_request(
                 ThemeElementBand.MIDDLE,
                 32,
             )
             text_request.font_family = "No Such Preview Face"
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 elements=[text_request],
             )
 
-            response: ThemePreviewResponse = _preview(preview_request, session, storage)
+            response: ThemePreviewResponse = _preview(preview_request, storage)
 
             self.assertFalse(response.blocked)
             self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
-            self._assert_nothing_stored(session, storage)
+            self._assert_nothing_stored(storage)
 
     def test_overlap_is_blocked_and_stores_nothing(self) -> None:
         """Tall top and middle text block the frame and leave no rows."""
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 page_margin=0,
                 element_gap=0,
                 element_margin=0,
@@ -112,7 +100,7 @@ class ThemePreviewTests(unittest.TestCase):
                 ],
             )
 
-            response: ThemePreviewResponse = _preview(preview_request, session, storage)
+            response: ThemePreviewResponse = _preview(preview_request, storage)
 
             self.assertTrue(response.blocked)
             self.assertEqual(response.block_reason, "overlap")
@@ -120,49 +108,43 @@ class ThemePreviewTests(unittest.TestCase):
             self.assertEqual(response.overlaps[0].band_a, ThemeElementBand.TOP)
             self.assertEqual(response.overlaps[0].band_b, ThemeElementBand.MIDDLE)
             self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
-            self._assert_nothing_stored(session, storage)
+            self._assert_nothing_stored(storage)
 
     def test_missing_asset_is_blocked_and_stores_nothing(self) -> None:
         """A picture background with no file blocks and writes no preview file."""
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.PICTURE,
                 background_asset_ref="backgrounds/missing.png",
             )
 
-            response: ThemePreviewResponse = _preview(preview_request, session, storage)
+            response: ThemePreviewResponse = _preview(preview_request, storage)
 
             self.assertTrue(response.blocked)
             self.assertEqual(response.block_reason, "missing_asset")
             self.assertIn("missing", (response.detail or "").lower())
             self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
-            self._assert_nothing_stored(session, storage)
+            self._assert_nothing_stored(storage)
 
     def test_blank_color_is_measure_error_and_stores_nothing(self) -> None:
         """A blank color blocks with a measure error and inserts nothing."""
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.COLOR,
                 background_color="",
             )
 
-            response: ThemePreviewResponse = _preview(preview_request, session, storage)
+            response: ThemePreviewResponse = _preview(preview_request, storage)
 
             self.assertTrue(response.blocked)
             self.assertEqual(response.block_reason, "measure_error")
             self.assertEqual(response.detail, BACKGROUND_COLOR_MISSING_DETAIL)
             self.assertEqual(_decoded_image(response).size, (THEME_FRAME_WIDTH_PIXELS, THEME_FRAME_HEIGHT_PIXELS))
-            self._assert_nothing_stored(session, storage)
+            self._assert_nothing_stored(storage)
 
     def test_gradient_preview_names_the_problem(self) -> None:
         """A bad gradient blocks with the same sentence the form shows."""
@@ -211,17 +193,13 @@ class ThemePreviewTests(unittest.TestCase):
             with self.subTest(expected_detail=expected_detail):
                 with tempfile.TemporaryDirectory() as storage_directory:
                     storage: Path = Path(storage_directory)
-                    source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-                    session: _PreviewMemorySession = _PreviewMemorySession(source_item)
                     preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                        source_item_id=source_item.id,
                         background_kind=BackgroundKind.GRADIENT,
                         background_gradient=gradient_payload,
                     )
 
                     response: ThemePreviewResponse = _preview(
                         preview_request,
-                        session,
                         storage,
                     )
 
@@ -236,16 +214,13 @@ class ThemePreviewTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.GRADIENT,
                 background_color=None,
                 background_gradient=default_gradient,
             )
 
-            response: ThemePreviewResponse = _preview(preview_request, session, storage)
+            response: ThemePreviewResponse = _preview(preview_request, storage)
 
             self.assertFalse(response.blocked)
             image: Image.Image = _decoded_image(response)
@@ -260,10 +235,7 @@ class ThemePreviewTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 elements=[
                     ThemeElementCreateRequest(
                         name="Title",
@@ -278,88 +250,77 @@ class ThemePreviewTests(unittest.TestCase):
             )
 
             with self.assertRaises(HTTPException) as preview_error:
-                _preview(preview_request, session, storage)
+                _preview(preview_request, storage)
 
             self.assertEqual(preview_error.exception.status_code, 400)
-            self._assert_nothing_stored(session, storage)
+            self._assert_nothing_stored(storage)
 
-    def test_non_spotmu_source_stores_nothing(self) -> None:
-        """A brand product source is 400 and does not render."""
+    def test_preview_text_is_drawn_without_a_source_item(self) -> None:
+        """Stand-in text changes the PNG. No source item is loaded."""
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item: SourceItem = _source_item(SourceType.BRAND_PRODUCT)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
-            preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
+            empty_request: ThemePreviewRequest = ThemePreviewRequest(
+                elements=[
+                    _text_element_request(ThemeElementBand.TOP, 48, preview_text=""),
+                ],
+            )
+            filled_request: ThemePreviewRequest = ThemePreviewRequest(
+                elements=[
+                    _text_element_request(
+                        ThemeElementBand.TOP,
+                        48,
+                        preview_text="Lorem ipsum dolor sit amet",
+                    ),
+                ],
             )
 
-            with self.assertRaises(HTTPException) as preview_error:
-                _preview(preview_request, session, storage)
+            empty_response: ThemePreviewResponse = _preview(empty_request, storage)
+            filled_response: ThemePreviewResponse = _preview(filled_request, storage)
 
-            self.assertEqual(preview_error.exception.status_code, 400)
-            self.assertIn("Spotmu", preview_error.exception.detail)
-            self._assert_nothing_stored(session, storage)
+            self.assertFalse(empty_response.blocked)
+            self.assertFalse(filled_response.blocked)
+            self.assertNotEqual(
+                empty_response.image_png_base64,
+                filled_response.image_png_base64,
+            )
+            self._assert_nothing_stored(storage)
 
-    def _assert_nothing_stored(
-        self,
-        session: "_PreviewMemorySession",
-        storage: Path,
-    ) -> None:
-        """No theme, artifact, post job, commit, or preview file."""
+    def test_create_body_rejects_preview_text(self) -> None:
+        """preview_text is not a field on a stored element."""
 
-        for added_row in session.added:
-            self.assertNotIsInstance(added_row, (Theme, ThemeElement, Artifact, PostJob))
+        with self.assertRaises(ValidationError):
+            ThemeElementCreateRequest(
+                name="Title",
+                band=ThemeElementBand.TOP,
+                content_kind=ThemeElementContentKind.TEXT,
+                font_family="DejaVu Sans",
+                font_size=32,
+                font_color="#112233",
+                alignment=ThemeElementAlignment.LEFT,
+                preview_text="Lorem",
+            )
 
-        self.assertEqual(session.added, [])
-        self.assertEqual(session.commit_count, 0)
+    def _assert_nothing_stored(self, storage: Path) -> None:
+        """No preview file is written."""
+
         written_files: list[Path] = [
             path for path in storage.rglob("*") if path.is_file()
         ]
         self.assertEqual(written_files, [])
 
 
-class _PreviewMemorySession:
-    """Source lookup that records inserts. Not a database."""
-
-    def __init__(self, source_item: SourceItem) -> None:
-
-        self.source_item: SourceItem = source_item
-        self.added: list[object] = []
-        self.commit_count: int = 0
-
-    def get(self, model: type[object], key: uuid.UUID) -> SourceItem | None:
-        """Return the source item when the id matches."""
-
-        if model is SourceItem and key == self.source_item.id:
-
-            return self.source_item
-
-        return None
-
-    def add(self, row: object) -> None:
-        """Record an insert the preview handler must not make."""
-
-        self.added.append(row)
-
-    def commit(self) -> None:
-        """Record a commit the preview handler must not make."""
-
-        self.commit_count += 1
-
-
 def _preview(
     preview_request: ThemePreviewRequest,
-    session: _PreviewMemorySession,
     storage: Path,
 ) -> ThemePreviewResponse:
-    """POST one preview against the in-memory session and this store."""
+    """POST one preview against this store. No database session."""
 
     settings: MagicMock = MagicMock()
     settings.artifact_storage_dir = str(storage)
 
     with patch("app.api.v1.theme_samples.get_settings", return_value=settings):
-        response: ThemePreviewResponse = create_theme_preview(preview_request, session)
+        response: ThemePreviewResponse = create_theme_preview(preview_request)
 
     return response
 
@@ -373,30 +334,14 @@ def _decoded_image(response: ThemePreviewResponse) -> Image.Image:
     return image
 
 
-def _source_item(source_type: SourceType) -> SourceItem:
-    """Build an in-memory source item. Nothing is written."""
-
-    source_item: SourceItem = SourceItem(
-        id=uuid.uuid4(),
-        brand_id=uuid.uuid4(),
-        source_type=source_type,
-        external_key="example",
-        title="Harbor light",
-        interest_heading="Evening",
-        overview_bullets=["One"],
-        canonical_url="https://example.test/harbor",
-    )
-
-    return source_item
-
-
 def _text_element_request(
     band: ThemeElementBand,
     font_size: int,
-) -> ThemeElementCreateRequest:
+    preview_text: str | None = None,
+) -> ThemePreviewElementRequest:
     """One valid text element. Family may be missing on this machine."""
 
-    text_request: ThemeElementCreateRequest = ThemeElementCreateRequest(
+    text_request: ThemePreviewElementRequest = ThemePreviewElementRequest(
         name="Title",
         band=band,
         content_kind=ThemeElementContentKind.TEXT,
@@ -405,6 +350,7 @@ def _text_element_request(
         font_size=font_size,
         font_color="#112233",
         alignment=ThemeElementAlignment.LEFT,
+        preview_text=preview_text,
     )
 
     return text_request

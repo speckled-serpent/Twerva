@@ -20,6 +20,7 @@ import {
   ThemeElementEditor,
   previewElementStateFromElements,
   themeElementCreateRequestFromElement,
+  type ThemePreviewDraftElement,
   type ThemePreviewElementState,
 } from "./ThemeElementEditor";
 import { ThemeAutosaveStatus } from "./ThemeAutosaveStatus";
@@ -234,7 +235,7 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
         onLocalElementsChange={setLocalElements}
         onValidationMessageChange={setElementValidationMessage}
         onPreviewElementsChange={(
-          elements: ThemeElementCreateRequest[] | null,
+          elements: ThemePreviewDraftElement[] | null,
           draftError: string | null,
         ): void => {
           setPreviewReport({ elements, draftError });

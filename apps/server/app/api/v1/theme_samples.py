@@ -18,6 +18,7 @@ from app.api.v1.lookups import (
 )
 from app.api.v1.schemas import (
     ThemeElementCreateRequest,
+    ThemePreviewElementRequest,
     ThemePreviewRequest,
     ThemePreviewResponse,
     ThemeSampleOverlapResponse,
@@ -32,7 +33,7 @@ from app.models import (
     Theme,
     ThemeElement,
 )
-from app.models.enums import ThemeElementBand
+from app.models.enums import ThemeElementBand, ThemeElementContentKind
 from app.settings import get_settings
 from app.themes.elements import (
     THEME_ELEMENT_SORT_ORDER_DETAIL,
@@ -126,34 +127,27 @@ def create_theme_sample(
 
 def create_theme_preview(
     theme_preview_request: ThemePreviewRequest,
-    our_database_session: Session = Depends(get_our_database_session),
 ) -> ThemePreviewResponse:
     """Render one frame from the form payload. Does not write a row.
 
     Readers and admins may call this. The PNG is returned inline. A
-    missing font uses the sample renderer's Pillow fallback. No theme,
-    artifact, post job, or preview file is created.
+    missing font uses the sample renderer's Pillow fallback. Text
+    elements draw ``preview_text``. No theme, artifact, post job, or
+    preview file is created, and no source item is loaded.
     """
-
-    found_source_item: SourceItem = fetch_source_item_by_id_or_raise(
-        theme_preview_request.source_item_id,
-        our_database_session,
-    )
-
-    if found_source_item.source_type != SourceType.SPOTMU_INTEREST:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=SPOTMU_INTEREST_REQUIRED_DETAIL,
-        )
 
     _reject_negative_preview_spacing(theme_preview_request)
     preview_theme: Theme = _preview_theme(theme_preview_request)
-    _append_preview_elements(preview_theme, theme_preview_request.elements)
+    preview_text_by_element_id: dict[uuid.UUID, str] = _append_preview_elements(
+        preview_theme,
+        theme_preview_request.elements,
+    )
     artifact_storage_directory: Path = Path(get_settings().artifact_storage_dir)
     rendered_sample: ThemeSampleRender = render_theme_sample(
         preview_theme,
-        found_source_item,
+        None,
         artifact_storage_directory,
+        preview_text_by_element_id=preview_text_by_element_id,
     )
     preview_response: ThemePreviewResponse = _preview_response(rendered_sample)
 
@@ -244,11 +238,17 @@ def _preview_theme(theme_preview_request: ThemePreviewRequest) -> Theme:
 
 def _append_preview_elements(
     preview_theme: Theme,
-    element_requests: list[ThemeElementCreateRequest],
-) -> None:
-    """Validate elements and attach them in band order. No flush."""
+    element_requests: list[ThemePreviewElementRequest],
+) -> dict[uuid.UUID, str]:
+    """Validate elements and attach them in band order. No flush.
 
-    resolved_rows: list[tuple[ThemeElementCreateRequest, ResolvedThemeElement]] = []
+    Returns:
+        Preview text keyed by the unsaved element id. Only text elements
+        with ``preview_text`` set are included. Nothing is stored.
+    """
+
+    resolved_rows: list[tuple[ThemePreviewElementRequest, ResolvedThemeElement]] = []
+    preview_text_by_element_id: dict[uuid.UUID, str] = {}
 
     for element_request in element_requests:
         _reject_negative_preview_sort_order(element_request.sort_order)
@@ -263,8 +263,9 @@ def _append_preview_elements(
     created_at: datetime = datetime.now(timezone.utc)
 
     for element_request, resolved_element in resolved_rows:
+        created_element_id: uuid.UUID = uuid.uuid4()
         created_element: ThemeElement = ThemeElement(
-            id=uuid.uuid4(),
+            id=created_element_id,
             theme_id=preview_theme.id,
             band=element_request.band,
             sort_order=0,
@@ -287,6 +288,13 @@ def _append_preview_elements(
             created_at=created_at,
             updated_at=created_at,
         )
+
+        if (
+            resolved_element.content_kind == ThemeElementContentKind.TEXT
+            and element_request.preview_text is not None
+        ):
+            preview_text_by_element_id[created_element_id] = element_request.preview_text
+
         band_members: list[ThemeElement] = members_by_band[element_request.band]
         target_index: int = insert_index(element_request.sort_order, len(band_members))
         band_members.insert(target_index, created_element)
@@ -296,6 +304,8 @@ def _append_preview_elements(
         for sort_order, band_member in enumerate(band_members):
             band_member.sort_order = sort_order
             preview_theme.elements.append(band_member)
+
+    return preview_text_by_element_id
 
 
 def _resolve_preview_element(

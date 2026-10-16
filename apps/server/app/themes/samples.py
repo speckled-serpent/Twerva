@@ -112,6 +112,7 @@ def render_theme_sample(
     source_item: SourceItem | None,
     artifact_storage_directory: Path,
     unit_fill: UnitThemeFill | None = None,
+    preview_text_by_element_id: dict[uuid.UUID, str] | None = None,
 ) -> ThemeSampleRender:
     """Resolve, measure, place, overlap-check, and draw one frame.
 
@@ -125,10 +126,13 @@ def render_theme_sample(
     Args:
         theme: Draft or Live carousel theme. Status is not changed.
         source_item: Spotmu interest whose text fields fill text elements.
-            Ignored when ``unit_fill`` is set.
+            Ignored when ``unit_fill`` is set, and ignored for an element
+            whose id is in ``preview_text_by_element_id``.
         artifact_storage_directory: Root for background and image files.
         unit_fill: This unit's text and image. Picture backgrounds and
             image elements use the unit image. No artifact row is written.
+        preview_text_by_element_id: Appearance text for the stateless
+            theme preview. Not stored. Image elements ignore it.
 
     Returns:
         PNG bytes, whether the frame is blocked, the reason and detail,
@@ -139,7 +143,13 @@ def render_theme_sample(
     resolved_storage_directory: Path = artifact_storage_directory.expanduser().resolve()
     ordered_elements: list[ThemeElement] = ordered_theme_elements(theme.elements)
     measure_elements: list[ThemeMeasureElement] = [
-        _measure_element(element, source_item, unit_fill) for element in ordered_elements
+        _measure_element(
+            element,
+            source_item,
+            unit_fill,
+            preview_text_by_element_id,
+        )
+        for element in ordered_elements
     ]
     measurement: ThemeMeasurement = measure_theme_elements(
         THEME_FRAME_WIDTH_PIXELS,
@@ -310,11 +320,14 @@ def _measure_element(
     element: ThemeElement,
     source_item: SourceItem | None,
     unit_fill: UnitThemeFill | None,
+    preview_text_by_element_id: dict[uuid.UUID, str] | None = None,
 ) -> ThemeMeasureElement:
     """Copy one stored element into the measure input, with text resolved.
 
-    A unit fill wins. A Spotmu source item uses ``text_source`` when
-    that column is set, and the element name when it is null.
+    Appearance preview text wins when this element's id is in
+    ``preview_text_by_element_id``. Otherwise a unit fill wins. A Spotmu
+    source item uses ``text_source`` when that column is set, and the
+    element name when it is null.
     """
 
     if element.content_kind == ThemeElementContentKind.IMAGE:
@@ -335,7 +348,12 @@ def _measure_element(
 
     resolved_text: str = ""
 
-    if unit_fill is not None:
+    if (
+        preview_text_by_element_id is not None
+        and element.id in preview_text_by_element_id
+    ):
+        resolved_text = preview_text_by_element_id[element.id]
+    elif unit_fill is not None:
         resolved_text = unit_fill.text_by_element_id.get(element.id, "")
     elif source_item is not None and element.text_source is not None:
         resolved_text = resolve_theme_text(source_item, element.text_source)
