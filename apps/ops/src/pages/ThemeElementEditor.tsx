@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactElement,
+} from "react";
 
 import {
   createThemeElement,
@@ -18,6 +25,14 @@ import type {
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import {
+  THEME_AUTOSAVE_DELAY_MS,
+  combineAutosaveStates,
+  formatThemeAutosaveError,
+  type ThemeAutosaveActions,
+  type ThemeAutosaveState,
+} from "./themeAutosave";
+import { useThemeAutosave } from "./useThemeAutosave";
 import { ThemeAssetAlbumField, loadThemePickerAlbums } from "./ThemeAssetAlbumField";
 import { ThemeFontFamilyField } from "./ThemeFontFamilyField";
 import { normalizeHexColor } from "./themeColors";
@@ -32,6 +47,10 @@ export interface ThemeElementEditorProps {
     elements: ThemeElementCreateRequest[] | null,
     draftError: string | null,
   ) => void;
+  onElementPatched?: (element: ThemeElementReadResponse) => void;
+  onValidationMessageChange?: (message: string | null) => void;
+  onAutosaveStateChange?: (state: ThemeAutosaveState) => void;
+  autosaveActionsRef?: { current: ThemeAutosaveActions | null };
 }
 
 interface TextSourceOption {
@@ -90,37 +109,162 @@ export function ThemeElementEditor({
   onThemeUpdated,
   onLocalElementsChange,
   onPreviewElementsChange,
+  onElementPatched,
+  onValidationMessageChange,
+  onAutosaveStateChange,
+  autosaveActionsRef,
 }: ThemeElementEditorProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
   const [addDraft, setAddDraft] = useState<ElementDraft>(emptyElementDraft());
   const [cardDrafts, setCardDrafts] = useState<Record<string, ElementDraft>>({});
+  const [draftErrors, setDraftErrors] = useState<Record<string, string>>({});
+  const [cardAutosaveStates, setCardAutosaveStates] = useState<
+    Record<string, ThemeAutosaveState>
+  >({});
   const [actionError, setActionError] = useState<unknown>(null);
-  const [statusMessage, setStatusMessage] = useState<string>("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const previewCallbackRef = useRef(onPreviewElementsChange);
   const lastPreviewKeyRef = useRef<string | null>(null);
+  const themeRef = useRef(theme);
+  const onThemeUpdatedRef = useRef(onThemeUpdated);
+  const onLocalElementsChangeRef = useRef(onLocalElementsChange);
+  const onElementPatchedRef = useRef(onElementPatched);
+  const onValidationMessageChangeRef = useRef(onValidationMessageChange);
+  const onAutosaveStateChangeRef = useRef(onAutosaveStateChange);
+  const reloadSerialRef = useRef(0);
+  const cardActionsRef = useRef<Map<string, ThemeAutosaveActions>>(new Map());
   previewCallbackRef.current = onPreviewElementsChange;
+  themeRef.current = theme;
+  onThemeUpdatedRef.current = onThemeUpdated;
+  onLocalElementsChangeRef.current = onLocalElementsChange;
+  onElementPatchedRef.current = onElementPatched;
+  onValidationMessageChangeRef.current = onValidationMessageChange;
+  onAutosaveStateChangeRef.current = onAutosaveStateChange;
   const fieldsDisabled: boolean = !canWrite || busyKey !== null;
   const isLocal: boolean = onLocalElementsChange !== undefined;
+  const validationMessage: string | null = firstDraftError(draftErrors);
+  const elementAutosaveState: ThemeAutosaveState = combineAutosaveStates(
+    Object.values(cardAutosaveStates),
+  );
+  const elementAutosaveKey: string = [
+    elementAutosaveState.phase,
+    elementAutosaveState.message,
+    elementAutosaveState.canRetry ? "retry" : "noretry",
+  ].join("|");
 
-  const reloadTheme = async (): Promise<ThemeReadResponse> => {
+  const reloadTheme = async (): Promise<ThemeReadResponse | null> => {
 
-    const reloadedTheme: ThemeReadResponse = await fetchThemeById(theme.id);
+    const serial: number = reloadSerialRef.current + 1;
+    reloadSerialRef.current = serial;
+    const reloadedTheme: ThemeReadResponse = await fetchThemeById(themeRef.current.id);
 
-    onThemeUpdated(reloadedTheme);
+    if (serial !== reloadSerialRef.current) {
+      return null;
+    }
+
+    onThemeUpdatedRef.current(reloadedTheme);
 
     return reloadedTheme;
   };
 
   const publishLocalElements = (nextElements: ThemeElementReadResponse[]): void => {
 
-    if (onLocalElementsChange === undefined) {
+    if (onLocalElementsChangeRef.current === undefined) {
       return;
     }
 
-    onLocalElementsChange(nextElements);
+    onLocalElementsChangeRef.current(nextElements);
   };
+
+  const handleCardDraftChange = useCallback((elementId: string, draft: ElementDraft): void => {
+
+    setCardDrafts((currentDrafts: Record<string, ElementDraft>): Record<string, ElementDraft> => {
+      const previousDraft: ElementDraft | undefined = currentDrafts[elementId];
+
+      if (previousDraft !== undefined && JSON.stringify(previousDraft) === JSON.stringify(draft)) {
+        return currentDrafts;
+      }
+
+      return { ...currentDrafts, [elementId]: draft };
+    });
+  }, []);
+
+  const handleDraftError = useCallback((elementId: string, message: string | null): void => {
+
+    setDraftErrors((currentErrors: Record<string, string>): Record<string, string> => {
+
+      if (message === null || message === "") {
+
+        if (!(elementId in currentErrors)) {
+          return currentErrors;
+        }
+
+        const nextErrors: Record<string, string> = { ...currentErrors };
+
+        delete nextErrors[elementId];
+
+        return nextErrors;
+      }
+
+      if (currentErrors[elementId] === message) {
+        return currentErrors;
+      }
+
+      return { ...currentErrors, [elementId]: message };
+    });
+  }, []);
+
+  const handleCardAutosaveState = useCallback((
+    elementId: string,
+    autosaveState: ThemeAutosaveState | null,
+  ): void => {
+
+    setCardAutosaveStates((
+      currentStates: Record<string, ThemeAutosaveState>,
+    ): Record<string, ThemeAutosaveState> => {
+
+      if (autosaveState === null) {
+
+        if (!(elementId in currentStates)) {
+          return currentStates;
+        }
+
+        const nextStates: Record<string, ThemeAutosaveState> = { ...currentStates };
+
+        delete nextStates[elementId];
+
+        return nextStates;
+      }
+
+      const previousState: ThemeAutosaveState | undefined = currentStates[elementId];
+
+      if (
+        previousState !== undefined
+        && previousState.phase === autosaveState.phase
+        && previousState.message === autosaveState.message
+        && previousState.canRetry === autosaveState.canRetry
+      ) {
+        return currentStates;
+      }
+
+      return { ...currentStates, [elementId]: autosaveState };
+    });
+  }, []);
+
+  const handleBindAutosave = useCallback((
+    elementId: string,
+    actions: ThemeAutosaveActions | null,
+  ): void => {
+
+    if (actions === null) {
+      cardActionsRef.current.delete(elementId);
+
+      return;
+    }
+
+    cardActionsRef.current.set(elementId, actions);
+  }, []);
 
   const handleAddElement = async (formEvent: FormEvent): Promise<void> => {
 
@@ -132,7 +276,6 @@ export function ThemeElementEditor({
 
     setBusyKey("add");
     setActionError(null);
-    setStatusMessage("");
 
     try {
       const draftToAdd: ElementDraft = await draftReadyToAdd(addDraft);
@@ -147,12 +290,10 @@ export function ThemeElementEditor({
 
         publishLocalElements([...theme.elements, createdElement]);
         setAddDraft(emptyElementDraft());
-        setStatusMessage("Element added. It is stored when you create the theme.");
       } else {
         await createThemeElement(theme.id, createRequest);
         await reloadTheme();
         setAddDraft(emptyElementDraft());
-        setStatusMessage("Element added.");
       }
     } catch (caughtError: unknown) {
       setActionError(caughtError);
@@ -163,7 +304,8 @@ export function ThemeElementEditor({
 
   const handleLocalSave = (elementId: string, draft: ElementDraft): void => {
 
-    const currentElement: ThemeElementReadResponse | undefined = theme.elements.find(
+    const currentElements: ThemeElementReadResponse[] = themeRef.current.elements;
+    const currentElement: ThemeElementReadResponse | undefined = currentElements.find(
       (element: ThemeElementReadResponse): boolean => element.id === elementId,
     );
 
@@ -171,15 +313,27 @@ export function ThemeElementEditor({
       return;
     }
 
-    const request: ThemeElementCreateRequest = elementRequestFromDraft(draft);
-    const updatedElement: ThemeElementReadResponse = applyRequestToElement(
-      currentElement,
-      request,
-    );
+    try {
+      const request: ThemeElementCreateRequest = elementRequestFromDraft(draft);
+      const currentRequest: ThemeElementCreateRequest = themeElementCreateRequestFromElement(
+        currentElement,
+      );
 
-    publishLocalElements(
-      placeSavedLocalElement(theme.elements, currentElement, updatedElement),
-    );
+      if (JSON.stringify(request) === JSON.stringify(currentRequest)) {
+        return;
+      }
+
+      const updatedElement: ThemeElementReadResponse = applyRequestToElement(
+        currentElement,
+        request,
+      );
+
+      publishLocalElements(
+        placeSavedLocalElement(currentElements, currentElement, updatedElement),
+      );
+    } catch {
+      return;
+    }
   };
 
   const handleLocalDelete = (elementId: string): void => {
@@ -192,18 +346,53 @@ export function ThemeElementEditor({
     publishLocalElements(moveLocalElement(theme.elements, elementId, nextSortOrder));
   };
 
-  const handleCardDraftChange = (elementId: string, draft: ElementDraft): void => {
+  useEffect((): void => {
+    onValidationMessageChangeRef.current?.(validationMessage);
+  }, [validationMessage]);
 
-    setCardDrafts((currentDrafts: Record<string, ElementDraft>): Record<string, ElementDraft> => {
-      const previousDraft: ElementDraft | undefined = currentDrafts[elementId];
+  const elementAutosaveStateRef = useRef(elementAutosaveState);
+  elementAutosaveStateRef.current = elementAutosaveState;
 
-      if (previousDraft !== undefined && JSON.stringify(previousDraft) === JSON.stringify(draft)) {
-        return currentDrafts;
-      }
+  useEffect((): void => {
+    onAutosaveStateChangeRef.current?.(elementAutosaveStateRef.current);
+  }, [elementAutosaveKey]);
 
-      return { ...currentDrafts, [elementId]: draft };
-    });
-  };
+  if (autosaveActionsRef !== undefined) {
+    autosaveActionsRef.current = {
+      flush: (): Promise<void> => {
+        const actions: ThemeAutosaveActions[] = [...cardActionsRef.current.values()];
+
+        return Promise.all(actions.map(
+          (action: ThemeAutosaveActions): Promise<void> => action.flush(),
+        )).then((): void => {
+          return;
+        });
+      },
+      retry: (): Promise<void> => {
+        const actions: ThemeAutosaveActions[] = [...cardActionsRef.current.values()];
+
+        return Promise.all(actions.map(
+          (action: ThemeAutosaveActions): Promise<void> => action.retry(),
+        )).then((): void => {
+          return;
+        });
+      },
+      abandon: (): Promise<void> => {
+        const actions: ThemeAutosaveActions[] = [...cardActionsRef.current.values()];
+
+        return Promise.all(actions.map(
+          (action: ThemeAutosaveActions): Promise<void> => action.abandon(),
+        )).then((): void => {
+          return;
+        });
+      },
+      isDirty: (): boolean => {
+        const actions: ThemeAutosaveActions[] = [...cardActionsRef.current.values()];
+
+        return actions.some((action: ThemeAutosaveActions): boolean => action.isDirty());
+      },
+    };
+  }
 
   useEffect((): void => {
     const previewCallback = previewCallbackRef.current;
@@ -248,7 +437,6 @@ export function ThemeElementEditor({
         Pick an image from an album. This form does not upload a file.
       </p>
       <ErrorBanner error={actionError} />
-      {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
 
       <form
         className="stack-form"
@@ -287,16 +475,14 @@ export function ThemeElementEditor({
               bandElements.map(
                 (element: ThemeElementReadResponse, elementIndex: number): ReactElement => (
                   <ThemeElementCard
-                    key={`${element.id}:${element.updated_at}:${element.band}:${element.sort_order}`}
+                    key={element.id}
                     themeId={theme.id}
                     element={element}
                     elementIndex={elementIndex}
                     bandLength={bandElements.length}
                     fieldsDisabled={fieldsDisabled}
-                    isBusy={busyKey === element.id}
                     onError={setActionError}
-                    onReload={async (message: string): Promise<void> => {
-                      setStatusMessage(message);
+                    onReload={async (): Promise<void> => {
 
                       if (!isLocal) {
                         await reloadTheme();
@@ -309,6 +495,12 @@ export function ThemeElementEditor({
                     onLocalDelete={isLocal ? handleLocalDelete : undefined}
                     onLocalMove={isLocal ? handleLocalMove : undefined}
                     onDraftChange={handleCardDraftChange}
+                    onDraftError={handleDraftError}
+                    onAutosaveState={handleCardAutosaveState}
+                    onBindAutosave={handleBindAutosave}
+                    onElementPatched={(patchedElement: ThemeElementReadResponse): void => {
+                      onElementPatchedRef.current?.(patchedElement);
+                    }}
                   />
                 ),
               )
@@ -326,14 +518,17 @@ interface ThemeElementCardProps {
   elementIndex: number;
   bandLength: number;
   fieldsDisabled: boolean;
-  isBusy: boolean;
   onError: (error: unknown) => void;
-  onReload: (message: string) => Promise<void>;
+  onReload: () => Promise<void>;
   onBusy: (isBusy: boolean) => void;
   onLocalSave?: (elementId: string, draft: ElementDraft) => void;
   onLocalDelete?: (elementId: string) => void;
   onLocalMove?: (elementId: string, nextSortOrder: number) => void;
   onDraftChange: (elementId: string, draft: ElementDraft) => void;
+  onDraftError: (elementId: string, message: string | null) => void;
+  onAutosaveState: (elementId: string, state: ThemeAutosaveState | null) => void;
+  onBindAutosave: (elementId: string, actions: ThemeAutosaveActions | null) => void;
+  onElementPatched: (element: ThemeElementReadResponse) => void;
 }
 
 function ThemeElementCard({
@@ -342,7 +537,6 @@ function ThemeElementCard({
   elementIndex,
   bandLength,
   fieldsDisabled,
-  isBusy,
   onError,
   onReload,
   onBusy,
@@ -350,14 +544,62 @@ function ThemeElementCard({
   onLocalDelete,
   onLocalMove,
   onDraftChange,
+  onDraftError,
+  onAutosaveState,
+  onBindAutosave,
+  onElementPatched,
 }: ThemeElementCardProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
   const [draft, setDraft] = useState<ElementDraft>(draftFromElement(element));
+  const isLocal: boolean = onLocalSave !== undefined;
+  const themeIdRef = useRef(themeId);
+  const elementRef = useRef(element);
+  const onReloadRef = useRef(onReload);
+  const onElementPatchedRef = useRef(onElementPatched);
+  const notedElementIdRef = useRef<string | null>(null);
+  themeIdRef.current = themeId;
+  elementRef.current = element;
+  onReloadRef.current = onReload;
+  onElementPatchedRef.current = onElementPatched;
+  const draftError: string | null = readElementDraftError(draft);
+  const autosave = useThemeAutosave<ElementDraft>({
+    delayMs: THEME_AUTOSAVE_DELAY_MS,
+    readiness: (nextDraft: ElementDraft) => {
 
-  useEffect((): void => {
-    onDraftChange(element.id, draft);
-  }, [draft, element.id, onDraftChange]);
+      if (isLocal || !canWrite) {
+        return { kind: "skip" };
+      }
+
+      const message: string | null = readElementDraftError(nextDraft);
+
+      if (message !== null) {
+        return { kind: "invalid", message };
+      }
+
+      return { kind: "ready" };
+    },
+    fingerprint: (nextDraft: ElementDraft): string => {
+      return JSON.stringify(elementRequestFromDraft(nextDraft));
+    },
+    save: async (nextDraft: ElementDraft): Promise<void> => {
+      const patchRequest: ThemeElementPatchRequest = elementRequestFromDraft(nextDraft);
+      const patchedElement: ThemeElementReadResponse = await patchThemeElement(
+        themeIdRef.current,
+        elementRef.current.id,
+        patchRequest,
+      );
+
+      if (nextDraft.band !== elementRef.current.band) {
+        await onReloadRef.current();
+
+        return;
+      }
+
+      onElementPatchedRef.current(patchedElement);
+    },
+    formatError: formatThemeAutosaveError,
+  });
   const canMoveEarlier: boolean = canWrite && elementIndex > 0 && draft.band === element.band;
   const canMoveLater: boolean = (
     canWrite
@@ -365,34 +607,75 @@ function ThemeElementCard({
     && draft.band === element.band
   );
 
-  const handleSave = async (formEvent: FormEvent): Promise<void> => {
+  useEffect((): void => {
+    onDraftChange(element.id, draft);
+    onDraftError(element.id, draftError);
 
-    formEvent.preventDefault();
-
-    if (!canWrite) {
+    if (!isLocal || draftError !== null || onLocalSave === undefined) {
       return;
     }
 
-    onBusy(true);
-    onError(null);
+    onLocalSave(element.id, draft);
+  }, [draft, draftError, element.id, isLocal, onDraftChange, onDraftError, onLocalSave]);
 
-    try {
-      if (onLocalSave !== undefined) {
-        onLocalSave(element.id, draft);
-        await onReload("Element updated. It is stored when you create the theme.");
+  useEffect((): void => {
 
-        return;
-      }
-
-      const patchRequest: ThemeElementPatchRequest = elementRequestFromDraft(draft);
-      await patchThemeElement(themeId, element.id, patchRequest);
-      await onReload("Element saved.");
-    } catch (caughtError: unknown) {
-      onError(caughtError);
-    } finally {
-      onBusy(false);
+    if (isLocal || !canWrite) {
+      return;
     }
-  };
+
+    if (notedElementIdRef.current !== element.id) {
+      notedElementIdRef.current = element.id;
+      autosave.noteSaved(draftFromElement(element));
+    }
+
+    autosave.schedule(draft);
+  }, [autosave.noteSaved, autosave.schedule, canWrite, draft, element.id, isLocal]);
+
+  useEffect((): void | (() => void) => {
+
+    if (isLocal) {
+      onBindAutosave(element.id, null);
+
+      return;
+    }
+
+    onBindAutosave(element.id, autosave);
+
+    return (): void => {
+      onBindAutosave(element.id, null);
+    };
+  }, [
+    autosave.flush,
+    autosave.retry,
+    autosave.abandon,
+    autosave.isDirty,
+    element.id,
+    isLocal,
+    onBindAutosave,
+  ]);
+
+  useEffect((): void | (() => void) => {
+
+    if (isLocal) {
+      onAutosaveState(element.id, null);
+
+      return;
+    }
+
+    onAutosaveState(element.id, autosave.state);
+
+    return (): void => {
+      onAutosaveState(element.id, null);
+    };
+  }, [
+    autosave.state.phase,
+    autosave.state.message,
+    autosave.state.canRetry,
+    element.id,
+    isLocal,
+    onAutosaveState,
+  ]);
 
   const handleDelete = async (): Promise<void> => {
 
@@ -404,15 +687,16 @@ function ThemeElementCard({
     onError(null);
 
     try {
+      await autosave.abandon();
+
       if (onLocalDelete !== undefined) {
         onLocalDelete(element.id);
-        await onReload("Element removed. It is stored when you create the theme.");
 
         return;
       }
 
       await deleteThemeElement(themeId, element.id);
-      await onReload("Element deleted.");
+      await onReload();
     } catch (caughtError: unknown) {
       onError(caughtError);
     } finally {
@@ -430,15 +714,16 @@ function ThemeElementCard({
     onError(null);
 
     try {
+      await autosave.flush();
+
       if (onLocalMove !== undefined) {
         onLocalMove(element.id, nextSortOrder);
-        await onReload("Element moved. It is stored when you create the theme.");
 
         return;
       }
 
       await patchThemeElement(themeId, element.id, { sort_order: nextSortOrder });
-      await onReload("Element moved.");
+      await onReload();
     } catch (caughtError: unknown) {
       onError(caughtError);
     } finally {
@@ -450,7 +735,8 @@ function ThemeElementCard({
     <form
       className="card stack-form"
       onSubmit={(formEvent: FormEvent): void => {
-        void handleSave(formEvent);
+        formEvent.preventDefault();
+        void autosave.flush();
       }}
     >
       <fieldset className="form-fieldset" disabled={fieldsDisabled}>
@@ -466,27 +752,31 @@ function ThemeElementCard({
           showDetails={true}
         />
       </fieldset>
+      {draftError !== null ? <p className="field-error">{draftError}</p> : null}
       <div className="button-row">
-        <button type="submit" disabled={fieldsDisabled}>
-          {isBusy ? "Saving…" : "Save element"}
-        </button>
         <button
           type="button"
+          className="icon-button"
+          aria-label="Move up"
+          title="Move up"
           disabled={!canMoveEarlier || fieldsDisabled}
           onClick={(): void => {
             void handleMove(element.sort_order - 1);
           }}
         >
-          Move earlier
+          <MoveUpIcon />
         </button>
         <button
           type="button"
+          className="icon-button"
+          aria-label="Move down"
+          title="Move down"
           disabled={!canMoveLater || fieldsDisabled}
           onClick={(): void => {
             void handleMove(element.sort_order + 1);
           }}
         >
-          Move later
+          <MoveDownIcon />
         </button>
         <button
           type="button"
@@ -500,6 +790,30 @@ function ThemeElementCard({
         </button>
       </div>
     </form>
+  );
+}
+
+function MoveUpIcon(): ReactElement {
+
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M10 3.75 4.25 9.5l1.4 1.4L9 7.55V16.25h2V7.55l3.35 3.35 1.4-1.4L10 3.75Z"
+      />
+    </svg>
+  );
+}
+
+function MoveDownIcon(): ReactElement {
+
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      <path
+        fill="currentColor"
+        d="M10 16.25 15.75 10.5l-1.4-1.4L11 12.45V3.75H9v8.7L5.65 9.1l-1.4 1.4L10 16.25Z"
+      />
+    </svg>
   );
 }
 
@@ -980,6 +1294,34 @@ function previewRequestsFromElements(
   });
 
   return requests;
+}
+
+function readElementDraftError(draft: ElementDraft): string | null {
+
+  try {
+    elementRequestFromDraft(draft);
+
+    return null;
+  } catch (caughtError: unknown) {
+    const message: string = caughtError instanceof Error
+      ? caughtError.message
+      : String(caughtError);
+
+    return message;
+  }
+}
+
+function firstDraftError(draftErrors: Record<string, string>): string | null {
+
+  const messages: string[] = Object.values(draftErrors);
+
+  if (messages.length === 0) {
+    return null;
+  }
+
+  const firstMessage: string = messages[0];
+
+  return firstMessage;
 }
 
 function elementRequestFromDraft(

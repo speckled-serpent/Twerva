@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 import {
   deleteTheme,
@@ -9,7 +9,7 @@ import {
 } from "../api/client";
 import type {
   ThemeElementCreateRequest,
-  ThemePatchRequest,
+  ThemeElementReadResponse,
   ThemeReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -33,6 +33,16 @@ import {
   formatThemeTimestamp,
   themeStatusLabel,
 } from "./themeDisplay";
+import { ThemeAutosaveStatus } from "./ThemeAutosaveStatus";
+import {
+  THEME_AUTOSAVE_DELAY_MS,
+  combineAutosaveStates,
+  formatThemeAutosaveError,
+  leaveAfterAutosave,
+  type ThemeAutosaveActions,
+  type ThemeAutosaveState,
+} from "./themeAutosave";
+import { useThemeAutosave } from "./useThemeAutosave";
 
 export interface ThemesPageProps {
   statusMessage: string;
@@ -379,20 +389,65 @@ function ThemeDetailView({
   const canWrite: boolean = useCanWriteOps();
   const [editedDraft, setEditedDraft] = useState<ThemeFrameDraft | null>(null);
   const [previewReport, setPreviewReport] = useState<ThemePreviewReport | null>(null);
-  const [editedForKey, setEditedForKey] = useState<string | null>(null);
+  const [editedForThemeId, setEditedForThemeId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
-  const [isBusy, setIsBusy] = useState<boolean>(false);
   const [isDuplicating, setIsDuplicating] = useState<boolean>(false);
-  const [saveMessage, setSaveMessage] = useState<string>("");
-  const [saveMessageKey, setSaveMessageKey] = useState<string | null>(null);
-  const themeKey: string | null = themeFrameKey(selectedTheme);
+  const [elementAutosaveState, setElementAutosaveState] = useState<ThemeAutosaveState>({
+    phase: "idle",
+    message: "",
+    canRetry: false,
+  });
+  const selectedThemeRef = useRef(selectedTheme);
+  const elementActionsRef = useRef<ThemeAutosaveActions | null>(null);
+  const notedFrameIdRef = useRef<string | null>(null);
+  selectedThemeRef.current = selectedTheme;
   const frameDraft: ThemeFrameDraft | null = frameDraftForTheme(
     selectedTheme,
-    themeKey,
     editedDraft,
-    editedForKey,
+    editedForThemeId,
   );
-  const visibleSaveMessage: string = saveMessageKey === themeKey ? saveMessage : "";
+  const frameAutosave = useThemeAutosave<ThemeFrameDraft>({
+    delayMs: THEME_AUTOSAVE_DELAY_MS,
+    readiness: (nextDraft: ThemeFrameDraft) => {
+
+      if (!canWrite) {
+        return { kind: "skip" };
+      }
+
+      try {
+        themePatchFromFrameDraft(nextDraft);
+
+        return { kind: "ready" };
+      } catch (caughtError: unknown) {
+        const message: string = caughtError instanceof Error
+          ? caughtError.message
+          : String(caughtError);
+
+        return { kind: "invalid", message };
+      }
+    },
+    fingerprint: (nextDraft: ThemeFrameDraft): string => {
+      return JSON.stringify(themePatchFromFrameDraft(nextDraft));
+    },
+    save: async (nextDraft: ThemeFrameDraft): Promise<void> => {
+      const theme: ThemeReadResponse | null = selectedThemeRef.current;
+
+      if (theme === null) {
+        return;
+      }
+
+      const updatedTheme: ThemeReadResponse = await patchTheme(
+        theme.id,
+        themePatchFromFrameDraft(nextDraft),
+      );
+      onThemeSaved(updatedTheme);
+    },
+    formatError: formatThemeAutosaveError,
+  });
+  const autosaveState: ThemeAutosaveState = combineAutosaveStates([
+    frameAutosave.state,
+    elementAutosaveState,
+  ]);
   const savedPreview: ThemePreviewElementState | null = selectedTheme === null
     ? null
     : previewElementStateFromElements(selectedTheme.elements);
@@ -403,49 +458,60 @@ function ThemeDetailView({
   )
     ? previewReport
     : savedPreview;
-  const fieldsDisabled: boolean = !canWrite || isBusy || isDuplicating;
-  const duplicateDisabled: boolean = !canWrite || isBusy || isDuplicating || selectedTheme === null;
+  const fieldsDisabled: boolean = !canWrite || isDuplicating;
+  const duplicateDisabled: boolean = !canWrite || isDuplicating || selectedTheme === null;
 
   const rememberDraft = (nextDraft: ThemeFrameDraft): void => {
 
-    if (themeKey === null) {
+    if (selectedTheme === null) {
       return;
     }
 
-    setEditedForKey(themeKey);
+    setEditedForThemeId(selectedTheme.id);
     setEditedDraft(nextDraft);
     setActionError(null);
   };
 
-  const handleSaveFrame = async (formEvent: FormEvent): Promise<void> => {
+  const flushThemeEdits = async (): Promise<void> => {
 
-    formEvent.preventDefault();
+    await Promise.all([
+      frameAutosave.flush(),
+      elementActionsRef.current?.flush() ?? Promise.resolve(),
+    ]);
+  };
 
-    if (!canWrite || selectedTheme === null || frameDraft === null) {
+  const themeEditsAreDirty = (): boolean => {
+
+    return frameAutosave.isDirty() || (elementActionsRef.current?.isDirty() ?? false);
+  };
+
+  const retryAutosave = (): void => {
+    void frameAutosave.retry();
+    void elementActionsRef.current?.retry();
+  };
+
+  const selectedThemeId: string | null = selectedTheme === null ? null : selectedTheme.id;
+
+  useEffect((): void => {
+    const theme: ThemeReadResponse | null = selectedThemeRef.current;
+
+    if (!canWrite || theme === null || frameDraft === null) {
       return;
     }
 
-    setIsBusy(true);
-    setActionError(null);
-    setSaveMessage("");
-
-    try {
-      const themePatchRequest: ThemePatchRequest = themePatchFromFrameDraft(frameDraft);
-      await patchTheme(selectedTheme.id, themePatchRequest);
-      const reloadedTheme: ThemeReadResponse = await fetchThemeById(selectedTheme.id);
-      const reloadedKey: string | null = themeFrameKey(reloadedTheme);
-
-      onThemeSaved(reloadedTheme);
-      setEditedDraft(null);
-      setEditedForKey(null);
-      setSaveMessage("Frame saved.");
-      setSaveMessageKey(reloadedKey);
-    } catch (caughtError: unknown) {
-      setActionError(caughtError);
-    } finally {
-      setIsBusy(false);
+    if (notedFrameIdRef.current !== theme.id) {
+      notedFrameIdRef.current = theme.id;
+      frameAutosave.noteSaved(frameDraftFromTheme(theme));
     }
-  };
+
+    frameAutosave.schedule(frameDraft);
+  }, [
+    canWrite,
+    frameAutosave.noteSaved,
+    frameAutosave.schedule,
+    frameDraft,
+    selectedThemeId,
+  ]);
 
   const handleDuplicate = async (): Promise<void> => {
 
@@ -457,6 +523,12 @@ function ThemeDetailView({
     setActionError(null);
 
     try {
+      await flushThemeEdits();
+
+      if (themeEditsAreDirty()) {
+        return;
+      }
+
       const copiedTheme: ThemeReadResponse = await duplicateTheme(selectedTheme.id);
 
       onThemeDuplicated(copiedTheme);
@@ -467,6 +539,10 @@ function ThemeDetailView({
     }
   };
 
+  const handleBack = (): void => {
+    void leaveAfterAutosave(flushThemeEdits, themeEditsAreDirty, onBack);
+  };
+
   return (
     <section>
       <div className="page-header-row">
@@ -474,7 +550,9 @@ function ThemeDetailView({
           <h1>{selectedTheme === null ? "Theme" : selectedTheme.name}</h1>
           <p className="lede">
             Draft or Live, background, spacing, and full-width elements.
+            Edits save on their own.
           </p>
+          <ThemeAutosaveStatus state={autosaveState} onRetry={retryAutosave} />
         </div>
         <div className="button-row">
           <button
@@ -486,7 +564,7 @@ function ThemeDetailView({
           >
             {isDuplicating ? "Duplicating…" : "Duplicate"}
           </button>
-          <button type="button" onClick={onBack} disabled={isDuplicating}>
+          <button type="button" onClick={handleBack} disabled={isDuplicating}>
             Back to list
           </button>
         </div>
@@ -495,9 +573,6 @@ function ThemeDetailView({
       <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
-      {visibleSaveMessage !== "" ? (
-        <p className="status-banner">{visibleSaveMessage}</p>
-      ) : null}
 
       {selectedTheme === null || frameDraft === null ? (
         loadError === null ? <p>Loading theme…</p> : null
@@ -523,7 +598,8 @@ function ThemeDetailView({
           <form
             className="stack-form campaign-form"
             onSubmit={(formEvent: FormEvent): void => {
-              void handleSaveFrame(formEvent);
+              formEvent.preventDefault();
+              void frameAutosave.flush();
             }}
           >
             <ThemeFrameFields
@@ -531,15 +607,34 @@ function ThemeDetailView({
               onDraftChange={rememberDraft}
               disabled={fieldsDisabled}
             />
-            <div className="button-row">
-              <button type="submit" disabled={fieldsDisabled}>
-                {isBusy ? "Saving…" : "Save frame"}
-              </button>
-            </div>
           </form>
           <ThemeElementEditor
             theme={selectedTheme}
             onThemeUpdated={onThemeSaved}
+            onElementPatched={(patchedElement: ThemeElementReadResponse): void => {
+              const currentTheme: ThemeReadResponse | null = selectedThemeRef.current;
+
+              if (currentTheme === null) {
+                return;
+              }
+
+              const nextElements: ThemeElementReadResponse[] = currentTheme.elements.map(
+                (element: ThemeElementReadResponse): ThemeElementReadResponse => {
+
+                  if (element.id !== patchedElement.id) {
+                    return element;
+                  }
+
+                  return patchedElement;
+                },
+              );
+              onThemeSaved({
+                ...currentTheme,
+                elements: nextElements,
+              });
+            }}
+            onAutosaveStateChange={setElementAutosaveState}
+            autosaveActionsRef={elementActionsRef}
             onPreviewElementsChange={(
               elements: ThemeElementCreateRequest[] | null,
               draftError: string | null,
@@ -587,29 +682,17 @@ function replaceThemeInList(
   return nextThemes;
 }
 
-function themeFrameKey(theme: ThemeReadResponse | null): string | null {
-
-  if (theme === null) {
-    return null;
-  }
-
-  const frameKey: string = `${theme.id}:${theme.updated_at}`;
-
-  return frameKey;
-}
-
 function frameDraftForTheme(
   theme: ThemeReadResponse | null,
-  themeKey: string | null,
   editedDraft: ThemeFrameDraft | null,
-  editedForKey: string | null,
+  editedForThemeId: string | null,
 ): ThemeFrameDraft | null {
 
   if (theme === null) {
     return null;
   }
 
-  if (editedDraft !== null && editedForKey === themeKey) {
+  if (editedDraft !== null && editedForThemeId === theme.id) {
     return editedDraft;
   }
 
