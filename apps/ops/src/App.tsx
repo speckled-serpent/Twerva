@@ -299,7 +299,6 @@ function renderActivePage(
       <NewThemePage
         onCreated={(createdTheme: ThemeReadResponse): void => {
           onThemeStatusMessageChange(`Created theme ${createdTheme.name}.`);
-          onNavigate("themes");
         }}
         onCancel={(): void => {
           onNavigate("themes");

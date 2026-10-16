@@ -1,30 +1,50 @@
-import { useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
-import { createTheme } from "../api/client";
+import {
+  createTheme,
+  createThemeElement,
+  deleteThemeElement,
+  fetchThemeById,
+  patchTheme,
+  patchThemeElement,
+} from "../api/client";
 import type {
   AdvertisementType,
-  ThemeCreateRequest,
   ThemeElementCreateRequest,
   ThemeElementReadResponse,
-  ThemePatchRequest,
   ThemeReadResponse,
 } from "../api/types";
-import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import {
   ThemeElementEditor,
   previewElementStateFromElements,
-  themeElementCreateRequestsInBandOrder,
+  themeElementCreateRequestFromElement,
   type ThemePreviewElementState,
 } from "./ThemeElementEditor";
+import { ThemeAutosaveStatus } from "./ThemeAutosaveStatus";
 import { ThemeLivePreview } from "./ThemeLivePreview";
 import {
   ThemeFrameFields,
   emptyThemeFrameDraft,
-  themePatchFromFrameDraft,
   type ThemeFrameDraft,
 } from "./ThemeFrameFields";
+import {
+  THEME_AUTOSAVE_DELAY_MS,
+  formatThemeAutosaveError,
+  leaveAfterAutosave,
+} from "./themeAutosave";
+import {
+  emptyNewThemePersistState,
+  newThemeSnapshotFingerprint,
+  newThemeSnapshotReadiness,
+  persistNewThemeSnapshot,
+  type NewThemePersistClients,
+  type NewThemePersistState,
+  type NewThemeSnapshot,
+  type StagedElementSync,
+} from "./themeElementSync";
+import { useThemeAutosave } from "./useThemeAutosave";
 
 export interface NewThemePageProps {
   onCreated: (createdTheme: ThemeReadResponse) => void;
@@ -34,10 +54,15 @@ export interface NewThemePageProps {
 const LOCAL_THEME_ID: string = "local-create-theme";
 
 /**
- * Create Theme tab: preset the frame and elements, then save them together.
+ * Create Theme tab.
  *
- * @param props - Success and cancel navigation callbacks
- * @returns The Create Theme form
+ * Nothing is stored until the name is filled in and the frame is valid.
+ * After a short pause the theme is created, and later edits to the frame
+ * and elements save on their own. The name is fixed once that first save
+ * starts, because the theme patch API does not rename a theme.
+ *
+ * @param props - Called when the theme first exists, and when the operator leaves
+ * @returns The create form
  */
 export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactElement {
 
@@ -49,62 +74,104 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
   const [frameDraft, setFrameDraft] = useState<ThemeFrameDraft>(emptyThemeFrameDraft());
   const [localElements, setLocalElements] = useState<ThemeElementReadResponse[]>([]);
   const [previewReport, setPreviewReport] = useState<ThemePreviewElementState | null>(null);
-  const [actionError, setActionError] = useState<unknown>(null);
-  const [isBusy, setIsBusy] = useState<boolean>(false);
-  const trimmedThemeName: string = themeName.trim();
+  const [elementValidationMessage, setElementValidationMessage] = useState<string | null>(null);
+  const [persistedThemeId, setPersistedThemeId] = useState<string | null>(null);
+  const persistStateRef = useRef<NewThemePersistState>(emptyNewThemePersistState());
+  const elementValidationRef = useRef<string | null>(null);
+  const announcedRef = useRef<boolean>(false);
+  const onCreatedRef = useRef(onCreated);
+  elementValidationRef.current = elementValidationMessage;
+  onCreatedRef.current = onCreated;
   const savedPreview: ThemePreviewElementState = previewElementStateFromElements(localElements);
   const activePreview: ThemePreviewElementState = previewReport ?? savedPreview;
-  const canCreate: boolean = canWrite && !isBusy && trimmedThemeName !== "";
   const localTheme: ThemeReadResponse = localThemeRecord(localElements);
+  const autosave = useThemeAutosave<NewThemeSnapshot>({
+    delayMs: THEME_AUTOSAVE_DELAY_MS,
+    readiness: (snapshot: NewThemeSnapshot) => {
+      return newThemeSnapshotReadiness(
+        snapshot,
+        elementValidationRef.current,
+        persistStateRef.current.themeId !== null,
+      );
+    },
+    fingerprint: (snapshot: NewThemeSnapshot): string => {
+      return newThemeSnapshotFingerprint(snapshot, describeThemeElement);
+    },
+    save: async (snapshot: NewThemeSnapshot): Promise<void> => {
+      const nextState: NewThemePersistState = await persistNewThemeSnapshot(
+        snapshot,
+        persistStateRef.current,
+        themePersistClients,
+        (checkpoint: NewThemePersistState): void => {
+          persistStateRef.current = checkpoint;
 
-  const handleCreateTheme = async (formEvent: FormEvent): Promise<void> => {
+          if (checkpoint.themeId !== null) {
+            setPersistedThemeId(checkpoint.themeId);
+          }
+        },
+      );
+      persistStateRef.current = nextState;
 
-    formEvent.preventDefault();
+      if (nextState.themeId === null || announcedRef.current) {
+        return;
+      }
 
-    if (trimmedThemeName === "") {
-      setActionError(new Error("Theme name is required."));
+      announcedRef.current = true;
+      setThemeName(snapshot.name.trim());
+      onCreatedRef.current(createdThemeNotice(snapshot.name, nextState.themeId));
+    },
+    formatError: formatThemeAutosaveError,
+  });
+  const nameLocked: boolean = !canWrite
+    || persistedThemeId !== null
+    || autosave.state.phase === "saving";
 
+  useEffect((): void => {
+
+    if (!canWrite) {
       return;
     }
 
-    setIsBusy(true);
-    setActionError(null);
+    autosave.schedule({
+      name: themeName,
+      frame: frameDraft,
+      elements: localElements,
+    });
+  }, [
+    autosave.schedule,
+    canWrite,
+    elementValidationMessage,
+    frameDraft,
+    localElements,
+    themeName,
+  ]);
 
-    try {
-      const framePatch: ThemePatchRequest = themePatchFromFrameDraft(frameDraft);
-      const themeCreateRequest: ThemeCreateRequest = {
-        name: trimmedThemeName,
-        advertisement_type: advertisementType,
-        page_margin: framePatch.page_margin ?? undefined,
-        element_gap: framePatch.element_gap ?? undefined,
-        element_margin: framePatch.element_margin ?? undefined,
-        background_kind: framePatch.background_kind ?? undefined,
-        background_color: framePatch.background_color,
-        background_gradient: framePatch.background_gradient,
-        background_asset_ref: framePatch.background_asset_ref,
-        elements: themeElementCreateRequestsInBandOrder(localElements),
-      };
-      const createdTheme: ThemeReadResponse = await createTheme(themeCreateRequest);
-
-      onCreated(createdTheme);
-    } catch (caughtError: unknown) {
-      setActionError(caughtError);
-    } finally {
-      setIsBusy(false);
-    }
+  const handleBack = (): void => {
+    void leaveAfterAutosave(
+      autosave.flush,
+      autosave.isDirty,
+      onCancel,
+    );
   };
 
   return (
     <section>
       <div className="page-header-row">
         <div>
-          <h1>Create theme</h1>
+          <h1>{persistedThemeId === null ? "Create theme" : themeName.trim()}</h1>
           <p className="lede">
-            Set the name, frame, and elements, then create the theme in one save.
-            Defaults stay paper color, spacing 96 / 0 / 0, and no elements.
+            Add a name. The theme is created when you pause, then frame and
+            element edits save on their own. Defaults stay paper color, spacing
+            96 / 0 / 0, and no elements.
           </p>
+          <ThemeAutosaveStatus
+            state={autosave.state}
+            onRetry={(): void => {
+              void autosave.retry();
+            }}
+          />
         </div>
-        <button type="button" onClick={onCancel}>
+        <button type="button" onClick={handleBack}>
           Back to Themes
         </button>
       </div>
@@ -113,10 +180,10 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
       <div className="theme-editor-layout">
         <div className="theme-editor-main">
       <form
-        id="create-theme-form"
         className="stack-form campaign-form"
         onSubmit={(formEvent: FormEvent): void => {
-          void handleCreateTheme(formEvent);
+          formEvent.preventDefault();
+          void autosave.flush();
         }}
       >
         <label>
@@ -128,9 +195,16 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
               setThemeName(changeEvent.target.value);
             }}
             required
-            disabled={!canWrite || isBusy}
+            disabled={nameLocked}
           />
         </label>
+        {persistedThemeId === null ? (
+          <p className="field-hint">
+            The name is saved with the theme and stays as it is after that.
+          </p>
+        ) : (
+          <p className="field-hint">This name is saved with the theme.</p>
+        )}
 
         <label>
           Advertisement type
@@ -148,7 +222,7 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
         <ThemeFrameFields
           frameDraft={frameDraft}
           onDraftChange={setFrameDraft}
-          disabled={!canWrite || isBusy}
+          disabled={!canWrite}
         />
       </form>
 
@@ -158,6 +232,7 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
           return;
         }}
         onLocalElementsChange={setLocalElements}
+        onValidationMessageChange={setElementValidationMessage}
         onPreviewElementsChange={(
           elements: ThemeElementCreateRequest[] | null,
           draftError: string | null,
@@ -165,19 +240,6 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
           setPreviewReport({ elements, draftError });
         }}
       />
-
-      {canWrite && !isBusy && trimmedThemeName === "" ? (
-        <p className="field-hint">Add a theme name before creating.</p>
-      ) : null}
-      <ErrorBanner error={actionError} />
-      <div className="button-row">
-        <button type="submit" form="create-theme-form" disabled={!canCreate}>
-          {isBusy ? "Saving…" : "Create theme"}
-        </button>
-        <button type="button" onClick={onCancel} disabled={isBusy}>
-          Cancel
-        </button>
-      </div>
         </div>
         <ThemeLivePreview
           frameDraft={frameDraft}
@@ -187,6 +249,44 @@ export function NewThemePage({ onCreated, onCancel }: NewThemePageProps): ReactE
       </div>
     </section>
   );
+}
+
+const themePersistClients: NewThemePersistClients = {
+  describeElement: describeThemeElement,
+  createTheme,
+  patchTheme,
+  createElement: createThemeElement,
+  patchElement: patchThemeElement,
+  deleteElement: deleteThemeElement,
+  fetchTheme: fetchThemeById,
+};
+
+function describeThemeElement(element: ThemeElementReadResponse): StagedElementSync {
+
+  const request: ThemeElementCreateRequest = {
+    ...themeElementCreateRequestFromElement(element),
+    sort_order: element.sort_order,
+  };
+  const staged: StagedElementSync = {
+    localId: element.id,
+    band: element.band,
+    sortOrder: element.sort_order,
+    payloadKey: JSON.stringify(request),
+    request,
+  };
+
+  return staged;
+}
+
+function createdThemeNotice(themeName: string, themeId: string): ThemeReadResponse {
+
+  const theme: ThemeReadResponse = {
+    ...localThemeRecord([]),
+    id: themeId,
+    name: themeName.trim(),
+  };
+
+  return theme;
 }
 
 function localThemeRecord(elements: ThemeElementReadResponse[]): ThemeReadResponse {
