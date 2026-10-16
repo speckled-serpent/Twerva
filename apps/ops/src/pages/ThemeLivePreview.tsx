@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
 
-import { createThemePreview, listSourceItems } from "../api/client";
+import { createThemePreview } from "../api/client";
 import type {
-  SourceItemReadResponse,
-  ThemeElementCreateRequest,
   ThemePatchRequest,
+  ThemePreviewElementRequest,
   ThemePreviewRequest,
   ThemePreviewResponse,
   ThemeSampleResponse,
@@ -15,11 +14,22 @@ import {
   themePatchFromFrameDraft,
   type ThemeFrameDraft,
 } from "./ThemeFrameFields";
+import {
+  type ThemePreviewDraftElement,
+} from "./ThemeElementEditor";
 import { sampleBlockMessage } from "./themeSampleMessage";
+import {
+  PREVIEW_WORD_COUNT_MAX,
+  PREVIEW_WORD_COUNT_MIN,
+  loremIpsumWords,
+  previewWordCountFromInput,
+  textElementsInFrameOrder,
+  wordCountForElement,
+} from "./themePreviewText";
 
 export interface ThemeLivePreviewProps {
   frameDraft: ThemeFrameDraft;
-  elements: ThemeElementCreateRequest[] | null;
+  elements: ThemePreviewDraftElement[] | null;
   draftError: string | null;
 }
 
@@ -33,8 +43,9 @@ const PREVIEW_REFRESH_DELAY_MS: number = 450;
 /**
  * One carousel frame from the form as it stands, including unsaved edits.
  *
- * Refresh runs on the button and again 450ms after the form or source
- * changes. Nothing is saved, queued, or published.
+ * Each text element has a word count. The preview draws that many lorem
+ * ipsum words. Counts stay in this panel and are not saved. Refresh runs
+ * on the button and again 450ms after the form or a count changes.
  *
  * @param props - Current frame draft, element payload, and a client draft error
  * @returns The preview panel beside the form
@@ -45,65 +56,13 @@ export function ThemeLivePreview({
   draftError,
 }: ThemeLivePreviewProps): ReactElement {
 
-  const [sourceItems, setSourceItems] = useState<SourceItemReadResponse[]>([]);
-  const [sourceItemId, setSourceItemId] = useState<string>("");
-  const [loadError, setLoadError] = useState<unknown>(null);
+  const [wordCounts, setWordCounts] = useState<Record<string, number>>({});
   const [actionError, setActionError] = useState<unknown>(null);
-  const [sourcesReady, setSourcesReady] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [preview, setPreview] = useState<LivePreviewImage | null>(null);
   const requestSerialRef = useRef<number>(0);
   const previewRef = useRef<LivePreviewImage | null>(null);
   previewRef.current = preview;
-
-  useEffect((): (() => void) => {
-    let isCancelled: boolean = false;
-
-    const loadSources = async (): Promise<void> => {
-
-      try {
-        const loadedItems: SourceItemReadResponse[] = await listSourceItems();
-
-        if (isCancelled) {
-          return;
-        }
-
-        const spotmuItems: SourceItemReadResponse[] = spotmuSourceItems(loadedItems);
-        setSourceItems(spotmuItems);
-        setSourceItemId((currentId: string): string => {
-
-          if (currentId !== "") {
-            return currentId;
-          }
-
-          const firstItem: SourceItemReadResponse | undefined = spotmuItems[0];
-
-          if (firstItem === undefined) {
-            return "";
-          }
-
-          return firstItem.id;
-        });
-        setLoadError(null);
-      } catch (caughtError: unknown) {
-        if (isCancelled) {
-          return;
-        }
-
-        setLoadError(caughtError);
-      } finally {
-        if (!isCancelled) {
-          setSourcesReady(true);
-        }
-      }
-    };
-
-    void loadSources();
-
-    return (): void => {
-      isCancelled = true;
-    };
-  }, []);
 
   useEffect((): (() => void) => {
 
@@ -116,9 +75,13 @@ export function ThemeLivePreview({
     };
   }, []);
 
+  const textElements: ThemePreviewDraftElement[] = elements === null
+    ? []
+    : textElementsInFrameOrder(elements);
+
   const refreshPreview = async (): Promise<void> => {
 
-    if (sourceItemId === "" || elements === null || visibleDraftError !== null) {
+    if (elements === null || visibleDraftError !== null) {
       return;
     }
 
@@ -132,7 +95,7 @@ export function ThemeLivePreview({
       const previewRequest: ThemePreviewRequest = previewRequestFromDraft(
         frameDraft,
         elements,
-        sourceItemId,
+        wordCounts,
       );
       const previewResponse: ThemePreviewResponse = await createThemePreview(previewRequest);
 
@@ -173,11 +136,16 @@ export function ThemeLivePreview({
 
   const frameError: string | null = frameDraftError(frameDraft);
   const visibleDraftError: string | null = draftError ?? frameError;
-  const payloadKey: string = previewPayloadKey(frameDraft, elements, visibleDraftError);
+  const payloadKey: string = previewPayloadKey(
+    frameDraft,
+    elements,
+    visibleDraftError,
+    wordCounts,
+  );
 
   useEffect((): (() => void) => {
 
-    if (!sourcesReady || sourceItemId === "" || elements === null || visibleDraftError !== null) {
+    if (elements === null || visibleDraftError !== null) {
       return (): void => {
         return;
       };
@@ -190,7 +158,26 @@ export function ThemeLivePreview({
     return (): void => {
       window.clearTimeout(refreshHandle);
     };
-  }, [payloadKey, sourceItemId, sourcesReady]);
+  }, [payloadKey]);
+
+  const rememberWordCount = (elementId: string, rawValue: string): void => {
+
+    const parsedCount: number | null = previewWordCountFromInput(rawValue);
+
+    setWordCounts((currentCounts: Record<string, number>): Record<string, number> => {
+
+      if (parsedCount === null) {
+        return { ...currentCounts };
+      }
+
+      const nextCounts: Record<string, number> = {
+        ...currentCounts,
+        [elementId]: parsedCount,
+      };
+
+      return nextCounts;
+    });
+  };
 
   const blockMessage: string | null = (
     visibleDraftError === null
@@ -200,9 +187,7 @@ export function ThemeLivePreview({
     ? sampleBlockMessage(preview.sample)
     : null;
   const refreshDisabled: boolean = (
-    !sourcesReady
-    || sourceItemId === ""
-    || elements === null
+    elements === null
     || visibleDraftError !== null
     || isRefreshing
   );
@@ -211,10 +196,10 @@ export function ThemeLivePreview({
     <aside className="theme-live-preview summary-block" id="theme-live-preview">
       <h2>Preview</h2>
       <p className="field-hint">
-        One Spotmu source, one frame, from the form as it is now. Refresh
-        follows edits. This does not save the theme, queue, schedule, or publish.
+        One frame from the form as it is now. Word counts choose lorem
+        ipsum so you can judge appearance. Refresh follows edits. This
+        does not save the theme, queue, schedule, or publish.
       </p>
-      <ErrorBanner error={loadError} />
       <ErrorBanner error={actionError} />
       {visibleDraftError !== null ? (
         <p className="error-banner" role="alert">{visibleDraftError}</p>
@@ -222,26 +207,35 @@ export function ThemeLivePreview({
       {blockMessage !== null ? (
         <p className="error-banner" role="alert">{blockMessage}</p>
       ) : null}
-      <label htmlFor="theme-live-preview-source">
-        Spotmu source
-      </label>
-      <select
-        id="theme-live-preview-source"
-        value={sourceItemId}
-        disabled={!sourcesReady || isRefreshing}
-        onChange={(changeEvent): void => {
-          setSourceItemId(changeEvent.target.value);
-        }}
-      >
-        <option value="">Choose a Spotmu source</option>
-        {sourceItems.map((sourceItem: SourceItemReadResponse): ReactElement => (
-          <option key={sourceItem.id} value={sourceItem.id}>
-            {sourceItem.title}
-          </option>
-        ))}
-      </select>
-      {sourcesReady && sourceItems.length === 0 ? (
-        <p className="empty-hint">No Spotmu source items yet.</p>
+      {textElements.length > 0 ? (
+        <div className="preview-word-counts" role="group" aria-label="Preview word counts">
+          {textElements.map((element: ThemePreviewDraftElement): ReactElement => {
+            const inputId: string = `theme-preview-words-${element.element_id}`;
+            const wordCount: number = wordCountForElement(wordCounts, element.element_id);
+
+            return (
+              <label key={element.element_id} htmlFor={inputId}>
+                <span className="toolbar-caption">{element.name}</span>
+                <input
+                  id={inputId}
+                  type="number"
+                  min={PREVIEW_WORD_COUNT_MIN}
+                  max={PREVIEW_WORD_COUNT_MAX}
+                  step={1}
+                  inputMode="numeric"
+                  value={wordCount}
+                  aria-label={`${element.name} word count`}
+                  onChange={(changeEvent): void => {
+                    rememberWordCount(element.element_id, changeEvent.target.value);
+                  }}
+                  onBlur={(blurEvent): void => {
+                    rememberWordCount(element.element_id, blurEvent.target.value);
+                  }}
+                />
+              </label>
+            );
+          })}
+        </div>
       ) : null}
       <div className="button-row">
         <button
@@ -256,11 +250,7 @@ export function ThemeLivePreview({
         </button>
       </div>
       {preview === null ? (
-        <p className="empty-hint">
-          {elements === null
-            ? "Preparing preview…"
-            : "No preview yet. Choose a Spotmu source."}
-        </p>
+        <p className="empty-hint">Preparing preview…</p>
       ) : (
         <figure
           id="theme-live-preview-figure"
@@ -280,13 +270,18 @@ export function ThemeLivePreview({
 
 function previewRequestFromDraft(
   frameDraft: ThemeFrameDraft,
-  elements: ThemeElementCreateRequest[],
-  sourceItemId: string,
+  elements: ThemePreviewDraftElement[],
+  wordCounts: Record<string, number>,
 ): ThemePreviewRequest {
 
   const framePatch: ThemePatchRequest = themePatchFromFrameDraft(frameDraft);
+  const previewElements: ThemePreviewElementRequest[] = elements.map(
+    (element: ThemePreviewDraftElement): ThemePreviewElementRequest => {
+
+      return previewElementRequest(element, wordCounts);
+    },
+  );
   const previewRequest: ThemePreviewRequest = {
-    source_item_id: sourceItemId,
     page_margin: framePatch.page_margin ?? 96,
     element_gap: framePatch.element_gap ?? 0,
     element_margin: framePatch.element_margin ?? 0,
@@ -294,22 +289,67 @@ function previewRequestFromDraft(
     background_color: framePatch.background_color,
     background_gradient: framePatch.background_gradient,
     background_asset_ref: framePatch.background_asset_ref,
-    elements,
+    elements: previewElements,
   };
 
   return previewRequest;
 }
 
+function previewElementRequest(
+  element: ThemePreviewDraftElement,
+  wordCounts: Record<string, number>,
+): ThemePreviewElementRequest {
+
+  const previewText: string | null = element.content_kind === "text"
+    ? loremIpsumWords(wordCountForElement(wordCounts, element.element_id))
+    : null;
+  const previewElement: ThemePreviewElementRequest = {
+    name: element.name,
+    band: element.band,
+    content_kind: element.content_kind,
+    sort_order: element.sort_order,
+    rectangle_color: element.rectangle_color,
+    rectangle_opacity: element.rectangle_opacity,
+    rectangle_radius: element.rectangle_radius,
+    text_source: element.text_source,
+    font_family: element.font_family,
+    font_size: element.font_size,
+    font_color: element.font_color,
+    bold: element.bold,
+    italic: element.italic,
+    underline: element.underline,
+    strikethrough: element.strikethrough,
+    font_weight: element.font_weight,
+    alignment: element.alignment,
+    image_asset_ref: element.image_asset_ref,
+    preview_text: previewText,
+  };
+
+  return previewElement;
+}
+
 function previewPayloadKey(
   frameDraft: ThemeFrameDraft,
-  elements: ThemeElementCreateRequest[] | null,
+  elements: ThemePreviewDraftElement[] | null,
   draftError: string | null,
+  wordCounts: Record<string, number>,
 ): string {
+
+  const counts: Record<string, number> = {};
+
+  if (elements !== null) {
+    const textElements: ThemePreviewDraftElement[] = textElementsInFrameOrder(elements);
+
+    textElements.forEach((element: ThemePreviewDraftElement): void => {
+      counts[element.element_id] = wordCountForElement(wordCounts, element.element_id);
+    });
+  }
 
   const payloadKey: string = JSON.stringify({
     frameDraft,
     elements,
     draftError,
+    counts,
   });
 
   return payloadKey;
@@ -329,19 +369,4 @@ function objectUrlFromPngBase64(imagePngBase64: string): string {
   const imageUrl: string = URL.createObjectURL(imageBlob);
 
   return imageUrl;
-}
-
-function spotmuSourceItems(sourceItems: SourceItemReadResponse[]): SourceItemReadResponse[] {
-
-  const spotmuItems: SourceItemReadResponse[] = sourceItems.filter(
-    (sourceItem: SourceItemReadResponse): boolean => sourceItem.source_type === "spotmu_interest",
-  );
-  const orderedItems: SourceItemReadResponse[] = [...spotmuItems].sort(
-    (left: SourceItemReadResponse, right: SourceItemReadResponse): number => {
-
-      return left.title.localeCompare(right.title);
-    },
-  );
-
-  return orderedItems;
 }

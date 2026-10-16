@@ -296,7 +296,9 @@ payload for its kind. A validation error stores no row.
 `DELETE /api/v1/themes/{id}` removes the theme and its elements.
 Another table that referenced the theme would block the delete.
 `POST /api/v1/themes/preview` renders one 1080 frame from a frame and
-element payload and returns the PNG inline. It does not insert a theme,
+element payload and returns the PNG inline. Text elements draw
+`preview_text` when that field is set. The string is not stored. The
+request does not take a source item. It does not insert a theme,
 artifact, or post job, and it does not write a preview file. Readers
 may call it. `POST /api/v1/themes/{id}/samples` still renders a saved
 theme and writes a preview file; that route stays admin-only.

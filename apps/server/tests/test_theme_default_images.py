@@ -12,7 +12,7 @@ from PIL import Image
 
 from app.api.v1.schemas import ThemeElementCreateRequest, ThemePreviewRequest
 from app.api.v1.themes import themes_router
-from app.models import BackgroundKind, SourceType
+from app.models import BackgroundKind
 from app.models.enums import ThemeElementBand, ThemeElementContentKind
 from app.storage.artifacts import ArtifactAssetPathEscapeError
 from app.themes.default_images import (
@@ -28,8 +28,6 @@ from app.themes.default_images import (
 from tests.test_theme_preview import (
     _decoded_image,
     _preview,
-    _source_item,
-    _PreviewMemorySession,
 )
 
 
@@ -112,25 +110,20 @@ class ThemeDefaultImageTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as storage_directory:
             storage: Path = Path(storage_directory)
-            source_item = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             preview_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.PICTURE,
                 background_asset_ref=stored_ref,
             )
 
-            first_response = _preview(preview_request, session, storage)
-            second_response = _preview(preview_request, session, storage)
+            first_response = _preview(preview_request, storage)
+            second_response = _preview(preview_request, storage)
             first_image: Image.Image = _decoded_image(first_response)
             missing_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.PICTURE,
                 background_asset_ref="backgrounds/missing.png",
             )
-            missing_response = _preview(missing_request, session, storage)
+            missing_response = _preview(missing_request, storage)
             image_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 elements=[
                     ThemeElementCreateRequest(
                         name="Image",
@@ -140,7 +133,7 @@ class ThemeDefaultImageTests(unittest.TestCase):
                     ),
                 ],
             )
-            image_response = _preview(image_request, session, storage)
+            image_response = _preview(image_request, storage)
 
             self.assertFalse(first_response.blocked)
             self.assertIsNone(first_response.block_reason)
@@ -161,25 +154,20 @@ class ThemeDefaultImageTests(unittest.TestCase):
             storage: Path = Path(storage_directory)
             _write_solid_jpeg(storage / album_path, (220, 20, 20))
             _write_solid_jpeg(storage / other_path, (20, 20, 220))
-            source_item = _source_item(SourceType.SPOTMU_INTEREST)
-            session: _PreviewMemorySession = _PreviewMemorySession(source_item)
             album_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.PICTURE,
                 background_asset_ref=album_path,
             )
 
-            first_response = _preview(album_request, session, storage)
-            second_response = _preview(album_request, session, storage)
+            first_response = _preview(album_request, storage)
+            second_response = _preview(album_request, storage)
             first_image: Image.Image = _decoded_image(first_response)
             other_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 background_kind=BackgroundKind.PICTURE,
                 background_asset_ref=other_path,
             )
-            other_response = _preview(other_request, session, storage)
+            other_response = _preview(other_request, storage)
             element_request: ThemePreviewRequest = ThemePreviewRequest(
-                source_item_id=source_item.id,
                 elements=[
                     ThemeElementCreateRequest(
                         name="Image",
@@ -189,7 +177,7 @@ class ThemeDefaultImageTests(unittest.TestCase):
                     ),
                 ],
             )
-            element_response = _preview(element_request, session, storage)
+            element_response = _preview(element_request, storage)
             red_pixel: tuple[int, ...] = first_image.getpixel((540, 960))
 
             self.assertFalse(first_response.blocked)

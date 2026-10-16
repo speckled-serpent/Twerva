@@ -606,7 +606,7 @@ export async function duplicateTheme(themeId: string): Promise<ThemeReadResponse
 /**
  * Render one frame from the form payload. Does not save a theme.
  *
- * @param themePreviewRequest - Source, frame, and elements as they stand
+ * @param themePreviewRequest - Frame, elements, and preview text as they stand
  * @returns The PNG and any block reason
  */
 /**

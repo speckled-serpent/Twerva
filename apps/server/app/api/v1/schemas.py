@@ -427,16 +427,27 @@ class ThemeFontFamiliesResponse(BaseModel):
     fallback_name: str
 
 
+class ThemePreviewElementRequest(ThemeElementCreateRequest):
+    """One element on a stateless preview.
+
+    ``preview_text`` is drawn for a text element and is not stored.
+    Image elements ignore it. Create and patch bodies do not accept
+    this field.
+    """
+
+    preview_text: str | None = None
+
+
 class ThemePreviewRequest(BaseModel):
     """Body for `POST /api/v1/themes/preview`.
 
     Frame fields and elements are the form as it stands, including a
     theme that has not been saved. Omitted frame fields use the create
-    defaults. The handler does not insert a theme, an artifact, or a
-    post job.
+    defaults. Text uses ``preview_text`` on each element. The handler
+    does not insert a theme, an artifact, or a post job, and it does
+    not read a source item.
     """
 
-    source_item_id: uuid.UUID
     status: ThemeStatus = ThemeStatus.DRAFT
     page_margin: int = DEFAULT_PAGE_MARGIN
     element_gap: int = DEFAULT_ELEMENT_GAP
@@ -445,7 +456,39 @@ class ThemePreviewRequest(BaseModel):
     background_color: str | None = DEFAULT_BACKGROUND_COLOR
     background_gradient: ThemeGradient | None = None
     background_asset_ref: str | None = None
-    elements: list[ThemeElementCreateRequest] = Field(default_factory=list)
+    elements: list[ThemePreviewElementRequest] = Field(default_factory=list)
+
+    @field_validator("elements", mode="before")
+    @classmethod
+    def coerce_preview_elements(cls, elements: object) -> object:
+        """Accept a stored element body as well as a preview element.
+
+        Callers that already built ``ThemeElementCreateRequest`` do not
+        carry ``preview_text``. Dump those models so validation can add
+        the default. A preview element and a raw dict pass through.
+        """
+
+        if not isinstance(elements, list):
+
+            return elements
+
+        normalized_elements: list[object] = []
+
+        for element in elements:
+
+            if isinstance(element, ThemePreviewElementRequest):
+                normalized_elements.append(element)
+
+                continue
+
+            if isinstance(element, BaseModel):
+                normalized_elements.append(element.model_dump())
+
+                continue
+
+            normalized_elements.append(element)
+
+        return normalized_elements
 
 
 class ThemePreviewResponse(BaseModel):

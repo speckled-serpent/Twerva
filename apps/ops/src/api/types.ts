@@ -433,8 +433,11 @@ export interface ThemeSampleResponse {
   overlaps: ThemeSampleOverlap[];
 }
 
+export interface ThemePreviewElementRequest extends ThemeElementCreateRequest {
+  preview_text?: string | null;
+}
+
 export interface ThemePreviewRequest {
-  source_item_id: string;
   status?: ThemeStatus;
   page_margin?: number;
   element_gap?: number;
@@ -443,7 +446,7 @@ export interface ThemePreviewRequest {
   background_color?: string | null;
   background_gradient?: ThemeGradient | null;
   background_asset_ref?: string | null;
-  elements?: ThemeElementCreateRequest[];
+  elements?: ThemePreviewElementRequest[];
 }
 
 export interface ThemePreviewResponse {

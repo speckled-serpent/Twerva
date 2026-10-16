@@ -44,7 +44,7 @@ export interface ThemeElementEditorProps {
   onThemeUpdated: (updatedTheme: ThemeReadResponse) => void;
   onLocalElementsChange?: (nextElements: ThemeElementReadResponse[]) => void;
   onPreviewElementsChange?: (
-    elements: ThemeElementCreateRequest[] | null,
+    elements: ThemePreviewDraftElement[] | null,
     draftError: string | null,
   ) => void;
   onElementPatched?: (element: ThemeElementReadResponse) => void;
@@ -398,7 +398,7 @@ export function ThemeElementEditor({
     }
 
     try {
-      const requests: ThemeElementCreateRequest[] = previewRequestsFromElements(
+      const requests: ThemePreviewDraftElement[] = previewRequestsFromElements(
         theme.elements,
         cardDrafts,
       );
@@ -1349,8 +1349,12 @@ export function themeElementCreateRequestsInBandOrder(
   return requests;
 }
 
+export interface ThemePreviewDraftElement extends ThemeElementCreateRequest {
+  element_id: string;
+}
+
 export interface ThemePreviewElementState {
-  elements: ThemeElementCreateRequest[] | null;
+  elements: ThemePreviewDraftElement[] | null;
   draftError: string | null;
 }
 
@@ -1368,7 +1372,7 @@ export function previewElementStateFromElements(
 ): ThemePreviewElementState {
 
   try {
-    const requests: ThemeElementCreateRequest[] = previewRequestsFromElements(elements, {});
+    const requests: ThemePreviewDraftElement[] = previewRequestsFromElements(elements, {});
     const previewState: ThemePreviewElementState = {
       elements: requests,
       draftError: null,
@@ -1391,10 +1395,10 @@ export function previewElementStateFromElements(
 function previewRequestsFromElements(
   elements: ThemeElementReadResponse[],
   cardDrafts: Record<string, ElementDraft>,
-): ThemeElementCreateRequest[] {
+): ThemePreviewDraftElement[] {
 
   const bandOrder: ThemeElementBand[] = ["top", "middle", "bottom"];
-  const requests: ThemeElementCreateRequest[] = [];
+  const requests: ThemePreviewDraftElement[] = [];
 
   bandOrder.forEach((band: ThemeElementBand): void => {
     const members: ThemeElementReadResponse[] = elements.filter(
@@ -1419,8 +1423,12 @@ function previewRequestsFromElements(
 
     orderedMembers.forEach((element: ThemeElementReadResponse, index: number): void => {
       const draft: ElementDraft = cardDrafts[element.id] ?? draftFromElement(element);
-      const request: ThemeElementCreateRequest = elementRequestFromDraft(draft);
-      request.sort_order = index;
+      const draftedRequest: ThemeElementCreateRequest = elementRequestFromDraft(draft);
+      const request: ThemePreviewDraftElement = {
+        ...draftedRequest,
+        element_id: element.id,
+        sort_order: index,
+      };
       requests.push(request);
     });
   });
