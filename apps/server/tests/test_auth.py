@@ -826,6 +826,29 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(clear_album_response.status_code, 403)
         self.assertIn("read-only", clear_album_response.json()["detail"].lower())
 
+        attach_research_response = self.test_client.post(
+            f"/api/v1/carousels/{uuid.uuid4()}/research",
+            json={"research_item_id": str(uuid.uuid4())},
+        )
+
+        self.assertEqual(attach_research_response.status_code, 403)
+        self.assertIn("read-only", attach_research_response.json()["detail"].lower())
+
+        reorder_research_response = self.test_client.put(
+            f"/api/v1/carousels/{uuid.uuid4()}/research",
+            json={"research_item_ids": [str(uuid.uuid4())]},
+        )
+
+        self.assertEqual(reorder_research_response.status_code, 403)
+        self.assertIn("read-only", reorder_research_response.json()["detail"].lower())
+
+        remove_research_response = self.test_client.delete(
+            f"/api/v1/carousels/{uuid.uuid4()}/research/{uuid.uuid4()}",
+        )
+
+        self.assertEqual(remove_research_response.status_code, 403)
+        self.assertIn("read-only", remove_research_response.json()["detail"].lower())
+
         upload_image_response = self.test_client.post(
             f"/api/v1/carousels/{uuid.uuid4()}/slides/{uuid.uuid4()}/images",
             data={"license": "cc0", "carousel": "https://example.com/photo"},

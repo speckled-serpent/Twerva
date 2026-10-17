@@ -33,7 +33,8 @@ from app.api.v1.carousel_writes import (
 )
 from app.api.v1.carousels import get_carousel
 from app.models.album import Album, AlbumImage
-from app.models.carousel import Carousel, Slide
+from app.models.carousel import Carousel, CarouselResearchItem, Slide
+from app.models.research_item import ResearchItem
 from app.models.enums import (
     AdvertisementType,
     BackgroundKind,
@@ -71,6 +72,7 @@ class _MemoryCarouselSession:
     def __init__(self) -> None:
         self.carousels: list[Carousel] = []
         self.albums: list[Album] = []
+        self.research_items: list[ResearchItem] = []
         self.deleted: list[object] = []
         self.commit_count: int = 0
         self.skeleton: Skeleton = Skeleton(
@@ -96,8 +98,21 @@ class _MemoryCarouselSession:
         if isinstance(row, Album) and row not in self.albums:
             self.albums.append(row)
 
+        if isinstance(row, ResearchItem) and row not in self.research_items:
+            self.research_items.append(row)
+
     def delete(self, row: object) -> None:
         self.deleted.append(row)
+
+        if isinstance(row, ResearchItem):
+            self.research_items = [
+                research_item
+                for research_item in self.research_items
+                if research_item.id != row.id
+            ]
+
+        if isinstance(row, CarouselResearchItem):
+            self._remove_research_link(row)
 
     def flush(self) -> None:
         return
@@ -133,16 +148,27 @@ class _MemoryCarouselSession:
         if model is AlbumImage:
             return self._find_image(row_id)
 
+        if model is ResearchItem:
+            return self._find_research_item(row_id)
+
         return None
 
     def scalars(self, statement: object) -> _ScalarResult:
         sql: str = str(statement)
+
+        if "carousel_research_items" in sql:
+            return _ScalarResult(self._research_links_for_statement(statement))
 
         if "carousels.slug" in sql:
             return _ScalarResult([carousel.slug for carousel in self.carousels])
 
         if "albums.slug" in sql:
             return _ScalarResult([album.slug for album in self.albums])
+
+        if "research_items.slug" in sql and "research_items.title" not in sql:
+            return _ScalarResult([
+                research_item.slug for research_item in self.research_items
+            ])
 
         if "slides.position" in sql:
             positions: list[int] = []
@@ -185,6 +211,42 @@ class _MemoryCarouselSession:
 
         return None
 
+    def _find_research_item(self, research_item_id: uuid.UUID) -> ResearchItem | None:
+        for research_item in self.research_items:
+            if research_item.id == research_item_id:
+                return research_item
+
+        return None
+
+    def _research_links_for_statement(self, statement: object) -> list[CarouselResearchItem]:
+        links: list[CarouselResearchItem] = []
+
+        for carousel in self.carousels:
+            links.extend(list(carousel.research_links))
+
+        research_item_id: uuid.UUID | None = _bound_research_item_id(statement)
+
+        if research_item_id is None:
+            return links
+
+        matching_links: list[CarouselResearchItem] = [
+            link for link in links if link.research_item_id == research_item_id
+        ]
+
+        return matching_links
+
+    def _remove_research_link(self, link: CarouselResearchItem) -> None:
+        carousel: Carousel | None = self._find_source(link.carousel_id)
+
+        if carousel is None:
+            return
+
+        carousel.research_links = [
+            stored
+            for stored in list(carousel.research_links)
+            if stored.id != link.id
+        ]
+
     def _find_image(self, image_id: uuid.UUID) -> AlbumImage | None:
         for album in self.albums:
             for image in list(album.images):
@@ -198,6 +260,20 @@ class _MemoryCarouselSession:
                         return image
 
         return None
+
+
+def _bound_research_item_id(statement: object) -> uuid.UUID | None:
+    """Return the research item id bound on a link query, when there is one."""
+
+    whereclause: object = getattr(statement, "whereclause", None)
+    right: object = getattr(whereclause, "right", None)
+    value: object = getattr(right, "value", None)
+
+    if isinstance(value, uuid.UUID):
+
+        return value
+
+    return None
 
 
 class AlbumAndSlideWriteTests(unittest.TestCase):

@@ -222,6 +222,14 @@ class CarouselReadApiTests(unittest.TestCase):
             methods_by_path["/carousels/{carousel_id}/album"],
             {"PUT", "POST", "DELETE"},
         )
+        self.assertEqual(
+            methods_by_path["/carousels/{carousel_id}/research"],
+            {"POST", "PUT"},
+        )
+        self.assertEqual(
+            methods_by_path["/carousels/{carousel_id}/research/{research_item_id}"],
+            {"DELETE"},
+        )
         self.assertIn("POST", methods_by_path["/carousels/{carousel_id}/slides"])
         self.assertTrue(
             {"PATCH", "DELETE"}.issubset(

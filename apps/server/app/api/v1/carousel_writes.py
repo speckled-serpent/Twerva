@@ -1,8 +1,9 @@
-"""Create, rename, change the open step, attach one album, and delete.
+"""Create, rename, change the open step, attach one album, attach research, and delete.
 
 No new image bytes on the slide routes. The skeleton stays the one
 chosen at create. Slide upload still creates an album when the
-carousel does not have one.
+carousel does not have one. Research is an ordered list and does not
+gate a step.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from app.api.v1.schemas import (
     CarouselAlbumAttachRequest,
     CarouselAlbumCreateRequest,
     CarouselCreateRequest,
+    CarouselResearchAttachRequest,
+    CarouselResearchOrderRequest,
     CarouselPatchRequest,
     CarouselReadResponse,
     CarouselStepPatchRequest,
@@ -40,10 +43,12 @@ from app.models.carousel import (
     CAROUSEL_EDITOR_STEP_DEFAULT,
     CAROUSEL_GENERATION_NUMBER_DEFAULT,
     Carousel,
+    CarouselResearchItem,
     Slide,
     SlideElementText,
     SlideExclusion,
 )
+from app.models.research_item import ResearchItem
 from app.models.enums import SlideImageMediaType, SlideTextStatus
 from app.models.skeleton import Skeleton
 from app.models.ops_user import OpsUser
@@ -83,10 +88,13 @@ IMAGE_MEDIA_TYPES: dict[SlideImageMediaType, str] = {
     SlideImageMediaType.SVG: "image/svg+xml",
 }
 CAROUSEL_SLUG_CONFLICT_DETAIL: str = "A carousel with that name already exists."
+DUPLICATE_RESEARCH_DETAIL: str = "Each research item is stored once."
+ALREADY_ATTACHED_RESEARCH_DETAIL: str = "That research item is already attached."
+RESEARCH_NOT_ATTACHED_DETAIL: str = "That research item is not attached."
 
 
 def register_source_write_routes(carousels_router: APIRouter) -> None:
-    """Attach album and slide writes, plus the packaged image stream."""
+    """Attach album, research, and slide writes, plus the packaged image stream."""
 
     carousels_router.add_api_route(
         "",
@@ -123,6 +131,24 @@ def register_source_write_routes(carousels_router: APIRouter) -> None:
     carousels_router.add_api_route(
         "/{carousel_id}/album",
         delete_carousel_album,
+        methods=["DELETE"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/research",
+        post_carousel_research,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/research",
+        put_carousel_research,
+        methods=["PUT"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/research/{research_item_id}",
+        delete_carousel_research,
         methods=["DELETE"],
         response_model=CarouselReadResponse,
     )
@@ -393,6 +419,168 @@ def delete_carousel_album(
         our_database_session.refresh(found_source)
 
     return _read_carousel(found_source, our_database_session)
+
+
+def post_carousel_research(
+    carousel_id: uuid.UUID,
+    research_attach_request: CarouselResearchAttachRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Append one research document at the next position.
+
+    Readers cannot call this. An unknown document is 404. A document
+    that is already attached is 400 and the stored order stays. The
+    research row is not created here. Research does not change the
+    derived step state. The response lists research in position order.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_item: ResearchItem = _fetch_research_or_raise(
+        research_attach_request.research_item_id,
+        our_database_session,
+    )
+    _reject_when_research_already_attached(found_source, found_item.id)
+    _append_research_link(found_source, found_item, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Research could not be attached.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def put_carousel_research(
+    carousel_id: uuid.UUID,
+    research_order_request: CarouselResearchOrderRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Replace the attached research and its order.
+
+    Readers cannot call this. The same id twice is 400 and nothing is
+    written. An unknown document is 404 and nothing is written. An
+    empty list clears every link and leaves the research rows.
+    Documents left off the list are detached. Research does not change
+    the derived step state. The response lists research in position
+    order.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    ordered_ids: list[uuid.UUID] = list(research_order_request.research_item_ids)
+    _require_unique_research_ids(ordered_ids)
+    ordered_items: list[ResearchItem] = _research_items_in_order(
+        ordered_ids,
+        our_database_session,
+    )
+    _replace_research_links(found_source, ordered_items, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Research order could not be saved.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def delete_carousel_research(
+    carousel_id: uuid.UUID,
+    research_item_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Drop one research link. The document stays in the library.
+
+    Readers cannot call this. An unknown document is 404. A document
+    that is not attached is 404 and the stored order stays. The
+    remaining links close up to positions 0, 1, 2, and so on. Research
+    does not change the derived step state.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_item: ResearchItem = _fetch_research_or_raise(
+        research_item_id,
+        our_database_session,
+    )
+    found_link: CarouselResearchItem | None = _attached_research_link(
+        found_source,
+        found_item.id,
+    )
+
+    if found_link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=RESEARCH_NOT_ATTACHED_DETAIL,
+        )
+
+    _drop_research_link(found_source, found_link, our_database_session)
+    _close_research_positions(found_source, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Research could not be detached.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def detach_research_item_links(
+    research_item_id: uuid.UUID,
+    our_database_session: Session,
+) -> None:
+    """Drop this document from every carousel. The caller commits.
+
+    The carousel rows stay. Other documents on those carousels stay,
+    and their positions close up. Deleting the document itself is the
+    caller's next step. A document with no links changes nothing.
+
+    Args:
+        research_item_id: The document being deleted.
+        our_database_session: Open session. Not committed here.
+    """
+
+    links: list[CarouselResearchItem] = list(
+        our_database_session.scalars(
+            select(CarouselResearchItem).where(
+                CarouselResearchItem.research_item_id == research_item_id,
+            ),
+        ).all(),
+    )
+    affected_carousels: list[Carousel] = []
+    seen_carousel_ids: set[uuid.UUID] = set()
+
+    for link in links:
+        found_source: Carousel | None = link.carousel
+
+        if found_source is None:
+            found_source = our_database_session.get(Carousel, link.carousel_id)
+
+        if found_source is None:
+            our_database_session.delete(link)
+
+            continue
+
+        _drop_research_link(found_source, link, our_database_session)
+
+        if found_source.id not in seen_carousel_ids:
+            seen_carousel_ids.add(found_source.id)
+            affected_carousels.append(found_source)
+
+    for found_source in affected_carousels:
+        _close_research_positions(found_source, our_database_session)
 
 
 def delete_carousel(
@@ -809,6 +997,224 @@ def _read_carousel(
     carousel_response: CarouselReadResponse = serialize_carousel(carousel, found_skeleton)
 
     return carousel_response
+
+
+def _fetch_research_or_raise(
+    research_item_id: uuid.UUID,
+    our_database_session: Session,
+) -> ResearchItem:
+    """Return a research document, or 404. Same detail as the research routes."""
+
+    from app.api.v1.research import _fetch_research_or_raise as fetch_research_or_raise
+
+    found_item: ResearchItem = fetch_research_or_raise(
+        research_item_id,
+        our_database_session,
+    )
+
+    return found_item
+
+
+def _research_items_in_order(
+    research_item_ids: list[uuid.UUID],
+    our_database_session: Session,
+) -> list[ResearchItem]:
+    """Return the documents in request order. An unknown id writes nothing."""
+
+    ordered_items: list[ResearchItem] = []
+
+    for research_item_id in research_item_ids:
+        found_item: ResearchItem = _fetch_research_or_raise(
+            research_item_id,
+            our_database_session,
+        )
+        ordered_items.append(found_item)
+
+    return ordered_items
+
+
+def _require_unique_research_ids(research_item_ids: list[uuid.UUID]) -> None:
+    """400 when one list names the same document twice. Nothing is written."""
+
+    seen_ids: set[uuid.UUID] = set()
+
+    for research_item_id in research_item_ids:
+
+        if research_item_id in seen_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=DUPLICATE_RESEARCH_DETAIL,
+            )
+
+        seen_ids.add(research_item_id)
+
+
+def _reject_when_research_already_attached(
+    carousel: Carousel,
+    research_item_id: uuid.UUID,
+) -> None:
+    """400 when this carousel already stores the document. The order stays."""
+
+    attached_link: CarouselResearchItem | None = _attached_research_link(
+        carousel,
+        research_item_id,
+    )
+
+    if attached_link is None:
+
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=ALREADY_ATTACHED_RESEARCH_DETAIL,
+    )
+
+
+def _attached_research_link(
+    carousel: Carousel,
+    research_item_id: uuid.UUID,
+) -> CarouselResearchItem | None:
+    """Return the link on this carousel, or null when it is not attached."""
+
+    for link in list(carousel.research_links):
+
+        if link.research_item_id == research_item_id:
+
+            return link
+
+    return None
+
+
+def _append_research_link(
+    carousel: Carousel,
+    research_item: ResearchItem,
+    our_database_session: Session,
+) -> CarouselResearchItem:
+    """Append one link at the next position. The caller commits."""
+
+    created_link: CarouselResearchItem = CarouselResearchItem(
+        id=new_row_id(),
+        carousel_id=carousel.id,
+        research_item_id=research_item.id,
+        position=_next_research_position(carousel),
+    )
+    created_link.research_item = research_item
+    created_link.carousel = carousel
+    our_database_session.add(created_link)
+
+    return created_link
+
+
+def _replace_research_links(
+    carousel: Carousel,
+    research_items: list[ResearchItem],
+    our_database_session: Session,
+) -> None:
+    """Make the attached list exactly these documents, in this order.
+
+    A document that is already attached keeps its link row. A new id
+    is appended, then the rows that were left off are dropped. Positions
+    are then 0, 1, 2, and so on. The caller commits.
+    """
+
+    existing_by_item_id: dict[uuid.UUID, CarouselResearchItem] = {
+        link.research_item_id: link for link in list(carousel.research_links)
+    }
+    kept_ids: set[uuid.UUID] = {research_item.id for research_item in research_items}
+    ordered_links: list[CarouselResearchItem] = []
+
+    for research_item in research_items:
+        existing_link: CarouselResearchItem | None = existing_by_item_id.get(research_item.id)
+
+        if existing_link is None:
+            created_link: CarouselResearchItem = _append_research_link(
+                carousel,
+                research_item,
+                our_database_session,
+            )
+            ordered_links.append(created_link)
+        else:
+            ordered_links.append(existing_link)
+
+    for link in list(carousel.research_links):
+
+        if link.research_item_id not in kept_ids:
+            _drop_research_link(carousel, link, our_database_session)
+
+    _assign_research_positions(ordered_links, our_database_session)
+
+
+def _drop_research_link(
+    carousel: Carousel,
+    link: CarouselResearchItem,
+    our_database_session: Session,
+) -> None:
+    """Remove one link from the carousel collection and the session."""
+
+    remaining_links: list[CarouselResearchItem] = [
+        stored
+        for stored in list(carousel.research_links)
+        if stored.id != link.id
+    ]
+    carousel.research_links = remaining_links
+    our_database_session.delete(link)
+
+
+def _close_research_positions(carousel: Carousel, our_database_session: Session) -> None:
+    """Renumber the remaining links in their current order, from zero."""
+
+    ordered_links: list[CarouselResearchItem] = sorted(
+        list(carousel.research_links),
+        key=_research_link_position,
+    )
+    _assign_research_positions(ordered_links, our_database_session)
+
+
+def _assign_research_positions(
+    ordered_links: list[CarouselResearchItem],
+    our_database_session: Session,
+) -> None:
+    """Store ``ordered_links`` as positions 0, 1, 2, and so on.
+
+    Positions are parked above the current maximum first so the unique
+    ``(carousel_id, position)`` constraint can move every row.
+    """
+
+    if len(ordered_links) == 0:
+
+        return
+
+    parked_base: int = max(link.position for link in ordered_links) + 1
+
+    for offset, link in enumerate(ordered_links):
+        link.position = parked_base + offset
+
+    our_database_session.flush()
+
+    for position, link in enumerate(ordered_links):
+        link.position = position
+
+
+def _research_link_position(link: CarouselResearchItem) -> int:
+    """Return the sort key for a research link."""
+
+    position: int = link.position
+
+    return position
+
+
+def _next_research_position(carousel: Carousel) -> int:
+    """Return the next position at the end of the research list."""
+
+    positions: list[int] = [link.position for link in list(carousel.research_links)]
+
+    if len(positions) == 0:
+
+        return 0
+
+    next_position: int = max(positions) + 1
+
+    return next_position
 
 
 def _require_name(raw_name: str) -> str:

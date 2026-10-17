@@ -1,4 +1,8 @@
-"""Research create, edit, and delete. No carousel attach and no upload."""
+"""Research create, edit, and delete. There is no file upload.
+
+Carousels attach research through ``carousel_research_items``. The
+carousel has no ``research_id`` column.
+"""
 
 import importlib
 import os
@@ -9,6 +13,7 @@ from datetime import datetime, timezone
 os.environ.setdefault("TWERVA_ENV", "test")
 
 from fastapi import HTTPException
+from sqlalchemy import CheckConstraint, UniqueConstraint
 
 from app.api.v1.research import (
     BODY_NOT_TEXT_DETAIL,
@@ -26,12 +31,11 @@ from app.api.v1.schemas import (
     ResearchPatchRequest,
     ResearchReadResponse,
 )
-from app.models.carousel import Carousel
+from app.models.carousel import Carousel, CarouselResearchItem
 from app.models.research_item import (
     RESEARCH_BODY_MAX_CHARACTERS,
     ResearchItem,
 )
-from sqlalchemy import CheckConstraint
 
 
 class _ScalarResult:
@@ -88,6 +92,10 @@ class _MemoryResearchSession:
 
     def scalars(self, statement: object) -> _ScalarResult:
         sql: str = str(statement)
+
+        if "carousel_research_items" in sql:
+
+            return _ScalarResult([])
 
         if "research_items.slug" in sql and "research_items.title" not in sql:
             return _ScalarResult([research_item.slug for research_item in self.items])
@@ -255,9 +263,19 @@ class ResearchWriteTests(unittest.TestCase):
         self.assertEqual(deleted.exception.status_code, 404)
 
     def test_carousel_has_no_research_link_and_upload_helpers_are_gone(self) -> None:
-        """Phase 4 attaches research. The old file helpers are not that."""
+        """There is no ``research_id`` column. Research uses the join table."""
 
         self.assertNotIn("research_id", set(Carousel.__table__.columns.keys()))
+        self.assertEqual(CarouselResearchItem.__tablename__, "carousel_research_items")
+        self.assertNotIn("research_id", set(CarouselResearchItem.__table__.columns.keys()))
+        unique_pairs: list[tuple[str, ...]] = [
+            tuple(column.name for column in constraint.columns)
+            for constraint in CarouselResearchItem.__table__.constraints
+            if isinstance(constraint, UniqueConstraint)
+        ]
+
+        self.assertIn(("carousel_id", "research_item_id"), unique_pairs)
+        self.assertIn(("carousel_id", "position"), unique_pairs)
         check_names: set[str | None] = {
             constraint.name
             for constraint in ResearchItem.__table__.constraints
