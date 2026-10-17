@@ -583,12 +583,31 @@ export interface SlideReadResponse {
   images: SlideImageReadResponse[];
 }
 
+export type CarouselStepState = "locked" | "available" | "done";
+
+export interface CarouselResearchReadResponse {
+  id: string;
+  title: string;
+  slug: string;
+  position: number;
+}
+
+export interface CarouselStepsResponse {
+  basic: CarouselStepState;
+  instructions: CarouselStepState;
+  content: CarouselStepState;
+  slides: CarouselStepState;
+  final: CarouselStepState;
+}
+
 export interface CarouselListItemResponse {
   id: string;
   skeleton_id: string;
   album_id: string | null;
   name: string;
   slug: string;
+  generation_number: number;
+  editor_step: number;
   slide_count: number;
   created_at: string;
   updated_at: string;
@@ -600,11 +619,15 @@ export interface CarouselReadResponse {
   album_id: string | null;
   name: string;
   slug: string;
+  generation_number: number;
+  editor_step: number;
   inspiration: string;
   rules: string;
   live_slide_count: number;
   created_at: string;
   updated_at: string;
+  research: CarouselResearchReadResponse[];
+  steps: CarouselStepsResponse;
   slides: SlideReadResponse[];
 }
 

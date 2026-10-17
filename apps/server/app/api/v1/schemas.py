@@ -28,6 +28,7 @@ from app.models.enums import (
     SlideImageMediaType,
     SlideTextStatus,
 )
+from app.carousels.slide_skeleton import CarouselStepState
 from app.models.skeleton import (
     DEFAULT_BACKGROUND_COLOR,
     DEFAULT_ELEMENT_GAP,
@@ -989,32 +990,74 @@ class SlideReadResponse(BaseModel):
     images: list[SlideImageReadResponse]
 
 
+class CarouselResearchReadResponse(BaseModel):
+    """One research document attached to a carousel, in position order.
+
+    ``id`` is the research item. ``position`` is the link order, starting
+    at zero. The body stays on the research item.
+    """
+
+    id: uuid.UUID
+    title: str
+    slug: str
+    position: int
+
+
+class CarouselStepsResponse(BaseModel):
+    """Derived step state. Not stored on the carousel.
+
+    ``basic`` is done. ``instructions`` and ``final`` are locked.
+    ``content`` and ``slides`` follow the album rule and the slide count.
+    """
+
+    basic: CarouselStepState
+    instructions: CarouselStepState
+    content: CarouselStepState
+    slides: CarouselStepState
+    final: CarouselStepState
+
+
 class CarouselListItemResponse(BaseModel):
-    """One carousel on `GET /api/v1/carousels`. Slides are on the detail route."""
+    """One carousel on `GET /api/v1/carousels`. Slides are on the detail route.
+
+    ``generation_number`` and ``editor_step`` are the stored values.
+    Research and derived step state are on the detail route.
+    """
 
     id: uuid.UUID
     skeleton_id: uuid.UUID
     name: str
     slug: str
     album_id: uuid.UUID | None = None
+    generation_number: int
+    editor_step: int
     slide_count: int
     created_at: datetime
     updated_at: datetime
 
 
 class CarouselReadResponse(BaseModel):
-    """One carousel and its slides."""
+    """One carousel, its research, derived step state, and slides.
+
+    ``editor_step`` is the stored open step. ``steps`` is derived and
+    does not change that stored value. ``research`` is the attached
+    documents in position order.
+    """
 
     id: uuid.UUID
     skeleton_id: uuid.UUID
     name: str
     slug: str
     album_id: uuid.UUID | None = None
+    generation_number: int
+    editor_step: int
     inspiration: str
     rules: str
     live_slide_count: int
     created_at: datetime
     updated_at: datetime
+    research: list[CarouselResearchReadResponse]
+    steps: CarouselStepsResponse
     slides: list[SlideReadResponse]
 
 

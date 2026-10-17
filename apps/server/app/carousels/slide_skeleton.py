@@ -1,12 +1,14 @@
 """How a slide follows its carousel's skeleton.
 
 An image is required when the skeleton has a picture background or an
-image element. Text is one value per text element. This module does
-not render or write files.
+image element. Text is one value per text element. The same picture
+rule decides whether Content is done and whether Slides is open.
+This module does not render or write files.
 """
 
 from __future__ import annotations
 
+import enum
 import uuid
 from dataclasses import dataclass
 
@@ -20,6 +22,19 @@ IMAGE_REQUIRED_DETAIL: str = "This skeleton needs an image on the slide."
 IMAGE_NOT_USED_DETAIL: str = "This skeleton does not use a slide image."
 UNKNOWN_TEXT_ELEMENT_DETAIL: str = "That text does not belong to this skeleton."
 DUPLICATE_TEXT_ELEMENT_DETAIL: str = "Each skeleton text element is stored once."
+CAROUSEL_SLIDES_DONE_COUNT: int = 2
+
+
+class CarouselStepState(enum.StrEnum):
+    """One derived step on the carousel stepper.
+
+    ``locked`` cannot be opened. ``available`` can be opened and is not
+    finished. ``done`` can be opened and the step's rule is met.
+    """
+
+    LOCKED = "locked"
+    AVAILABLE = "available"
+    DONE = "done"
 
 
 @dataclass(frozen=True)
@@ -33,6 +48,22 @@ class SlideSkeletonFill:
 
     text_by_element_id: dict[uuid.UUID, str]
     slide_image_relative_path: str | None
+
+
+@dataclass(frozen=True)
+class CarouselStepStates:
+    """The five stepper states for one carousel. None of these are stored.
+
+    ``basic`` is done once the carousel exists. ``instructions`` and
+    ``final`` stay locked until later phases. ``content`` and ``slides``
+    follow the album rule and the slide count.
+    """
+
+    basic: CarouselStepState
+    instructions: CarouselStepState
+    content: CarouselStepState
+    slides: CarouselStepState
+    final: CarouselStepState
 
 
 def skeleton_requires_image(skeleton: Skeleton) -> bool:
@@ -56,6 +87,73 @@ def skeleton_requires_image(skeleton: Skeleton) -> bool:
             return True
 
     return False
+
+
+def carousel_step_states(
+    skeleton: Skeleton,
+    album_id: uuid.UUID | None,
+    slide_count: int,
+) -> CarouselStepStates:
+    """Return the five derived step states for one carousel.
+
+    The album rule passes when the skeleton needs no picture, or when
+    ``album_id`` is set. A skeleton that needs no picture passes
+    immediately, with or without an album. An attached album passes
+    even when it has zero images. ``content`` is done when that rule
+    passes and available otherwise. ``slides`` is locked when the rule
+    fails, available when it passes and the carousel has fewer than two
+    slides, and done at two or more. ``basic`` is done. ``instructions``
+    and ``final`` are locked. This does not read or write ``editor_step``.
+
+    Args:
+        skeleton: The carousel's skeleton, with elements loaded.
+        album_id: ``carousels.album_id``. Null when no album is attached.
+        slide_count: Every slide on the carousel, including drafts.
+
+    Returns:
+        The five step states, in stepper order.
+    """
+
+    album_passes: bool = _album_rule_passes(skeleton, album_id)
+    content_state: CarouselStepState = CarouselStepState.AVAILABLE
+    slides_state: CarouselStepState = CarouselStepState.LOCKED
+
+    if album_passes:
+        content_state = CarouselStepState.DONE
+        slides_state = CarouselStepState.AVAILABLE
+
+    if album_passes and slide_count >= CAROUSEL_SLIDES_DONE_COUNT:
+        slides_state = CarouselStepState.DONE
+
+    step_states: CarouselStepStates = CarouselStepStates(
+        basic=CarouselStepState.DONE,
+        instructions=CarouselStepState.LOCKED,
+        content=content_state,
+        slides=slides_state,
+        final=CarouselStepState.LOCKED,
+    )
+
+    return step_states
+
+
+def _album_rule_passes(skeleton: Skeleton, album_id: uuid.UUID | None) -> bool:
+    """Return true when Content is satisfied for this skeleton.
+
+    Args:
+        skeleton: The carousel's skeleton, with elements loaded.
+        album_id: The attached album, or null.
+
+    Returns:
+        True when the skeleton needs no picture, or an album is set.
+    """
+
+    if not skeleton_requires_image(skeleton):
+
+        return True
+
+    album_is_set: bool = album_id is not None
+
+    return album_is_set
 
 
 def skeleton_text_elements(skeleton: Skeleton) -> list[SkeletonElement]:

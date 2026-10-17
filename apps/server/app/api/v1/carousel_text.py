@@ -110,6 +110,10 @@ def patch_source_guidance(
             detail=GUIDANCE_TOO_LONG_DETAIL,
         )
 
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
     found_source.inspiration = inspiration
     found_source.rules = rules
     commit_database_session_or_raise_conflict(
@@ -120,7 +124,7 @@ def patch_source_guidance(
 
     from app.api.v1.carousels import serialize_carousel
 
-    return serialize_carousel(found_source)
+    return serialize_carousel(found_source, found_skeleton)
 
 
 def generate_source_slide(
