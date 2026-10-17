@@ -1213,3 +1213,45 @@ class AlbumPatchRequest(BaseModel):
 
     name: str
     images: list[AlbumImageWrite] = Field(default_factory=list)
+
+
+class ResearchListItemResponse(BaseModel):
+    """One research document on the list. The body is on the detail route."""
+
+    id: uuid.UUID
+    title: str
+    slug: str
+    word_count: int
+    character_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResearchReadResponse(BaseModel):
+    """One research document, including the body."""
+
+    id: uuid.UUID
+    title: str
+    slug: str
+    body: str
+    word_count: int
+    character_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResearchCreateRequest(BaseModel):
+    """JSON body for `POST /api/v1/research`. The title is required."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+
+
+class ResearchPatchRequest(BaseModel):
+    """Save the title and the body. The slug is not in this request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    body: str

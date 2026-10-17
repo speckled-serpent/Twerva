@@ -31,7 +31,6 @@ CAROUSEL_NAME_CHECK_SQL: str = (
 SLIDE_POSITION_CHECK_SQL: str = "position >= 0"
 SLIDE_NAME_CHECK_SQL: str = "btrim(name) <> ''"
 SLIDE_FIELD_TEXT_CHECK_SQL: str = "btrim(label) <> '' AND btrim(value) <> ''"
-RESOURCE_FILE_MAX_BYTES: int = 2 * 1024 * 1024
 
 
 class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):

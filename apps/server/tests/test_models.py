@@ -38,6 +38,7 @@ from app.models import (
     SkeletonElementContentKind,
     SkeletonElementTextSource,
     SkeletonStatus,
+    ResearchItem,
     BackgroundKind,
     cluster_source_items,
 )
@@ -65,6 +66,7 @@ EXPECTED_TABLE_NAMES: frozenset[str] = frozenset(
         "campaign_interests",
         "skeletons",
         "skeleton_elements",
+        "research_items",
     },
 )
 
@@ -97,6 +99,7 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(CampaignInterest.__tablename__, "campaign_interests")
         self.assertEqual(Skeleton.__tablename__, "skeletons")
         self.assertEqual(SkeletonElement.__tablename__, "skeleton_elements")
+        self.assertEqual(ResearchItem.__tablename__, "research_items")
         self.assertIs(Account, AccountModel)
         self.assertIn("template_id", set(Artifact.__table__.columns.keys()))
 

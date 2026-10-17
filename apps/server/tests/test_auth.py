@@ -816,6 +816,14 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(import_image_response.status_code, 403)
         self.assertIn("read-only", import_image_response.json()["detail"].lower())
 
+        create_research_response = self.test_client.post(
+            "/api/v1/research",
+            json={"title": "Blocked notes"},
+        )
+
+        self.assertEqual(create_research_response.status_code, 403)
+        self.assertIn("read-only", create_research_response.json()["detail"].lower())
+
         sample_response = self.test_client.post(
             f"/api/v1/skeletons/{uuid.uuid4()}/samples",
             json={"source_item_id": str(uuid.uuid4())},

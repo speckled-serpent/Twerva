@@ -23,7 +23,7 @@ The carousel stores inspiration and rules as two text fields. Generate drafts th
 
 A campaign stores the chosen skeleton and one carousel bound to that skeleton. Older rows can have both empty. Run groups the live slides into `campaign_carousels` that respect the exclusion rules. It does not call the model and does not draw frames. Those rows are a run's assembly, not the carousel. Create still asks for platforms and at least one Spotmu interest. A production Spotmu campaign also asks for an account. A Spotmu test campaign does not. Run does not read the interests.
 
-The ops console is signed in. An admin can change rows. A reader can look. The left rail is Content (Campaigns, Skeletons, Carousels), Library (Albums), Run (Queue, Schedule, Results), and Setup (Accounts, Users). An album is a named set of images. The list has Create Album. The detail adds, removes, and reorders images, edits license, source, alt, and license note, and autosaves. Delete asks first.
+The ops console is signed in. An admin can change rows. A reader can look. The left rail is Content (Campaigns, Skeletons, Carousels), Library (Albums, Research), Run (Queue, Schedule, Results), and Setup (Accounts, Users). An album is a named set of images. The list has Create Album. The detail adds, removes, and reorders images, edits license, source, alt, and license note, and autosaves. Delete asks first. A research item is one document: a title, a slug, and a body of Markdown or plain text, up to one million characters. The list has Create Research. The detail edits the title and the body and autosaves. There is no upload and no carousel link.
 
 An earlier loop still renders a shipping carousel from `carousel_template_v1` off one Spotmu interest. The caption is that interest's title, a fixed hashtag set, and the interest URL. The ops console can approve that draft, set a time, mock-publish, and record a metric by hand. An account can carry a per-day cadence cap. It does not store a login. Publish is a mock adapter. An Ayrshare adapter is in the tree and refuses the live call. Metric rows, a manual entry route, and a cluster median of the latest view counts exist. A stub can copy mock views onto a mock-published job. Clusters, brands, ingest, and steer from that loop are still in the API. The phases below replace that loop for the new model.
 
@@ -60,13 +60,18 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ## 3. Research
 
+**Status.** Done. Revision `research_items`.
+
 **Goal.** A reusable text document a carousel can draw on later.
 
 **Scope.** Minimal. A name and a body of text. Its own rail section. An operator can write and edit it. No upload rules beyond plain text, no synthesis, and no link to a carousel until the Content step.
 
-**Migration.** None. `resource_files` was dropped when sources became theme-bound. Do not recreate it. The API does not use the leftover helpers under `app/carousels/resource_files.py`, `resource_store.py`, and `resource_markdown.py`. Remove them here so Research is not that old upload.
+**Migration.** Add `research_items`: a title, a slug, a body, and timestamps. Do not recreate `resource_files`. The unused helpers `app/carousels/resource_files.py`, `resource_store.py`, and `resource_markdown.py` are removed. Downgrade drops the new table and the rows in it. Albums and carousels stay.
 
-**Open questions.** Mu will detail Research. Is one row one document, or can one research item hold several? Is there a size limit?
+**Open questions.** Settled for this phase:
+
+- One row is one document. A research item does not hold several documents.
+- The body is at most 1,000,000 characters. An empty body is allowed. There is no file upload.
 
 ## 4. Carousel steps and the Content step
 

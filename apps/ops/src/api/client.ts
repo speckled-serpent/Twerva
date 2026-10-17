@@ -52,6 +52,10 @@ import type {
   AlbumListItemResponse,
   AlbumPatchRequest,
   AlbumReadResponse,
+  ResearchCreateRequest,
+  ResearchListItemResponse,
+  ResearchPatchRequest,
+  ResearchReadResponse,
   CarouselCreateRequest,
   CarouselGuidancePatchRequest,
   TextGenerationStatusResponse,
@@ -552,6 +556,40 @@ export async function patchAlbum(
 export async function deleteAlbum(albumId: string): Promise<void> {
 
   await requestJson<undefined>("DELETE", `/api/v1/albums/${albumId}`);
+}
+
+export async function listResearch(): Promise<ResearchListItemResponse[]> {
+
+  return requestJson<ResearchListItemResponse[]>("GET", "/api/v1/research");
+}
+
+export async function fetchResearchById(researchId: string): Promise<ResearchReadResponse> {
+
+  return requestJson<ResearchReadResponse>("GET", `/api/v1/research/${researchId}`);
+}
+
+export async function createResearch(
+  researchCreateRequest: ResearchCreateRequest,
+): Promise<ResearchReadResponse> {
+
+  return requestJson<ResearchReadResponse>("POST", "/api/v1/research", researchCreateRequest);
+}
+
+export async function patchResearch(
+  researchId: string,
+  researchPatchRequest: ResearchPatchRequest,
+): Promise<ResearchReadResponse> {
+
+  return requestJson<ResearchReadResponse>(
+    "PATCH",
+    `/api/v1/research/${researchId}`,
+    researchPatchRequest,
+  );
+}
+
+export async function deleteResearch(researchId: string): Promise<void> {
+
+  await requestJson<undefined>("DELETE", `/api/v1/research/${researchId}`);
 }
 
 export async function uploadAlbumImage(

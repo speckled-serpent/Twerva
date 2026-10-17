@@ -32,20 +32,21 @@ LICENSE_NOTE_DETAIL: str = "A licensed image needs a license note."
 IMAGE_IN_USE_DETAIL: str = "This image is still used by a skeleton or an artifact."
 SLIDE_IN_USE_DETAIL: str = "This slide is still used by a skeleton or an artifact."
 ALBUM_IN_USE_DETAIL: str = "This album is still used by a skeleton or an artifact."
-RESOURCE_NOT_IN_SLICE_DETAIL: str = "That action is only for an album."
-RESOURCE_FILE_REQUIRED_DETAIL: str = (
-    "A resource is created by uploading a Markdown or TXT file."
-)
 
 
-def slugify_carousel_name(carousel_name: str) -> str:
-    """Turn an album name into a lowercase hyphenated slug.
+def slugify_carousel_name(
+    carousel_name: str,
+    fallback_slug: str = SLUG_FALLBACK,
+) -> str:
+    """Turn a name into a lowercase hyphenated slug.
 
     Args:
         carousel_name: Operator-facing name.
+        fallback_slug: Slug used when the name has no letters or digits.
 
     Returns:
-        A slug. Falls back to ``album`` when the name has no letters or digits.
+        A slug. Falls back to ``fallback_slug`` when the name has no
+        letters or digits.
     """
 
     stripped_name: str = carousel_name.strip()
@@ -58,7 +59,7 @@ def slugify_carousel_name(carousel_name: str) -> str:
 
     if source_slug == "":
 
-        return SLUG_FALLBACK
+        return fallback_slug
 
     return source_slug
 
