@@ -123,7 +123,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: a second carousel can attach the Default album and the files stay one set. Clearing Default, and replacing it with another album, each return 409 with that reason, and Default stays the album. A carousel with no slide images can clear its album and attach another.
 
-- [ ] **4.5 Attach, reorder, and remove research**
+- [x] **4.5 Attach, reorder, and remove research**
 
   `POST /api/v1/carousels/{carousel_id}/research` with `{research_item_id}` appends at the next position. `PUT /api/v1/carousels/{carousel_id}/research` with `{research_item_ids}` replaces the order. `DELETE /api/v1/carousels/{carousel_id}/research/{research_item_id}` drops that link. Admin only. Unknown research is 404. The same id twice in one list is 400. Deleting a research item drops its links and leaves the carousel. Update `test_carousel_has_no_research_link_and_upload_helpers_are_gone` so it still rejects a `research_id` column and asserts the join table.
 

@@ -1129,6 +1129,31 @@ class CarouselAlbumCreateRequest(BaseModel):
     name: str
 
 
+class CarouselResearchAttachRequest(BaseModel):
+    """JSON body for `POST /api/v1/carousels/{carousel_id}/research`.
+
+    ``research_item_id`` must already exist. The document is appended.
+    This does not create a research item.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    research_item_id: uuid.UUID
+
+
+class CarouselResearchOrderRequest(BaseModel):
+    """JSON body for `PUT /api/v1/carousels/{carousel_id}/research`.
+
+    ``research_item_ids`` replaces the attached list and its order.
+    An empty list clears every link. The same id twice is rejected.
+    Omitting the field does not clear the list.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    research_item_ids: list[uuid.UUID]
+
+
 class SlideElementTextWrite(BaseModel):
     """One skeleton text element and the value to store on the slide."""
 

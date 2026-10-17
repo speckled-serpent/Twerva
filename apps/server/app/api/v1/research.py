@@ -1,7 +1,8 @@
 """Research list, create, autosave, and delete.
 
 One row is one document. The body is text stored on the row. There is
-no upload and no carousel link.
+no upload. Deleting a document drops its carousel links and leaves the
+carousel. The carousel has no ``research_id`` column.
 """
 
 from __future__ import annotations
@@ -136,10 +137,18 @@ def delete_research(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> None:
-    """Delete one document. Readers cannot call this."""
+    """Delete one document. Its carousel links drop. The carousel stays.
+
+    Readers cannot call this. Other documents attached to that carousel
+    stay attached. Their positions close up.
+    """
 
     _ = current_ops_operator
     found_item: ResearchItem = _fetch_research_or_raise(research_id, our_database_session)
+
+    from app.api.v1.carousel_writes import detach_research_item_links
+
+    detach_research_item_links(found_item.id, our_database_session)
     our_database_session.delete(found_item)
     commit_database_session_or_raise_conflict(
         our_database_session,
