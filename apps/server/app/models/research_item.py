@@ -2,7 +2,8 @@
 
 A research item does not hold several documents. The body is Markdown
 or plain text stored in the row. There is no file upload. A carousel
-does not point at this row until the Content step.
+attaches an ordered list of these rows through
+``carousel_research_items``. There is no ``research_id`` column.
 """
 
 from __future__ import annotations

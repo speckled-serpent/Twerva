@@ -5,7 +5,10 @@ Its text is one value per text element on that skeleton. Generated text
 stays a draft until a person accepts it. ``slide_exclusions`` stores the
 other slide ids it cannot be shown with. The carousel stores inspiration
 and rules for that draft, and may point at the album its images came
-from. Skeletons still store a concrete image path. They do not reference
+from. ``generation_number`` starts at 1. ``editor_step`` remembers Basic,
+Content, or Slides. Research attaches as an ordered list in
+``carousel_research_items``. There is no ``research_id`` column.
+Skeletons still store a concrete image path. They do not reference
 these rows.
 """
 
@@ -23,23 +26,36 @@ from app.models.enums import (
     SLIDE_TEXT_STATUS_ENUM,
     SlideTextStatus,
 )
+from app.models.research_item import ResearchItem
 
 
 CAROUSEL_NAME_CHECK_SQL: str = (
     "btrim(name) <> '' AND btrim(slug) <> ''"
 )
+CAROUSEL_GENERATION_NUMBER_DEFAULT: int = 1
+CAROUSEL_EDITOR_STEP_DEFAULT: int = 3
+CAROUSEL_GENERATION_CHECK_SQL: str = "generation_number >= 1"
+CAROUSEL_EDITOR_STEP_CHECK_SQL: str = "editor_step IN (0, 2, 3)"
+CAROUSEL_RESEARCH_POSITION_CHECK_SQL: str = "position >= 0"
 SLIDE_POSITION_CHECK_SQL: str = "position >= 0"
 SLIDE_NAME_CHECK_SQL: str = "btrim(name) <> ''"
 SLIDE_FIELD_TEXT_CHECK_SQL: str = "btrim(label) <> '' AND btrim(value) <> ''"
 
 
 class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
-    """Row in ``carousels``. Every carousel requires one skeleton."""
+    """Row in ``carousels``. Every carousel requires one skeleton.
+
+    ``generation_number`` starts at 1. ``editor_step`` is 0 Basic, 2
+    Content, or 3 Slides. Existing rows open on Slides. The skeleton
+    stays the one chosen at create.
+    """
 
     __tablename__ = "carousels"
     __table_args__ = (
         UniqueConstraint("slug", name="uq_carousels_slug"),
         CheckConstraint(CAROUSEL_NAME_CHECK_SQL, name="name"),
+        CheckConstraint(CAROUSEL_GENERATION_CHECK_SQL, name="generation_number"),
+        CheckConstraint(CAROUSEL_EDITOR_STEP_CHECK_SQL, name="editor_step"),
     )
 
     skeleton_id: Mapped[uuid.UUID] = mapped_column(
@@ -68,6 +84,18 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         nullable=True,
         index=True,
     )
+    generation_number: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=CAROUSEL_GENERATION_NUMBER_DEFAULT,
+        server_default=str(CAROUSEL_GENERATION_NUMBER_DEFAULT),
+    )
+    editor_step: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=CAROUSEL_EDITOR_STEP_DEFAULT,
+        server_default=str(CAROUSEL_EDITOR_STEP_DEFAULT),
+    )
 
     slides: Mapped[list["Slide"]] = relationship(
         "Slide",
@@ -76,6 +104,12 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         order_by="Slide.position",
     )
     album: Mapped[Album | None] = relationship("Album")
+    research_links: Mapped[list["CarouselResearchItem"]] = relationship(
+        "CarouselResearchItem",
+        back_populates="carousel",
+        cascade="all, delete-orphan",
+        order_by="CarouselResearchItem.position",
+    )
 
 
 class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -230,3 +264,47 @@ class SlideElementText(Base, UuidPrimaryKeyMixin):
     draft_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     slide: Mapped[Slide] = relationship("Slide", back_populates="element_texts")
+
+
+class CarouselResearchItem(Base, UuidPrimaryKeyMixin):
+    """One research document attached to a carousel, in order.
+
+    The pair is unique. ``position`` is unique inside the carousel and
+    starts at zero. Deleting the carousel or the research item removes
+    this row. The carousel has no ``research_id`` column.
+    """
+
+    __tablename__ = "carousel_research_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "carousel_id",
+            "research_item_id",
+            name="uq_carousel_research_items_carousel_id_research_item_id",
+        ),
+        UniqueConstraint(
+            "carousel_id",
+            "position",
+            name="uq_carousel_research_items_carousel_id_position",
+        ),
+        CheckConstraint(CAROUSEL_RESEARCH_POSITION_CHECK_SQL, name="position"),
+    )
+
+    carousel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("carousels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    research_item_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("research_items.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    carousel: Mapped[Carousel] = relationship(
+        "Carousel",
+        back_populates="research_links",
+    )
+    research_item: Mapped[ResearchItem] = relationship("ResearchItem")

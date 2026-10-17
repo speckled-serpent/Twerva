@@ -32,6 +32,7 @@ THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID: str = "theme_element_text_optional"
 SKELETONS_CAROUSELS_SLIDES_REVISION_ID: str = "skeletons_carousels_slides"
 ALBUMS_FROM_SLIDES_REVISION_ID: str = "albums_from_slides"
 RESEARCH_ITEMS_REVISION_ID: str = "research_items"
+CAROUSEL_STEPS_REVISION_ID: str = "carousel_steps"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -66,6 +67,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGN_THEME_SOURCE_REVISION_ID}.py",
                 f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py",
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
+                f"{CAROUSEL_STEPS_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
                 f"{RESEARCH_ITEMS_REVISION_ID}.py",
@@ -779,7 +781,7 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn('op.drop_table("slide_images")', revision_source)
 
     def test_research_follows_albums(self) -> None:
-        """Research items are the head after albums, with short check names."""
+        """Research items follow albums, with short check names."""
 
         revision_path: Path = (
             SERVER_ROOT_DIRECTORY
@@ -803,6 +805,47 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertNotIn("ck_research_items_ck_", revision_source)
         self.assertIn('op.drop_table("research_items")', revision_source)
         self.assertNotIn('op.create_table(\n        "resource_files"', revision_source)
+
+    def test_carousel_steps_follow_research(self) -> None:
+        """Generation, editor step, and the research link follow research items."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_STEPS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), CAROUSEL_STEPS_REVISION_ID)
+        self.assertLessEqual(len(str(assigned_values.get("revision"))), 32)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            RESEARCH_ITEMS_REVISION_ID,
+        )
+        self.assertIn(
+            'op.create_check_constraint(\n        "generation_number",',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_check_constraint(\n        "editor_step",',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_check_constraint(\n        "position",',
+            revision_source,
+        )
+        self.assertIn('op.create_table(\n        "carousel_research_items"', revision_source)
+        self.assertIn("CAROUSEL_GENERATION_CHECK_SQL", revision_source)
+        self.assertIn("CAROUSEL_EDITOR_STEP_CHECK_SQL", revision_source)
+        self.assertIn("CAROUSEL_RESEARCH_POSITION_CHECK_SQL", revision_source)
+        self.assertNotIn("ck_carousels_ck_", revision_source)
+        self.assertNotIn("ck_carousel_research_items_ck_", revision_source)
+        self.assertNotIn('"research_id"', revision_source)
+        self.assertIn('op.drop_table("carousel_research_items")', revision_source)
+        self.assertIn('op.drop_column("carousels", "generation_number")', revision_source)
+        self.assertIn('op.drop_column("carousels", "editor_step")', revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

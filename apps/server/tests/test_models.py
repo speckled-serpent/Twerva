@@ -42,6 +42,15 @@ from app.models import (
     BackgroundKind,
     cluster_source_items,
 )
+from app.models.carousel import (
+    CAROUSEL_EDITOR_STEP_CHECK_SQL,
+    CAROUSEL_EDITOR_STEP_DEFAULT,
+    CAROUSEL_GENERATION_CHECK_SQL,
+    CAROUSEL_GENERATION_NUMBER_DEFAULT,
+    CAROUSEL_RESEARCH_POSITION_CHECK_SQL,
+    Carousel,
+    CarouselResearchItem,
+)
 from app.models.skeleton_element import (
     SKELETON_ELEMENT_CONTENT_CHECK_SQL,
     SKELETON_ELEMENT_NAME_CHECK_SQL,
@@ -67,6 +76,7 @@ EXPECTED_TABLE_NAMES: frozenset[str] = frozenset(
         "skeletons",
         "skeleton_elements",
         "research_items",
+        "carousel_research_items",
     },
 )
 
@@ -100,6 +110,11 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(Skeleton.__tablename__, "skeletons")
         self.assertEqual(SkeletonElement.__tablename__, "skeleton_elements")
         self.assertEqual(ResearchItem.__tablename__, "research_items")
+        self.assertEqual(Carousel.__tablename__, "carousels")
+        self.assertEqual(
+            CarouselResearchItem.__tablename__,
+            "carousel_research_items",
+        )
         self.assertIs(Account, AccountModel)
         self.assertIn("template_id", set(Artifact.__table__.columns.keys()))
 
@@ -448,6 +463,58 @@ class DomainEnumTests(unittest.TestCase):
             str(checks_by_name["ck_skeleton_elements_name"].sqltext),
             SKELETON_ELEMENT_NAME_CHECK_SQL,
         )
+
+    def test_carousel_generation_step_and_research_link(self) -> None:
+        """Generation starts at 1. Research is an ordered list, not a column."""
+
+        column_names: set[str] = set(Carousel.__table__.columns.keys())
+        generation_column: Column[int] = Carousel.__table__.c.generation_number
+        editor_step_column: Column[int] = Carousel.__table__.c.editor_step
+        check_names: dict[str, str] = {
+            constraint.name: str(constraint.sqltext)
+            for constraint in Carousel.__table__.constraints
+            if isinstance(constraint, CheckConstraint) and constraint.name is not None
+        }
+        link_checks: dict[str, str] = {
+            constraint.name: str(constraint.sqltext)
+            for constraint in CarouselResearchItem.__table__.constraints
+            if isinstance(constraint, CheckConstraint) and constraint.name is not None
+        }
+        unique_pairs: list[tuple[str, ...]] = _unique_column_tuples(
+            CarouselResearchItem.__table__,
+        )
+        delete_actions: dict[str, str | None] = {
+            foreign_key.parent.name: foreign_key.ondelete
+            for foreign_key in CarouselResearchItem.__table__.foreign_keys
+        }
+
+        self.assertNotIn("research_id", column_names)
+        self.assertIn("generation_number", column_names)
+        self.assertIn("editor_step", column_names)
+        self.assertFalse(generation_column.nullable)
+        self.assertFalse(editor_step_column.nullable)
+        self.assertEqual(generation_column.server_default.arg, "1")
+        self.assertEqual(editor_step_column.server_default.arg, "3")
+        self.assertEqual(generation_column.default.arg, CAROUSEL_GENERATION_NUMBER_DEFAULT)
+        self.assertEqual(editor_step_column.default.arg, CAROUSEL_EDITOR_STEP_DEFAULT)
+        self.assertEqual(
+            check_names["ck_carousels_generation_number"],
+            CAROUSEL_GENERATION_CHECK_SQL,
+        )
+        self.assertEqual(
+            check_names["ck_carousels_editor_step"],
+            CAROUSEL_EDITOR_STEP_CHECK_SQL,
+        )
+        self.assertNotIn("ck_carousels_ck_carousels_generation_number", check_names)
+        self.assertEqual(
+            link_checks["ck_carousel_research_items_position"],
+            CAROUSEL_RESEARCH_POSITION_CHECK_SQL,
+        )
+        self.assertIn(("carousel_id", "research_item_id"), unique_pairs)
+        self.assertIn(("carousel_id", "position"), unique_pairs)
+        self.assertEqual(delete_actions["carousel_id"], "CASCADE")
+        self.assertEqual(delete_actions["research_item_id"], "CASCADE")
+        self.assertNotIn("research_id", CarouselResearchItem.__table__.columns.keys())
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:
