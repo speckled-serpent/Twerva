@@ -803,6 +803,29 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(change_step_response.status_code, 403)
         self.assertIn("read-only", change_step_response.json()["detail"].lower())
 
+        attach_album_response = self.test_client.put(
+            f"/api/v1/carousels/{uuid.uuid4()}/album",
+            json={"album_id": str(uuid.uuid4())},
+        )
+
+        self.assertEqual(attach_album_response.status_code, 403)
+        self.assertIn("read-only", attach_album_response.json()["detail"].lower())
+
+        create_attached_album_response = self.test_client.post(
+            f"/api/v1/carousels/{uuid.uuid4()}/album",
+            json={"name": "Blocked album"},
+        )
+
+        self.assertEqual(create_attached_album_response.status_code, 403)
+        self.assertIn("read-only", create_attached_album_response.json()["detail"].lower())
+
+        clear_album_response = self.test_client.delete(
+            f"/api/v1/carousels/{uuid.uuid4()}/album",
+        )
+
+        self.assertEqual(clear_album_response.status_code, 403)
+        self.assertIn("read-only", clear_album_response.json()["detail"].lower())
+
         upload_image_response = self.test_client.post(
             f"/api/v1/carousels/{uuid.uuid4()}/slides/{uuid.uuid4()}/images",
             data={"license": "cc0", "carousel": "https://example.com/photo"},

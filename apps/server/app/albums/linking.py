@@ -1,6 +1,12 @@
-"""Point a carousel at an album when its slides gain an image."""
+"""Point a carousel at an album when its slides gain an image.
+
+Replacing or clearing that link is refused while a slide on the carousel
+still points at an image in the album being left.
+"""
 
 from __future__ import annotations
+
+import uuid
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,7 +17,12 @@ from app.carousels.editing import (
     slugify_carousel_name,
 )
 from app.models.album import Album, AlbumImage
-from app.models.carousel import Carousel
+from app.models.carousel import Carousel, Slide
+
+
+SLIDES_STILL_POINT_AT_ALBUM_DETAIL: str = (
+    "Slides still point at that album's images, so clear those slide images first."
+)
 
 
 def ensure_carousel_album(carousel: Carousel, our_database_session: Session) -> Album:
@@ -54,6 +65,36 @@ def ensure_carousel_album(carousel: Carousel, our_database_session: Session) -> 
     return created_album
 
 
+def slides_point_at_album(
+    carousel: Carousel,
+    album_id: uuid.UUID,
+    our_database_session: Session,
+) -> bool:
+    """Return true when a slide on this carousel points at that album.
+
+    The check is ``album_image_id`` on this carousel's slides. A slide
+    on another carousel can keep pointing at the same images. This does
+    not write, and it does not treat the Default album as a special case.
+
+    Args:
+        carousel: The carousel that would leave the album. Slides loaded.
+        album_id: The album being replaced or cleared.
+        our_database_session: Open session, used to load the image row.
+
+    Returns:
+        True when at least one slide still points at an image in that album.
+    """
+
+    for slide in list(carousel.slides):
+        image_album_id: uuid.UUID | None = _image_album_id(slide, our_database_session)
+
+        if image_album_id == album_id:
+
+            return True
+
+    return False
+
+
 def next_album_image_position(album: Album) -> int:
     """Return the next position at the end of an album.
 
@@ -73,6 +114,41 @@ def next_album_image_position(album: Album) -> int:
     next_position: int = max(positions) + 1
 
     return next_position
+
+
+def _image_album_id(slide: Slide, our_database_session: Session) -> uuid.UUID | None:
+    """Return the album that owns the image this slide points at.
+
+    Args:
+        slide: A slide on the carousel being changed.
+        our_database_session: Open session, used when the image row is
+            not already on the slide.
+
+    Returns:
+        The image's ``album_id``, or null when the slide has no image.
+    """
+
+    image_id: uuid.UUID | None = slide.album_image_id
+    pointed_image: AlbumImage | None = slide.album_image
+
+    if image_id is None and pointed_image is not None:
+        image_id = pointed_image.id
+
+    if image_id is None:
+
+        return None
+
+    found_image: AlbumImage | None = our_database_session.get(AlbumImage, image_id)
+
+    if found_image is not None:
+
+        return found_image.album_id
+
+    if pointed_image is not None and pointed_image.id == image_id:
+
+        return pointed_image.album_id
+
+    return None
 
 
 def slide_image_rows(slide: object) -> list[AlbumImage]:

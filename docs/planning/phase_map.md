@@ -117,7 +117,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: an admin can store step 0 or 2 on any carousel, and step 3 only when the album rule passes. A reader is rejected. A picture carousel with no album stays on its previous step when step 3 is refused.
 
-- [ ] **4.4 Attach and detach the one album**
+- [x] **4.4 Attach and detach the one album**
 
   Keep `carousels.album_id`. `PUT /api/v1/carousels/{carousel_id}/album` with `{album_id}` points at an existing album. `POST /api/v1/carousels/{carousel_id}/album` with `{name}` creates an album (same name and slug rules as `POST /api/v1/albums`) and points at it. `DELETE /api/v1/carousels/{carousel_id}/album` clears `album_id` and leaves the album row and its files. Admin only. Unknown album is 404. A blank name is 400. Replace and clear return 409 while any slide's `album_image_id` still points at an image in the album being left, including the Default album. The 409 detail says slides still point at that album's images and to clear those slide images first. The stored `album_id` stays. Two carousels may point at one album. This PR leaves `ensure_carousel_album` on the slide upload path.
 
