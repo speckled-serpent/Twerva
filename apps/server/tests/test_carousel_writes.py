@@ -32,7 +32,8 @@ from app.api.v1.carousel_writes import (
     patch_slide_image_metadata,
 )
 from app.api.v1.carousels import get_carousel
-from app.models.carousel import Carousel, Slide, SlideImage
+from app.models.album import Album, AlbumImage
+from app.models.carousel import Carousel, Slide
 from app.models.enums import (
     AdvertisementType,
     BackgroundKind,
@@ -69,6 +70,7 @@ class _MemoryCarouselSession:
 
     def __init__(self) -> None:
         self.carousels: list[Carousel] = []
+        self.albums: list[Album] = []
         self.deleted: list[object] = []
         self.commit_count: int = 0
         self.skeleton: Skeleton = Skeleton(
@@ -90,6 +92,9 @@ class _MemoryCarouselSession:
 
         if isinstance(row, Slide):
             self._attach_slide(row)
+
+        if isinstance(row, Album) and row not in self.albums:
+            self.albums.append(row)
 
     def delete(self, row: object) -> None:
         self.deleted.append(row)
@@ -122,7 +127,10 @@ class _MemoryCarouselSession:
         if model is Slide:
             return self._find_slide(row_id)
 
-        if model is SlideImage:
+        if model is Album:
+            return self._find_album(row_id)
+
+        if model is AlbumImage:
             return self._find_image(row_id)
 
         return None
@@ -132,6 +140,9 @@ class _MemoryCarouselSession:
 
         if "carousels.slug" in sql:
             return _ScalarResult([carousel.slug for carousel in self.carousels])
+
+        if "albums.slug" in sql:
+            return _ScalarResult([album.slug for album in self.albums])
 
         if "slides.position" in sql:
             positions: list[int] = []
@@ -167,7 +178,19 @@ class _MemoryCarouselSession:
 
         return None
 
-    def _find_image(self, image_id: uuid.UUID) -> SlideImage | None:
+    def _find_album(self, album_id: uuid.UUID) -> Album | None:
+        for album in self.albums:
+            if album.id == album_id:
+                return album
+
+        return None
+
+    def _find_image(self, image_id: uuid.UUID) -> AlbumImage | None:
+        for album in self.albums:
+            for image in list(album.images):
+                if image.id == image_id:
+                    return image
+
         for carousel in self.carousels:
             for slide in list(carousel.slides):
                 for image in list(slide.images):
@@ -345,7 +368,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
         session.carousels.append(_default_source_from_catalog())
         carousel: Carousel = session.carousels[0]
         slide: Slide = list(carousel.slides)[0]
-        image: SlideImage = list(slide.images)[0]
+        image: AlbumImage = list(slide.images)[0]
         original_license: SlideImageLicense = image.license
         commits_before: int = session.commit_count
 
@@ -379,7 +402,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
         session.carousels.append(_default_source_from_catalog())
         carousel: Carousel = session.carousels[0]
         slide: Slide = list(carousel.slides)[0]
-        image: SlideImage = list(slide.images)[0]
+        image: AlbumImage = list(slide.images)[0]
         original_source: str = image.source
 
         with self.assertRaises(HTTPException) as raised:
@@ -407,7 +430,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
         session.carousels.append(_default_source_from_catalog())
         carousel: Carousel = session.carousels[0]
         slide: Slide = list(carousel.slides)[0]
-        image: SlideImage = list(slide.images)[0]
+        image: AlbumImage = list(slide.images)[0]
 
         response: FileResponse = get_slide_image_file(
             carousel.id,
@@ -427,7 +450,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
         session.carousels.append(_default_source_from_catalog())
         carousel: Carousel = session.carousels[0]
         slide: Slide = list(carousel.slides)[0]
-        image: SlideImage = list(slide.images)[0]
+        image: AlbumImage = list(slide.images)[0]
 
         with patch(
             "app.api.v1.carousel_writes.stored_paths_in_use",
@@ -447,7 +470,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
         self.assertEqual(album_error.exception.status_code, 409)
         self.assertIn(image.relative_path, image_error.exception.detail)
         self.assertEqual(session.deleted, [])
-        self.assertIs(session.get(SlideImage, image.id), image)
+        self.assertIs(session.get(AlbumImage, image.id), image)
         self.assertEqual(len(get_carousel(carousel.id, session).slides), 6)
 
     def test_unused_image_only_slide_cannot_drop_its_only_image(self) -> None:
@@ -458,7 +481,7 @@ class ImageMetadataAndDeleteTests(unittest.TestCase):
         session.carousels.append(_default_source_from_catalog())
         carousel: Carousel = session.carousels[0]
         slide: Slide = list(carousel.slides)[0]
-        image: SlideImage = list(slide.images)[0]
+        image: AlbumImage = list(slide.images)[0]
 
         with patch(
             "app.api.v1.carousel_writes.stored_paths_in_use",

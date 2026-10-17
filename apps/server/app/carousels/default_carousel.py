@@ -101,11 +101,23 @@ def default_slide_display_name(filename: str) -> str:
 
 
 def default_album_carousel_id() -> uuid.UUID:
-    """Return the stable id of the seeded Default album."""
+    """Return the stable id of the seeded Default carousel."""
 
     carousel_id: uuid.UUID = uuid.uuid5(DEFAULT_ALBUM_NAMESPACE, "source:default")
 
     return carousel_id
+
+
+def default_library_album_id() -> uuid.UUID:
+    """Return the stable id of the Default album of packaged photos.
+
+    The migration uses this same uuid5 value. The carousel id stays the
+    older ``source:default`` value.
+    """
+
+    album_id: uuid.UUID = uuid.uuid5(DEFAULT_ALBUM_NAMESPACE, "album:default")
+
+    return album_id
 
 
 def default_slide_seeds() -> tuple[DefaultSlideSeed, ...]:

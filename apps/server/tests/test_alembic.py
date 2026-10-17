@@ -30,6 +30,7 @@ CAMPAIGN_THEME_SOURCE_REVISION_ID: str = "campaign_theme_source"
 THEME_ELEMENT_NAMES_REVISION_ID: str = "theme_element_names"
 THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID: str = "theme_element_text_optional"
 SKELETONS_CAROUSELS_SLIDES_REVISION_ID: str = "skeletons_carousels_slides"
+ALBUMS_FROM_SLIDES_REVISION_ID: str = "albums_from_slides"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -58,6 +59,7 @@ class AlembicInitializationTests(unittest.TestCase):
             revision_names,
             [
                 f"{DOMAIN_REVISION_ID}.py",
+                f"{ALBUMS_FROM_SLIDES_REVISION_ID}.py",
                 f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
                 f"{CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID}.py",
                 f"{CAMPAIGN_THEME_SOURCE_REVISION_ID}.py",
@@ -748,6 +750,31 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("ck_sources_name", revision_source)
         self.assertNotIn("op.create_check_constraint(", revision_source)
         self.assertNotIn("op.drop_constraint(", revision_source)
+
+    def test_albums_follow_the_rename(self) -> None:
+        """Slide images move onto albums after the rename, with short check names."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{ALBUMS_FROM_SLIDES_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), ALBUMS_FROM_SLIDES_REVISION_ID)
+        self.assertLessEqual(len(str(assigned_values.get("revision"))), 32)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            SKELETONS_CAROUSELS_SLIDES_REVISION_ID,
+        )
+        self.assertIn('op.create_check_constraint("name", "albums"', revision_source)
+        self.assertIn('op.create_check_constraint("position", "album_images"', revision_source)
+        self.assertNotIn("ck_albums_ck_", revision_source)
+        self.assertNotIn("ck_album_images_ck_", revision_source)
+        self.assertIn("INSERT INTO album_images", revision_source)
+        self.assertIn('op.drop_table("slide_images")', revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

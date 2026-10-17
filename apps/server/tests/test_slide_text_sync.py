@@ -39,7 +39,7 @@ from app.api.v1.skeleton_elements import (
     patch_skeleton_element,
 )
 from app.api.v1.skeletons import create_skeleton, delete_skeleton_by_id
-from app.models.carousel import Slide, SlideElementText, SlideImage
+from app.models.carousel import Slide, SlideElementText
 from app.models.enums import (
     SkeletonElementAlignment,
     SkeletonElementBand,
@@ -534,13 +534,10 @@ class SkeletonElementSlideTextSyncTests(unittest.TestCase):
         """Return how many images this slide stores."""
 
         self.our_database_session.expire_all()
-        statement: Select[tuple[SlideImage]] = select(SlideImage).where(
-            SlideImage.slide_id == slide_id,
-        )
-        stored_images: list[SlideImage] = list(
-            self.our_database_session.scalars(statement).all(),
-        )
-        image_count: int = len(stored_images)
+        found_slide: Slide | None = self.our_database_session.get(Slide, slide_id)
+        self.assertIsNotNone(found_slide)
+        assert found_slide is not None
+        image_count: int = 0 if found_slide.album_image_id is None else 1
 
         return image_count
 

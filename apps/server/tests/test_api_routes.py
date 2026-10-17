@@ -17,6 +17,13 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/brands/{brand_id}",
         "/api/v1/source-items",
         "/api/v1/source-items/{source_item_id}",
+        "/api/v1/albums",
+        "/api/v1/albums/{album_id}",
+        "/api/v1/albums/{album_id}/images",
+        "/api/v1/albums/{album_id}/images/import",
+        "/api/v1/albums/{album_id}/images/{image_id}",
+        "/api/v1/albums/{album_id}/images/{image_id}/file",
+        "/api/v1/albums/{album_id}/images/{image_id}/thumbnail",
         "/api/v1/carousels",
         "/api/v1/carousels/{carousel_id}",
         "/api/v1/carousels/{carousel_id}/slides",
@@ -100,6 +107,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/post-jobs",
             "/api/v1/campaigns",
             "/api/v1/skeletons",
+            "/api/v1/albums",
         )
 
         for collection_path in collection_paths:
@@ -314,6 +322,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/post-jobs/{post_job_id}",
             "/api/v1/campaigns/{campaign_id}",
             "/api/v1/skeletons/{skeleton_id}",
+            "/api/v1/albums/{album_id}",
         )
 
         for item_path in item_paths:

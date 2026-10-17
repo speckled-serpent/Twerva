@@ -7,6 +7,7 @@ import {
   logoutOpsOperator,
 } from "./api/client";
 import type {
+  AlbumReadResponse,
   CampaignReadResponse,
   HealthReadResponse,
   OpsUserReadResponse,
@@ -14,11 +15,13 @@ import type {
   SkeletonReadResponse,
 } from "./api/types";
 import { NavBar, type OpsPageId } from "./components/NavBar";
+import { AlbumsPage, type AlbumsOpenRequest } from "./pages/AlbumsPage";
 import { AccountPage } from "./pages/AccountPage";
 import { AccountsPage } from "./pages/AccountsPage";
 import { CampaignsPage } from "./pages/CampaignsPage";
 import { campaignStatusLabel } from "./pages/campaignDisplay";
 import { LoginPage } from "./pages/LoginPage";
+import { NewAlbumPage } from "./pages/NewAlbumPage";
 import { NewCampaignPage } from "./pages/NewCampaignPage";
 import { NewCarouselPage } from "./pages/NewCarouselPage";
 import { NewSkeletonPage } from "./pages/NewSkeletonPage";
@@ -48,6 +51,7 @@ export function App(): ReactElement {
   const [campaignStatusMessage, setCampaignStatusMessage] = useState<string>("");
   const [skeletonStatusMessage, setSkeletonStatusMessage] = useState<string>("");
   const [sourceOpenRequest, setCarouselOpenRequest] = useState<CarouselsOpenRequest | null>(null);
+  const [albumOpenRequest, setAlbumOpenRequest] = useState<AlbumsOpenRequest | null>(null);
   const [healthLabel, setHealthLabel] = useState<string>("API: checking…");
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -180,6 +184,10 @@ export function App(): ReactElement {
             if (pageId !== "carousels") {
               setCarouselOpenRequest(null);
             }
+
+            if (pageId !== "albums") {
+              setAlbumOpenRequest(null);
+            }
           }}
           healthLabel={healthLabel}
           signedInUsername={signedInOperator.username}
@@ -196,10 +204,12 @@ export function App(): ReactElement {
             campaignStatusMessage,
             skeletonStatusMessage,
             sourceOpenRequest,
+            albumOpenRequest,
             setOpenedCampaignId,
             setCampaignStatusMessage,
             setSkeletonStatusMessage,
             setCarouselOpenRequest,
+            setAlbumOpenRequest,
             setActivePageId,
           )}
         </main>
@@ -214,10 +224,12 @@ function renderActivePage(
   campaignStatusMessage: string,
   skeletonStatusMessage: string,
   sourceOpenRequest: CarouselsOpenRequest | null,
+  albumOpenRequest: AlbumsOpenRequest | null,
   onOpenedCampaignIdChange: (campaignId: string | null) => void,
   onCampaignStatusMessageChange: (statusMessage: string) => void,
   onSkeletonStatusMessageChange: (statusMessage: string) => void,
   onCarouselOpenRequestChange: (openRequest: CarouselsOpenRequest | null) => void,
+  onAlbumOpenRequestChange: (openRequest: AlbumsOpenRequest | null) => void,
   onNavigate: (pageId: OpsPageId) => void,
 ): ReactElement {
 
@@ -272,6 +284,35 @@ function renderActivePage(
         onCreateCarousel={(): void => {
           onCarouselOpenRequestChange(null);
           onNavigate("new-carousel");
+        }}
+      />
+    );
+  }
+
+  if (activePageId === "albums") {
+    return (
+      <AlbumsPage
+        openRequest={albumOpenRequest}
+        onCreateAlbum={(): void => {
+          onAlbumOpenRequestChange(null);
+          onNavigate("new-album");
+        }}
+      />
+    );
+  }
+
+  if (activePageId === "new-album") {
+    return (
+      <NewAlbumPage
+        onCreated={(createdAlbum: AlbumReadResponse): void => {
+          onAlbumOpenRequestChange({
+            albumId: createdAlbum.id,
+            statusMessage: `Created album ${createdAlbum.name}.`,
+          });
+          onNavigate("albums");
+        }}
+        onCancel={(): void => {
+          onNavigate("albums");
         }}
       />
     );

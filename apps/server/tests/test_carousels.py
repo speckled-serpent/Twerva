@@ -20,7 +20,8 @@ from app.api.v1.carousels import (
     list_carousels,
     carousels_router,
 )
-from app.models.carousel import Carousel, Slide, SlideImage
+from app.models.album import AlbumImage
+from app.models.carousel import Carousel, Slide
 from app.models.enums import (
     SlideImageIntake,
     SlideImageLicense,
@@ -30,6 +31,7 @@ from app.carousels.default_carousel import (
     DEFAULT_ALBUM_SLUG,
     DEFAULT_ALBUM_SKELETON_ID,
     default_album_carousel_id,
+    default_library_album_id,
     default_slide_seeds,
 )
 from app.skeletons.default_images import (
@@ -265,10 +267,10 @@ def _default_source_from_catalog() -> Carousel:
             created_at=now,
             updated_at=now,
         )
-        image: SlideImage = SlideImage(
+        image: AlbumImage = AlbumImage(
             id=seed.image_id,
-            slide_id=slide.id,
-            position=0,
+            album_id=default_library_album_id(),
+            position=seed.position,
             relative_path=seed.relative_path,
             media_type=SlideImageMediaType.JPEG,
             byte_size=seed.byte_size,
@@ -283,7 +285,7 @@ def _default_source_from_catalog() -> Carousel:
             created_at=now,
             updated_at=now,
         )
-        slide.images = [image]
+        slide.album_image = image
         slide.element_texts = []
         slide.exclusions = []
         slides.append(slide)

@@ -9,6 +9,7 @@ cookie. Readers may GET; mutations return 403 except self
 from fastapi import APIRouter, Depends
 
 from app.api.v1.accounts import accounts_router
+from app.api.v1.albums import albums_router
 from app.api.v1.artifacts import artifacts_router
 from app.api.v1.authentication import authentication_router
 from app.api.v1.brands import brands_router
@@ -37,6 +38,7 @@ protected_api_v1_router: APIRouter = APIRouter(
 protected_api_v1_router.include_router(brands_router)
 protected_api_v1_router.include_router(source_items_router)
 protected_api_v1_router.include_router(carousels_router)
+protected_api_v1_router.include_router(albums_router)
 protected_api_v1_router.include_router(campaigns_router)
 protected_api_v1_router.include_router(skeletons_router)
 protected_api_v1_router.include_router(spotmu_router)

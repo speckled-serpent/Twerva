@@ -1,9 +1,4 @@
-import type {
-  CarouselReadResponse,
-  SlideElementTextReadResponse,
-  SlideImageReadResponse,
-  SlideReadResponse,
-} from "../api/types";
+import type { AlbumImageReadResponse, AlbumReadResponse } from "../api/types";
 
 export const DEFAULT_ALBUM_ID: string = "default";
 export const SAVED_ASSET_OPTION: string = "__saved__";
@@ -50,68 +45,54 @@ export function captionForSlide(textValues: readonly string[]): string {
 }
 
 /**
- * Albums for the skeleton picker. Text-only slides are omitted.
+ * Albums for the skeleton picker. Each image is one thumbnail.
+ * The caption is the alt text. Skeleton fields still store the path.
  *
- * @param carousel - Album detail from `GET /api/v1/carousels/{id}`
- * @returns One album and the image slides inside it
+ * @param album - Album detail from `GET /api/v1/albums/{id}`
+ * @returns One album and the images inside it
  */
-export function skeletonAlbumFromCarousel(carousel: CarouselReadResponse): SkeletonImageAlbum {
+export function skeletonAlbumFromAlbum(album: AlbumReadResponse): SkeletonImageAlbum {
 
-  const orderedSlides: SlideReadResponse[] = [...carousel.slides].sort(
-    (left: SlideReadResponse, right: SlideReadResponse): number => left.position - right.position,
+  const orderedImages: AlbumImageReadResponse[] = [...album.images].sort(
+    (left: AlbumImageReadResponse, right: AlbumImageReadResponse): number => (
+      left.position - right.position
+    ),
   );
-  const pickerSlides: SkeletonPickerSlide[] = [];
   const assetRefs: string[] = [];
-
-  for (const slide of orderedSlides) {
-    const orderedImages: SlideImageReadResponse[] = [...slide.images].sort(
-      (left: SlideImageReadResponse, right: SlideImageReadResponse): number => (
-        left.position - right.position
-      ),
-    );
-
-    if (orderedImages.length === 0) {
-      continue;
-    }
-
-    const textValues: string[] = slide.texts.map(
-      (elementText: SlideElementTextReadResponse): string => elementText.value,
-    );
-    const pickerImages: SkeletonPickerImage[] = orderedImages.map((image) => {
+  const pickerSlides: SkeletonPickerSlide[] = orderedImages.map(
+    (image: AlbumImageReadResponse): SkeletonPickerSlide => {
       assetRefs.push(image.relative_path);
-
+      const caption: string = (image.alt_text ?? "").trim();
       const pickerImage: SkeletonPickerImage = {
         imageId: image.id,
-        slideId: slide.id,
+        slideId: image.id,
         relativePath: image.relative_path,
         hasThumbnail: image.thumbnail_path !== null && image.thumbnail_path !== "",
       };
+      const pickerSlide: SkeletonPickerSlide = {
+        slideId: image.id,
+        caption,
+        images: [pickerImage],
+      };
 
-      return pickerImage;
-    });
-    const pickerSlide: SkeletonPickerSlide = {
-      slideId: slide.id,
-      caption: captionForSlide(textValues),
-      images: pickerImages,
-    };
-    pickerSlides.push(pickerSlide);
-  }
-
-  const album: SkeletonImageAlbum = {
-    album_id: carousel.id,
-    name: carousel.name,
-    slug: carousel.slug,
+      return pickerSlide;
+    },
+  );
+  const pickerAlbum: SkeletonImageAlbum = {
+    album_id: album.id,
+    name: album.name,
+    slug: album.slug,
     asset_refs: assetRefs,
     slides: pickerSlides,
   };
 
-  return album;
+  return pickerAlbum;
 }
 
 /**
  * Return the album that already contains this stored path.
  *
- * @param albums - Albums loaded from Carousels
+ * @param albums - Albums loaded from the library
  * @param assetRef - Concrete path stored on the skeleton
  * @returns The matching album, or null when the path is outside every album
  */
@@ -130,7 +111,7 @@ export function albumForAssetRef(
 /**
  * The seeded Default album, by slug or by the old catalog id.
  *
- * @param albums - Albums loaded from Carousels
+ * @param albums - Albums loaded from the library
  * @returns Default, or undefined when it is absent
  */
 export function findDefaultAlbum(
@@ -211,7 +192,7 @@ export function assetRefForAlbumChoice(
  *
  * A saved path outside the albums shuffles the Default album.
  *
- * @param albums - Albums from Carousels
+ * @param albums - Albums from the library
  * @param selectValue - Current dropdown value
  * @param currentAssetRef - Path currently stored
  * @param randomSlide - Number in ``[0, 1)``
@@ -241,7 +222,7 @@ export function assetRefAfterShuffle(
 /**
  * Pick one concrete path from the Default album for a new image element.
  *
- * @param albums - Albums from Carousels
+ * @param albums - Albums from the library
  * @param randomSlide - Number in ``[0, 1)``
  * @returns A stored path from Default
  */

@@ -20,7 +20,10 @@ from app.settings import Settings, get_settings
 alembic_configuration: Config = context.config
 
 if alembic_configuration.config_file_name is not None:
-    fileConfig(alembic_configuration.config_file_name)
+    fileConfig(
+        alembic_configuration.config_file_name,
+        disable_existing_loggers=False,
+    )
 
 target_metadata = Base.metadata
 

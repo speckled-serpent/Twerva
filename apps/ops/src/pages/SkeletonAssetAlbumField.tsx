@@ -1,19 +1,19 @@
 import { useEffect, useState, type ReactElement } from "react";
 
 import {
-  fetchCarouselById,
-  listCarousels,
-  slideImageFileUrl,
-  slideImageThumbnailUrl,
+  albumImageFileUrl,
+  albumImageThumbnailUrl,
+  fetchAlbumById,
+  listAlbums,
 } from "../api/client";
-import type { CarouselListItemResponse, CarouselReadResponse } from "../api/types";
+import type { AlbumListItemResponse, AlbumReadResponse } from "../api/types";
 import {
   SAVED_ASSET_OPTION,
   albumForAssetRef,
   assetRefAfterShuffle,
   assetRefForAlbumChoice,
   findDefaultAlbum,
-  skeletonAlbumFromCarousel,
+  skeletonAlbumFromAlbum,
   type SkeletonImageAlbum,
   type SkeletonPickerImage,
   type SkeletonPickerSlide,
@@ -30,9 +30,10 @@ export interface SkeletonAssetAlbumFieldProps {
 let albumsPromise: Promise<SkeletonImageAlbum[]> | null = null;
 
 /**
- * Load every album once. A failed request can be tried again.
+ * Load every album. A later visit fetches again so a new album shows up.
+ * A failed request can be tried again.
  *
- * @returns Albums from Carousels, with text-only slides omitted
+ * @returns Albums from the library
  */
 export function loadSkeletonPickerAlbums(): Promise<SkeletonImageAlbum[]> {
 
@@ -40,14 +41,16 @@ export function loadSkeletonPickerAlbums(): Promise<SkeletonImageAlbum[]> {
     return albumsPromise;
   }
 
-  const pendingAlbums: Promise<SkeletonImageAlbum[]> = listCarousels()
-    .then(async (listedAlbums: CarouselListItemResponse[]): Promise<SkeletonImageAlbum[]> => {
-      const details: CarouselReadResponse[] = await Promise.all(
-        listedAlbums.map((listedAlbum: CarouselListItemResponse): Promise<CarouselReadResponse> => (
-          fetchCarouselById(listedAlbum.id)
+  const pendingAlbums: Promise<SkeletonImageAlbum[]> = listAlbums()
+    .then(async (listedAlbums: AlbumListItemResponse[]): Promise<SkeletonImageAlbum[]> => {
+      const details: AlbumReadResponse[] = await Promise.all(
+        listedAlbums.map((listedAlbum: AlbumListItemResponse): Promise<AlbumReadResponse> => (
+          fetchAlbumById(listedAlbum.id)
         )),
       );
-      const pickerAlbums: SkeletonImageAlbum[] = details.map(skeletonAlbumFromCarousel);
+      const pickerAlbums: SkeletonImageAlbum[] = details.map(skeletonAlbumFromAlbum);
+
+      albumsPromise = null;
 
       return pickerAlbums;
     })
@@ -244,13 +247,13 @@ export function SkeletonAssetAlbumField({
   );
 }
 
-function displayUrl(sourceId: string, image: SkeletonPickerImage): string {
+function displayUrl(albumId: string, image: SkeletonPickerImage): string {
 
   if (image.hasThumbnail) {
-    return slideImageThumbnailUrl(sourceId, image.slideId, image.imageId);
+    return albumImageThumbnailUrl(albumId, image.imageId);
   }
 
-  return slideImageFileUrl(sourceId, image.slideId, image.imageId);
+  return albumImageFileUrl(albumId, image.imageId);
 }
 
 function assetHint(

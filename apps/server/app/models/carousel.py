@@ -1,11 +1,12 @@
 """Content carousels: one kind of carousel, bound to a required skeleton.
 
-A slide keeps its id, has a name, and holds at most one image. Its text
-is one value per text element on that skeleton. Generated text stays a
-draft until a person accepts it. ``slide_exclusions`` stores the other
-slide ids it cannot be shown with. The carousel stores inspiration and
-rules for that draft. Skeletons still store a concrete image path. They
-do not reference these rows.
+A slide keeps its id, has a name, and points at most one album image.
+Its text is one value per text element on that skeleton. Generated text
+stays a draft until a person accepts it. ``slide_exclusions`` stores the
+other slide ids it cannot be shown with. The carousel stores inspiration
+and rules for that draft, and may point at the album its images came
+from. Skeletons still store a concrete image path. They do not reference
+these rows.
 """
 
 from __future__ import annotations
@@ -16,15 +17,10 @@ from sqlalchemy import CheckConstraint, ForeignKey, Integer, Text, UniqueConstra
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.models.album import Album, AlbumImage
 from app.models.base import Base, TimestampMixin, UuidPrimaryKeyMixin
 from app.models.enums import (
-    SLIDE_IMAGE_INTAKE_ENUM,
-    SLIDE_IMAGE_LICENSE_ENUM,
-    SLIDE_IMAGE_MEDIA_TYPE_ENUM,
     SLIDE_TEXT_STATUS_ENUM,
-    SlideImageIntake,
-    SlideImageLicense,
-    SlideImageMediaType,
     SlideTextStatus,
 )
 
@@ -35,42 +31,7 @@ CAROUSEL_NAME_CHECK_SQL: str = (
 SLIDE_POSITION_CHECK_SQL: str = "position >= 0"
 SLIDE_NAME_CHECK_SQL: str = "btrim(name) <> ''"
 SLIDE_FIELD_TEXT_CHECK_SQL: str = "btrim(label) <> '' AND btrim(value) <> ''"
-SLIDE_IMAGE_SOURCE_CHECK_SQL: str = "btrim(source) <> ''"
-SLIDE_IMAGE_BYTE_SIZE_CHECK_SQL: str = "byte_size > 0"
-SLIDE_IMAGE_LICENSE_NOTE_CHECK_SQL: str = (
-    "("
-    "license <> 'licensed'::slide_image_license"
-    " AND license_note = ''"
-    ") OR ("
-    "license = 'licensed'::slide_image_license"
-    " AND btrim(license_note) <> ''"
-    ")"
-)
-SLIDE_IMAGE_DIMENSIONS_CHECK_SQL: str = (
-    "("
-    "media_type = 'svg'::slide_image_media_type"
-    " AND width IS NULL"
-    " AND height IS NULL"
-    " AND thumbnail_path IS NULL"
-    ") OR ("
-    "media_type <> 'svg'::slide_image_media_type"
-    " AND width > 0"
-    " AND height > 0"
-    ")"
-)
 RESOURCE_FILE_MAX_BYTES: int = 2 * 1024 * 1024
-SLIDE_IMAGE_PATH_CHECK_SQL: str = (
-    "btrim(relative_path) = relative_path"
-    " AND relative_path <> ''"
-    " AND strpos(relative_path, '..') = 0"
-    " AND strpos(relative_path, ':') = 0"
-    " AND strpos(relative_path, chr(92)) = 0"
-    " AND left(relative_path, 1) <> '/'"
-    " AND ("
-    "lower(right(relative_path, 4)) IN ('.svg', '.png', '.jpg')"
-    " OR lower(right(relative_path, 5)) = '.jpeg'"
-    ")"
-)
 
 
 class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -102,6 +63,12 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         default="",
         server_default="",
     )
+    album_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("albums.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     slides: Mapped[list["Slide"]] = relationship(
         "Slide",
@@ -109,6 +76,7 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="Slide.position",
     )
+    album: Mapped[Album | None] = relationship("Album")
 
 
 class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -139,6 +107,12 @@ class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
         default=SlideTextStatus.LIVE,
         server_default="live",
     )
+    album_image_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("album_images.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     carousel: Mapped[Carousel] = relationship("Carousel", back_populates="slides")
     element_texts: Mapped[list["SlideElementText"]] = relationship(
@@ -146,11 +120,9 @@ class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="slide",
         cascade="all, delete-orphan",
     )
-    images: Mapped[list["SlideImage"]] = relationship(
-        "SlideImage",
-        back_populates="slide",
-        cascade="all, delete-orphan",
-        order_by="SlideImage.position",
+    album_image: Mapped[AlbumImage | None] = relationship(
+        "AlbumImage",
+        foreign_keys=[album_image_id],
     )
     exclusions: Mapped[list["SlideExclusion"]] = relationship(
         "SlideExclusion",
@@ -158,6 +130,33 @@ class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="slide",
         cascade="all, delete-orphan",
     )
+
+    @property
+    def images(self) -> list[AlbumImage]:
+        """The album image this slide points at, or an empty list.
+
+        Slide reads still expose ``images`` so a slide has at most one
+        image. The row itself lives on the album.
+        """
+
+        if self.album_image is None:
+
+            return []
+
+        return [self.album_image]
+
+    @images.setter
+    def images(self, rows: list[AlbumImage]) -> None:
+        """Point the slide at the only image, or clear the pointer."""
+
+        if len(rows) == 0:
+            self.album_image = None
+            self.album_image_id = None
+
+            return
+
+        self.album_image = rows[0]
+        self.album_image_id = rows[0].id
 
 
 class SlideExclusion(Base, UuidPrimaryKeyMixin):
@@ -232,65 +231,3 @@ class SlideElementText(Base, UuidPrimaryKeyMixin):
     draft_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     slide: Mapped[Slide] = relationship("Slide", back_populates="element_texts")
-
-
-class SlideImage(Base, UuidPrimaryKeyMixin, TimestampMixin):
-    """One image file that belongs to a slide, with license and source."""
-
-    __tablename__ = "slide_images"
-    __table_args__ = (
-        UniqueConstraint("relative_path", name="uq_slide_images_relative_path"),
-        UniqueConstraint("slide_id", name="uq_slide_images_slide_id"),
-        UniqueConstraint(
-            "slide_id",
-            "position",
-            name="uq_slide_images_slide_id_position",
-        ),
-        CheckConstraint(SLIDE_POSITION_CHECK_SQL, name="position"),
-        CheckConstraint(SLIDE_IMAGE_SOURCE_CHECK_SQL, name="source"),
-        CheckConstraint(SLIDE_IMAGE_BYTE_SIZE_CHECK_SQL, name="byte_size"),
-        CheckConstraint(
-            SLIDE_IMAGE_LICENSE_NOTE_CHECK_SQL,
-            name="license_note",
-        ),
-        CheckConstraint(
-            SLIDE_IMAGE_DIMENSIONS_CHECK_SQL,
-            name="dimensions",
-        ),
-        CheckConstraint(SLIDE_IMAGE_PATH_CHECK_SQL, name="relative_path"),
-    )
-
-    slide_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("slides.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    position: Mapped[int] = mapped_column(Integer, nullable=False)
-    relative_path: Mapped[str] = mapped_column(Text, nullable=False)
-    media_type: Mapped[SlideImageMediaType] = mapped_column(
-        SLIDE_IMAGE_MEDIA_TYPE_ENUM,
-        nullable=False,
-    )
-    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
-    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    alt_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    license: Mapped[SlideImageLicense] = mapped_column(
-        SLIDE_IMAGE_LICENSE_ENUM,
-        nullable=False,
-    )
-    source: Mapped[str] = mapped_column(Text, nullable=False)
-    license_note: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        default="",
-        server_default="",
-    )
-    intake: Mapped[SlideImageIntake] = mapped_column(
-        SLIDE_IMAGE_INTAKE_ENUM,
-        nullable=False,
-    )
-    thumbnail_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    slide: Mapped[Slide] = relationship("Slide", back_populates="images")

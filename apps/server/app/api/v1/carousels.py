@@ -24,7 +24,8 @@ from app.carousels.text_generation import (
     text_generation_availability,
 )
 from app.db import get_our_database_session
-from app.models.carousel import Carousel, Slide, SlideElementText, SlideImage
+from app.models.album import AlbumImage
+from app.models.carousel import Carousel, Slide, SlideElementText
 from app.models.enums import SlideTextStatus
 from app.carousels.slide_text_review import live_slides, slide_counts_as_live
 
@@ -42,7 +43,7 @@ def carousels_list_statement() -> Select[tuple[Carousel]]:
     statement: Select[tuple[Carousel]] = (
         select(Carousel)
         .options(
-            selectinload(Carousel.slides).selectinload(Slide.images),
+            selectinload(Carousel.slides).selectinload(Slide.album_image),
             selectinload(Carousel.slides).selectinload(Slide.element_texts),
             selectinload(Carousel.slides).selectinload(Slide.exclusions),
         )
@@ -108,6 +109,7 @@ def serialize_carousel_list_item(carousel: Carousel) -> CarouselListItemResponse
         skeleton_id=carousel.skeleton_id,
         name=carousel.name,
         slug=carousel.slug,
+        album_id=carousel.album_id,
         slide_count=len(list(carousel.slides)),
         created_at=carousel.created_at,
         updated_at=carousel.updated_at,
@@ -127,6 +129,7 @@ def serialize_carousel(carousel: Carousel) -> CarouselReadResponse:
         skeleton_id=carousel.skeleton_id,
         name=carousel.name,
         slug=carousel.slug,
+        album_id=carousel.album_id,
         inspiration=carousel.inspiration or "",
         rules=carousel.rules or "",
         live_slide_count=len(live_slides(list(carousel.slides))),
@@ -227,23 +230,15 @@ def _excluded_slide_ids(slide: Slide) -> list[uuid.UUID]:
     return excluded_ids
 
 
-def _images_in_position_order(slide: Slide) -> list[SlideImage]:
-    """Return images sorted by position."""
+def _images_in_position_order(slide: Slide) -> list[AlbumImage]:
+    """Return the album image this slide points at, if any."""
 
-    ordered_images: list[SlideImage] = sorted(list(slide.images), key=_image_position)
+    ordered_images: list[AlbumImage] = list(slide.images)
 
     return ordered_images
 
 
-def _image_position(image: SlideImage) -> int:
-    """Return the sort key for an image."""
-
-    position: int = image.position
-
-    return position
-
-
-def serialize_image(image: SlideImage) -> SlideImageReadResponse:
+def serialize_image(image: AlbumImage) -> SlideImageReadResponse:
     """Return one image, including license and the concrete path."""
 
     image_response: SlideImageReadResponse = SlideImageReadResponse(

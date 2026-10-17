@@ -19,9 +19,10 @@ text element. ``slide_exclusions`` stores the other slide ids a slide
 cannot be shown with. ``slides.text_status`` is ``live`` or ``draft``.
 A draft is generated text that is not live until a person accepts it.
 ``carousels.inspiration`` and ``carousels.rules`` steer that draft.
-``slide_images`` holds at most one image per slide. A campaign stores
-the skeleton and the carousel it runs. ``campaign_carousels`` is the
-latest assembly of live slides on that skeleton.
+``album_images`` holds the files. A slide points at most one of them.
+A carousel may point at the album those images came from. A campaign
+stores the skeleton and the carousel it runs. ``campaign_carousels`` is
+the latest assembly of live slides on that skeleton.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -32,6 +33,7 @@ table. Alembic ``env.py`` depends on that.
 """
 
 from app.models.account import Account
+from app.models.album import Album, AlbumImage
 from app.models.artifact import Artifact, ArtifactSlide
 from app.models.base import Base
 from app.models.brand import Brand
@@ -48,7 +50,6 @@ from app.models.carousel import (
     Slide,
     SlideElementText,
     SlideExclusion,
-    SlideImage,
 )
 from app.models.enums import (
     ACCOUNT_STATUS_ENUM,
@@ -114,6 +115,8 @@ __all__ = [
     "BACKGROUND_KIND_ENUM",
     "Account",
     "AccountStatus",
+    "Album",
+    "AlbumImage",
     "AdvertisementType",
     "Artifact",
     "ArtifactSlide",
@@ -161,7 +164,6 @@ __all__ = [
     "Slide",
     "SlideElementText",
     "SlideExclusion",
-    "SlideImage",
     "SlideImageIntake",
     "SlideImageLicense",
     "SlideImageMediaType",

@@ -27,7 +27,8 @@ from app.api.v1.schemas import (
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
-from app.models.carousel import Carousel, Slide, SlideElementText, SlideExclusion, SlideImage
+from app.models.album import AlbumImage
+from app.models.carousel import Carousel, Slide, SlideElementText, SlideExclusion
 from app.models.enums import SlideImageMediaType, SlideTextStatus
 from app.models.skeleton import Skeleton
 from app.models.ops_user import OpsUser
@@ -206,13 +207,11 @@ def delete_carousel(
         _image_paths_on_source(found_source),
         ALBUM_IN_USE_DETAIL,
     )
-    stored_files: list[tuple[str, str | None]] = _stored_files_on_source(found_source)
     our_database_session.delete(found_source)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Carousel could not be deleted.",
     )
-    _discard_stored_files(stored_files)
 
 
 def create_slide(
@@ -338,14 +337,12 @@ def delete_slide(
         _image_paths_on_slide(found_slide),
         SLIDE_IN_USE_DETAIL,
     )
-    stored_files: list[tuple[str, str | None]] = _stored_files_on_slide(found_slide)
     _clear_exclusion_pairs(found_slide, found_source, our_database_session)
     our_database_session.delete(found_slide)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be deleted.",
     )
-    _discard_stored_files(stored_files)
 
 
 def patch_slide_image_metadata(
@@ -359,7 +356,7 @@ def patch_slide_image_metadata(
     """Update license, source, alt, and note. A bad license writes nothing."""
 
     _ = current_ops_operator
-    found_image: SlideImage = _fetch_image_or_raise(
+    found_image: AlbumImage = _fetch_image_or_raise(
         carousel_id,
         slide_id,
         image_id,
@@ -391,7 +388,7 @@ def delete_slide_image(
     """Delete one image row. 409 when a skeleton or artifact stores its path."""
 
     _ = current_ops_operator
-    found_image: SlideImage = _fetch_image_or_raise(
+    found_image: AlbumImage = _fetch_image_or_raise(
         carousel_id,
         slide_id,
         image_id,
@@ -416,6 +413,7 @@ def delete_slide_image(
     stored_files: list[tuple[str, str | None]] = [
         (found_image.relative_path, found_image.thumbnail_path),
     ]
+    found_slide.images = []
     our_database_session.delete(found_image)
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -435,7 +433,7 @@ def get_slide_image_file(
     Readers may call this. This route does not upload or thumbnail.
     """
 
-    found_image: SlideImage = _fetch_image_or_raise(
+    found_image: AlbumImage = _fetch_image_or_raise(
         carousel_id,
         slide_id,
         image_id,
@@ -773,13 +771,17 @@ def _fetch_image_or_raise(
     slide_id: uuid.UUID,
     image_id: uuid.UUID,
     our_database_session: Session,
-) -> SlideImage:
-    """Return an image on this slide, or 404."""
+) -> AlbumImage:
+    """Return the album image this slide points at, or 404."""
 
     found_slide: Slide = _fetch_slide_or_raise(carousel_id, slide_id, our_database_session)
-    found_image: SlideImage | None = our_database_session.get(SlideImage, image_id)
+    found_image: AlbumImage | None = our_database_session.get(AlbumImage, image_id)
+    pointed_image_id: uuid.UUID | None = found_slide.album_image_id
 
-    if found_image is None or found_image.slide_id != found_slide.id:
+    if pointed_image_id is None and found_slide.album_image is not None:
+        pointed_image_id = found_slide.album_image.id
+
+    if found_image is None or pointed_image_id != found_image.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Image not found: {image_id}",

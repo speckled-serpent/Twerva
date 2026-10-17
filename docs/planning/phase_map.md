@@ -15,15 +15,15 @@ Build in the order below. The rename is a real change to the tables and the rout
 
 A skeleton is the shape of a carousel frame: one background (picture, solid color, or gradient), spacing, and named elements. An element is text or an image, and the name is required. The skeleton editor covers that frame, autosaves frame and element edits, and previews the frame with lorem ipsum at a word count per text element. It does not ask the operator to mark the skeleton Draft or Live. The status column is still on the row. A campaign can pick any skeleton. Adding a text element adds an empty text on every slide of every carousel bound to that skeleton. Removing an element removes that text. A text element may omit a Spotmu text source. Slide text is the value stored for that element, under its name. A picture background or an image element stores a concrete image path.
 
-A carousel is bound to one skeleton. Create asks for a name and that skeleton. There is one kind of carousel. Album and resource are gone, and the `resource_files` table is gone. A slide has a name, at most one image, and one text per named text element. The image field is there only when the skeleton has a picture background or an image element. A slide can name other slides in the same carousel that it cannot be shown with. Images are a manual upload or a URL import, with a license and a source note, stored on disk. The path prefix is `albums/…`, or `theme-defaults/…` for the packaged photos. Opening a slide previews that skeleton with this slide and does not write an artifact.
+A carousel is bound to one skeleton. Create asks for a name and that skeleton. There is one kind of carousel. Album and resource are gone, and the `resource_files` table is gone. A slide has a name, at most one image, and one text per named text element. The image field is there only when the skeleton has a picture background or an image element. A slide can name other slides in the same carousel that it cannot be shown with. Images are a manual upload or a URL import, with a license and a source note, stored on disk. The path prefix is `albums/…`, or `theme-defaults/…` for the packaged photos. The file row lives on an album. A slide that has an image points at that album image. Opening a slide previews that skeleton with this slide and does not write an artifact.
 
-The Default carousel (slug `default`) is six packaged photos, bound to Spotmu Paper v1, so the required skeleton has a row to point at. Its paths stay `theme-defaults/…`.
+The Default carousel (slug `default`) is bound to Spotmu Paper v1, so the required skeleton has a row to point at. Its six packaged photos are the Default album (slug `default`). Paths stay `theme-defaults/…`. A carousel that had slide images points at an album named after that carousel. A carousel with no images has no album. Skeleton picture paths stay concrete files.
 
 The carousel stores inspiration and rules as two text fields. Generate drafts the slide's name and text from those. Accept makes that text the live text. Leaving it unreviewed keeps the slide off a run. The call uses OpenAI when `OPENAI_API_KEY` is set (`TEXT_GENERATION_PROVIDER` is `openai` or `fake`; the model defaults to `gpt-4o-mini`) and stays off otherwise. Images are not generated.
 
 A campaign stores the chosen skeleton and one carousel bound to that skeleton. Older rows can have both empty. Run groups the live slides into `campaign_carousels` that respect the exclusion rules. It does not call the model and does not draw frames. Those rows are a run's assembly, not the carousel. Create still asks for platforms and at least one Spotmu interest. A production Spotmu campaign also asks for an account. A Spotmu test campaign does not. Run does not read the interests.
 
-The ops console is signed in. An admin can change rows. A reader can look. The left rail is Content (Campaigns, Skeletons, Carousels), Run (Queue, Schedule, Results), and Setup (Accounts, Users).
+The ops console is signed in. An admin can change rows. A reader can look. The left rail is Content (Campaigns, Skeletons, Carousels), Library (Albums), Run (Queue, Schedule, Results), and Setup (Accounts, Users). An album is a named set of images. The list has Create Album. The detail adds, removes, and reorders images, edits license, source, alt, and license note, and autosaves. Delete asks first.
 
 An earlier loop still renders a shipping carousel from `carousel_template_v1` off one Spotmu interest. The caption is that interest's title, a fixed hashtag set, and the interest URL. The ops console can approve that draft, set a time, mock-publish, and record a metric by hand. An account can carry a per-day cadence cap. It does not store a login. Publish is a mock adapter. An Ayrshare adapter is in the tree and refuses the live call. Metric rows, a manual entry route, and a cluster median of the latest view counts exist. A stub can copy mock views onto a mock-published job. Clusters, brands, ingest, and steer from that loop are still in the API. The phases below replace that loop for the new model.
 
@@ -45,13 +45,18 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ## 2. Albums
 
+**Status.** Done. Revision `albums_from_slides`.
+
 **Goal.** A reusable collection of images, on the rail, that more than one carousel can use.
 
 **Scope.** An album is a named set of images. Keep today's upload, URL import, license fields, and thumbnails. Skeleton picture paths stay concrete files. This phase does not build the Content step. It does store which album a carousel's images came from, so the files are not left on the slide with nowhere to live.
 
 **Migration.** Add albums and album images. For each carousel that has slide images, create one album named after the carousel and move the image rows onto it. The carousel points at that album. A slide that had an image keeps a pointer to that album image. Do not copy the bytes. The Default carousel's six packaged photos become an album named Default. Their paths stay `theme-defaults/…`. Other files stay at the paths they already have. A carousel with no images gets no album. Skeleton backgrounds that store a path are left alone.
 
-**Open questions.** Mu will detail albums further. Does the album screen show the license, source, and alt already stored on each image? Today two slides can each hold their own copy of one picture. Should those become one album image?
+**Open questions.** Settled for this phase:
+
+- The album screen shows and edits the license, source, alt, and license note already stored on each image. Upload already requires them. Edits autosave. There is no separate Save button.
+- Two slides that each held their own copy stay two album images. The rows are not merged. Each slide image keeps its id and its path.
 
 ## 3. Research
 

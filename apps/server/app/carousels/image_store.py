@@ -125,6 +125,26 @@ def album_image_relative_path(
     return relative_path
 
 
+def library_image_relative_path(
+    album_id: uuid.UUID,
+    image_id: uuid.UUID,
+    extension: str,
+) -> str:
+    """Return ``albums/<album>/<image>.<ext>`` for an image added on the album."""
+
+    relative_path: str = f"{ALBUM_IMAGE_PREFIX}{album_id}/{image_id}.{extension}"
+
+    return relative_path
+
+
+def library_thumbnail_relative_path(album_id: uuid.UUID, image_id: uuid.UUID) -> str:
+    """Return the JPEG thumbnail path beside an album-page upload."""
+
+    thumbnail_path: str = f"{ALBUM_IMAGE_PREFIX}{album_id}/{image_id}-thumb.jpg"
+
+    return thumbnail_path
+
+
 def album_thumbnail_relative_path(
     carousel_id: uuid.UUID,
     slide_id: uuid.UUID,

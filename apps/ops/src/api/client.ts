@@ -47,6 +47,11 @@ import type {
   OpsUserRolePatchRequest,
   PostJobReadResponse,
   SchedulePostJobRequest,
+  AlbumCreateRequest,
+  AlbumImageReadResponse,
+  AlbumListItemResponse,
+  AlbumPatchRequest,
+  AlbumReadResponse,
   CarouselCreateRequest,
   CarouselGuidancePatchRequest,
   TextGenerationStatusResponse,
@@ -515,6 +520,130 @@ export function slideImageThumbnailUrl(
  * @param image - Image row
  * @returns img src for the grid or editor
  */
+export async function listAlbums(): Promise<AlbumListItemResponse[]> {
+
+  return requestJson<AlbumListItemResponse[]>("GET", "/api/v1/albums");
+}
+
+export async function fetchAlbumById(albumId: string): Promise<AlbumReadResponse> {
+
+  return requestJson<AlbumReadResponse>("GET", `/api/v1/albums/${albumId}`);
+}
+
+export async function createAlbum(
+  albumCreateRequest: AlbumCreateRequest,
+): Promise<AlbumReadResponse> {
+
+  return requestJson<AlbumReadResponse>("POST", "/api/v1/albums", albumCreateRequest);
+}
+
+export async function patchAlbum(
+  albumId: string,
+  albumPatchRequest: AlbumPatchRequest,
+): Promise<AlbumReadResponse> {
+
+  return requestJson<AlbumReadResponse>(
+    "PATCH",
+    `/api/v1/albums/${albumId}`,
+    albumPatchRequest,
+  );
+}
+
+export async function deleteAlbum(albumId: string): Promise<void> {
+
+  await requestJson<undefined>("DELETE", `/api/v1/albums/${albumId}`);
+}
+
+export async function uploadAlbumImage(
+  albumId: string,
+  file: File,
+  imageLicense: SlideImageLicense,
+  source: string,
+  altText: string,
+  licenseNote: string,
+): Promise<AlbumImageReadResponse> {
+
+  const formData: FormData = new FormData();
+  formData.append("file", file);
+  formData.append("license", imageLicense);
+  formData.append("source", source);
+  formData.append("alt_text", altText);
+  formData.append("license_note", licenseNote);
+
+  return requestForm<AlbumImageReadResponse>(
+    "POST",
+    `/api/v1/albums/${albumId}/images`,
+    formData,
+  );
+}
+
+export async function importAlbumImage(
+  albumId: string,
+  imageImportRequest: SlideImageImportRequest,
+): Promise<AlbumImageReadResponse> {
+
+  return requestJson<AlbumImageReadResponse>(
+    "POST",
+    `/api/v1/albums/${albumId}/images/import`,
+    imageImportRequest,
+  );
+}
+
+export async function deleteAlbumImage(albumId: string, imageId: string): Promise<void> {
+
+  await requestJson<undefined>(
+    "DELETE",
+    `/api/v1/albums/${albumId}/images/${imageId}`,
+  );
+}
+
+/**
+ * Same-origin URL for an image stored on an album.
+ *
+ * @param albumId - Album UUID
+ * @param imageId - Image UUID
+ * @returns Path the grid can use as an img src
+ */
+export function albumImageFileUrl(albumId: string, imageId: string): string {
+
+  const requestPath: string = `/api/v1/albums/${albumId}/images/${imageId}/file`;
+
+  return `${resolveApiBaseUrl()}${requestPath}`;
+}
+
+/**
+ * Thumbnail URL when the album image has one.
+ *
+ * @param albumId - Album UUID
+ * @param imageId - Image UUID
+ * @returns Path the grid can use as an img src
+ */
+export function albumImageThumbnailUrl(albumId: string, imageId: string): string {
+
+  const requestPath: string = `/api/v1/albums/${albumId}/images/${imageId}/thumbnail`;
+
+  return `${resolveApiBaseUrl()}${requestPath}`;
+}
+
+/**
+ * Prefer the album thumbnail. Fall back to the original file.
+ *
+ * @param albumId - Album UUID
+ * @param image - Image row
+ * @returns img src for the album editor or the skeleton picker
+ */
+export function albumImageDisplayUrl(
+  albumId: string,
+  image: AlbumImageReadResponse,
+): string {
+
+  if (image.thumbnail_path !== null && image.thumbnail_path !== "") {
+    return albumImageThumbnailUrl(albumId, image.id);
+  }
+
+  return albumImageFileUrl(albumId, image.id);
+}
+
 export function slideImageDisplayUrl(
   sourceId: string,
   slideId: string,
