@@ -17,7 +17,8 @@ from app.api.v1.carousel_writes import _fetch_slide_or_raise, _parsed_texts
 from app.api.v1.skeleton_samples import _preview_response
 from app.auth.dependencies import require_authenticated_ops_operator
 from app.db import get_our_database_session
-from app.models.carousel import Carousel, Slide, SlideImage
+from app.models.album import AlbumImage
+from app.models.carousel import Carousel, Slide
 from app.models.ops_user import OpsUser
 from app.models.skeleton import Skeleton
 from app.settings import get_settings
@@ -103,7 +104,7 @@ def _saved_image_path(
         return None
 
     found_slide: Slide = _fetch_slide_or_raise(carousel_id, slide_id, our_database_session)
-    images: list[SlideImage] = list(found_slide.images)
+    images: list[AlbumImage] = list(found_slide.images)
 
     if len(images) == 0:
 

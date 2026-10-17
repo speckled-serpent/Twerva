@@ -1,0 +1,1 @@
+"""Album library helpers."""

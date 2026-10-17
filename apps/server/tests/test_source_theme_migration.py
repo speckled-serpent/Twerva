@@ -558,9 +558,8 @@ class SourceThemeMigrationTests(unittest.TestCase):
                 for row in connection.execute(
                     text(
                         """
-                        SELECT COUNT(*)
-                        FROM slide_images
-                        GROUP BY slide_id
+                        SELECT CASE WHEN album_image_id IS NULL THEN 0 ELSE 1 END
+                        FROM slides
                         """
                     ),
                 ).fetchall()

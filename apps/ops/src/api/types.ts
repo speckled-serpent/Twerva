@@ -586,6 +586,7 @@ export interface SlideReadResponse {
 export interface CarouselListItemResponse {
   id: string;
   skeleton_id: string;
+  album_id: string | null;
   name: string;
   slug: string;
   slide_count: number;
@@ -596,6 +597,7 @@ export interface CarouselListItemResponse {
 export interface CarouselReadResponse {
   id: string;
   skeleton_id: string;
+  album_id: string | null;
   name: string;
   slug: string;
   inspiration: string;
@@ -604,6 +606,57 @@ export interface CarouselReadResponse {
   created_at: string;
   updated_at: string;
   slides: SlideReadResponse[];
+}
+
+export interface AlbumImageReadResponse {
+  id: string;
+  position: number;
+  relative_path: string;
+  media_type: SlideImageMediaType;
+  byte_size: number;
+  width: number | null;
+  height: number | null;
+  alt_text: string | null;
+  license: SlideImageLicense;
+  source: string;
+  license_note: string;
+  intake: SlideImageIntake;
+  thumbnail_path: string | null;
+}
+
+export interface AlbumListItemResponse {
+  id: string;
+  name: string;
+  slug: string;
+  image_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AlbumReadResponse {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+  updated_at: string;
+  images: AlbumImageReadResponse[];
+}
+
+export interface AlbumCreateRequest {
+  name: string;
+}
+
+export interface AlbumImageWrite {
+  id: string;
+  alt_text: string | null;
+  license: SlideImageLicense;
+  source: string;
+  license_note: string;
+}
+
+export interface AlbumPatchRequest {
+  name: string;
+  images: AlbumImageWrite[];
 }
 
 export interface CarouselGuidancePatchRequest {

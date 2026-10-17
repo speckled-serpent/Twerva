@@ -8,7 +8,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.v1.lookups import fetch_skeleton_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
@@ -28,6 +28,7 @@ from app.db import get_our_database_session
 from app.generate.templates import CAROUSEL_TEMPLATES_BY_ID
 from app.models import (
     AdvertisementType,
+    Album,
     BackgroundKind,
     Campaign,
     OpsUser,
@@ -52,7 +53,7 @@ from app.skeletons.bundled_fonts import (
     FALLBACK_FONT_FAMILY_NAME,
     list_bundled_font_families,
 )
-from app.skeletons.default_images import list_skeleton_image_albums
+from app.carousels.default_carousel import DEFAULT_ALBUM_SLUG
 from app.skeletons.elements import (
     ResolvedSkeletonElement,
     ordered_skeleton_elements,
@@ -186,21 +187,37 @@ def list_skeletons(
 
 
 @skeletons_router.get("/default-images", response_model=SkeletonDefaultImagesResponse)
-def list_skeleton_default_images() -> SkeletonDefaultImagesResponse:
-    """Return bundled image albums. Readers may call this, same as preview.
+def list_skeleton_default_images(
+    our_database_session: Session = Depends(get_our_database_session),
+) -> SkeletonDefaultImagesResponse:
+    """Return the Default album's concrete paths. Readers may call this.
 
     Registered before ``/{skeleton_id}`` so ``default-images`` is not parsed
-    as a skeleton id.
+    as a skeleton id. The packaged file list is no longer the catalog.
+    Skeleton fields still store the path, not an album image id.
     """
 
-    album_responses: list[SkeletonImageAlbumResponse] = [
-        SkeletonImageAlbumResponse(
-            album_id=album.album_id,
-            name=album.name,
-            asset_refs=list(album.asset_refs),
+    statement = (
+        select(Album)
+        .where(Album.slug == DEFAULT_ALBUM_SLUG)
+        .options(selectinload(Album.images))
+    )
+    default_album: Album | None = our_database_session.scalars(statement).first()
+    album_responses: list[SkeletonImageAlbumResponse] = []
+
+    if default_album is not None:
+        ordered_paths: list[str] = [
+            image.relative_path
+            for image in sorted(list(default_album.images), key=lambda image: image.position)
+        ]
+        album_responses.append(
+            SkeletonImageAlbumResponse(
+                album_id=str(default_album.id),
+                name=default_album.name,
+                asset_refs=ordered_paths,
+            ),
         )
-        for album in list_skeleton_image_albums()
-    ]
+
     images_response: SkeletonDefaultImagesResponse = SkeletonDefaultImagesResponse(
         albums=album_responses,
     )

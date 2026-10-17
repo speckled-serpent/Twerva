@@ -996,6 +996,7 @@ class CarouselListItemResponse(BaseModel):
     skeleton_id: uuid.UUID
     name: str
     slug: str
+    album_id: uuid.UUID | None = None
     slide_count: int
     created_at: datetime
     updated_at: datetime
@@ -1008,6 +1009,7 @@ class CarouselReadResponse(BaseModel):
     skeleton_id: uuid.UUID
     name: str
     slug: str
+    album_id: uuid.UUID | None = None
     inspiration: str
     rules: str
     live_slide_count: int
@@ -1135,3 +1137,79 @@ class SlideWithImagesCreateRequest(BaseModel):
     texts: list[SlideElementTextWrite] = Field(default_factory=list)
     excluded_slide_ids: list[uuid.UUID] = Field(default_factory=list)
     images: list[SlideImageCreateItem] = Field(default_factory=list)
+
+
+class AlbumImageReadResponse(BaseModel):
+    """One image in an album. The path is the file that was already stored."""
+
+    id: uuid.UUID
+    position: int
+    relative_path: str
+    media_type: SlideImageMediaType
+    byte_size: int
+    width: int | None
+    height: int | None
+    alt_text: str | None
+    license: SlideImageLicense
+    source: str
+    license_note: str
+    intake: SlideImageIntake
+    thumbnail_path: str | None
+
+
+class AlbumListItemResponse(BaseModel):
+    """One album on the list. Images are on the detail route."""
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    image_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class AlbumReadResponse(BaseModel):
+    """One album and its images, in position order."""
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    created_at: datetime
+    updated_at: datetime
+    images: list[AlbumImageReadResponse]
+
+
+class AlbumCreateRequest(BaseModel):
+    """JSON body for `POST /api/v1/albums`. The name is required."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+
+class AlbumImageWrite(BaseModel):
+    """License fields for an image that is already in the album.
+
+    The order of these rows in the patch is the album order.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    alt_text: str | None = None
+    license: SlideImageLicense
+    source: str
+    license_note: str = ""
+
+
+class AlbumPatchRequest(BaseModel):
+    """Rename an album and save image order, alt, license, and source.
+
+    Every current image id must be present. Removing an image is a
+    separate request, so a stale edit cannot drop a row.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    images: list[AlbumImageWrite] = Field(default_factory=list)

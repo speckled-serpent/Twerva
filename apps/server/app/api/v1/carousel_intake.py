@@ -42,7 +42,9 @@ from app.api.v1.carousel_writes import (
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
-from app.models.carousel import Carousel, Slide, SlideImage
+from app.albums.linking import ensure_carousel_album, next_album_image_position
+from app.models.album import Album, AlbumImage
+from app.models.carousel import Carousel, Slide
 from app.models.enums import SlideTextStatus
 from app.models.enums import SlideImageIntake, SlideImageLicense
 from app.models.skeleton import Skeleton
@@ -386,18 +388,20 @@ def create_slide_with_images(
     next_position: int = _next_slide_position(found_source.id, our_database_session)
     saved_paths: list[str] = []
 
+    image_album: Album = ensure_carousel_album(found_source, our_database_session)
+
     try:
-        created_images: list[SlideImage] = [
+        created_images: list[AlbumImage] = [
             _materialize_slide_image(
                 found_source.id,
                 slide_id,
-                image_position,
+                image_album,
                 prepared_image,
                 attachment,
                 image_store,
                 saved_paths,
             )
-            for image_position, (prepared_image, attachment) in enumerate(staged_images)
+            for prepared_image, attachment in staged_images
         ]
     except Exception:
         _delete_saved_paths(image_store, saved_paths)
@@ -489,13 +493,13 @@ def _payload_for_create_item(
 def _materialize_slide_image(
     carousel_id: uuid.UUID,
     slide_id: uuid.UUID,
-    position: int,
+    album: Album,
     prepared_image: PreparedSlideImage,
     attachment: SlideImageAttachment,
     image_store: LocalAlbumImageStore,
     saved_paths: list[str],
-) -> SlideImage:
-    """Write one original and its thumbnail. The row is not committed yet."""
+) -> AlbumImage:
+    """Write one original and its thumbnail onto the carousel's album."""
 
     image_id: uuid.UUID = new_row_id()
     relative_path: str = album_image_relative_path(
@@ -513,10 +517,10 @@ def _materialize_slide_image(
         saved_paths.append(thumbnail_path)
         image_store.save(thumbnail_path, prepared_image.thumbnail_jpeg)
 
-    created_image: SlideImage = SlideImage(
+    created_image: AlbumImage = AlbumImage(
         id=image_id,
-        slide_id=slide_id,
-        position=position,
+        album_id=album.id,
+        position=next_album_image_position(album),
         relative_path=relative_path,
         media_type=prepared_image.media_type,
         byte_size=len(prepared_image.payload),
@@ -529,6 +533,7 @@ def _materialize_slide_image(
         intake=attachment.intake,
         thumbnail_path=thumbnail_path,
     )
+    album.images.append(created_image)
 
     return created_image
 
@@ -591,11 +596,13 @@ def add_images_from_payloads(
         alt_text,
     )
     prepared_images: list[PreparedSlideImage] = _prepare_all_or_400(payloads)
+    image_album: Album = ensure_carousel_album(found_source, our_database_session)
     saved_paths: list[str] = []
 
     try:
-        created_rows: list[SlideImage] = _write_prepared_images(
+        created_rows: list[AlbumImage] = _write_prepared_images(
             found_slide,
+            image_album,
             prepared_images,
             image_license,
             image_source,
@@ -638,7 +645,7 @@ def get_slide_image_thumbnail(
     Readers may call this.
     """
 
-    found_image: SlideImage = _fetch_image_or_raise(
+    found_image: AlbumImage = _fetch_image_or_raise(
         carousel_id,
         slide_id,
         image_id,
@@ -733,6 +740,7 @@ def _prepare_all_or_400(payloads: list[bytes]) -> list[PreparedSlideImage]:
 
 def _write_prepared_images(
     slide: Slide,
+    album: Album,
     prepared_images: list[PreparedSlideImage],
     image_license: SlideImageLicense,
     image_source: str,
@@ -742,68 +750,35 @@ def _write_prepared_images(
     image_store: LocalAlbumImageStore,
     our_database_session: Session,
     saved_paths: list[str],
-) -> list[SlideImage]:
-    """Write files then rows. ``saved_paths`` records what to undo."""
+) -> list[AlbumImage]:
+    """Write files then album rows. ``saved_paths`` records what to undo."""
 
-    next_position: int = _next_image_position(slide)
-    created_rows: list[SlideImage] = []
+    created_rows: list[AlbumImage] = []
 
-    for offset, prepared_image in enumerate(prepared_images):
-        image_id: uuid.UUID = new_row_id()
-        relative_path: str = album_image_relative_path(
+    for prepared_image in prepared_images:
+        created_image: AlbumImage = _materialize_slide_image(
             slide.carousel_id,
             slide.id,
-            image_id,
-            prepared_image.extension,
+            album,
+            prepared_image,
+            SlideImageAttachment(
+                payload=b"",
+                intake=intake,
+                image_license=image_license,
+                source=image_source,
+                license_note=license_note,
+                alt_text=alt_text,
+            ),
+            image_store,
+            saved_paths,
         )
-        thumbnail_path: str | None = None
-        image_store.save(relative_path, prepared_image.payload)
-        saved_paths.append(relative_path)
-
-        if prepared_image.thumbnail_jpeg is not None:
-            thumbnail_path = album_thumbnail_relative_path(
-                slide.carousel_id,
-                slide.id,
-                image_id,
-            )
-            image_store.save(thumbnail_path, prepared_image.thumbnail_jpeg)
-            saved_paths.append(thumbnail_path)
-
-        created_image: SlideImage = SlideImage(
-            id=image_id,
-            slide_id=slide.id,
-            position=next_position + offset,
-            relative_path=relative_path,
-            media_type=prepared_image.media_type,
-            byte_size=len(prepared_image.payload),
-            width=prepared_image.width,
-            height=prepared_image.height,
-            alt_text=alt_text,
-            license=image_license,
-            source=image_source,
-            license_note=license_note,
-            intake=intake,
-            thumbnail_path=thumbnail_path,
-        )
-        slide.images.append(created_image)
         our_database_session.add(created_image)
         created_rows.append(created_image)
 
+    if len(created_rows) == 1:
+        slide.album_image = created_rows[0]
+
     return created_rows
-
-
-def _next_image_position(slide: Slide) -> int:
-    """Return the next image position on this slide."""
-
-    positions: list[int] = [image.position for image in list(slide.images)]
-
-    if len(positions) == 0:
-
-        return 0
-
-    next_position: int = max(positions) + 1
-
-    return next_position
 
 
 def _delete_saved_paths(image_store: LocalAlbumImageStore, saved_paths: list[str]) -> None:

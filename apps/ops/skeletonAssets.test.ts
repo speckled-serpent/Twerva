@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import type { CarouselReadResponse } from "./src/api/types.ts";
+import type { AlbumReadResponse } from "./src/api/types.ts";
 import {
   assetRefAfterShuffle,
   assetRefForAlbumChoice,
@@ -8,7 +8,7 @@ import {
   captionForSlide,
   chooseAlbumAssetRef,
   pickDefaultAlbumImage,
-  skeletonAlbumFromCarousel,
+  skeletonAlbumFromAlbum,
   DEFAULT_ALBUM_ID,
   type SkeletonImageAlbum,
 } from "./src/pages/skeletonAssets.ts";
@@ -89,61 +89,33 @@ assert.equal(captionForSlide(["  Brass lamp  ", "ignored"]), "Brass lamp");
 assert.equal(captionForSlide(["  ", "First field"]), "First field");
 assert.equal(captionForSlide([]), "");
 
-const uploadedAlbum: CarouselReadResponse = {
+const uploadedAlbum: AlbumReadResponse = {
   id: "album-1",
-  skeleton_id: "skeleton-1",
   name: "Lamps",
   slug: "lamps",
-  inspiration: "",
-  rules: "",
-  live_slide_count: 2,
   created_at: "2026-10-14T00:00:00Z",
   updated_at: "2026-10-14T00:00:00Z",
-  slides: [
+  images: [
     {
-      id: "text-slide",
+      id: "image-1",
       position: 0,
-      name: "Notes",
-      text_status: "live",
-      texts: [{ skeleton_element_id: "title", value: "Notes only" }],
-      draft_texts: [],
-      excluded_slide_ids: [],
-      images: [],
-    },
-    {
-      id: "lamp-slide",
-      position: 2,
-      name: "Lamp",
-      text_status: "live",
-      texts: [
-        { skeleton_element_id: "name", value: "Desk lamp" },
-        { skeleton_element_id: "finish", value: "  Brass lamp  " },
-      ],
-      draft_texts: [],
-      excluded_slide_ids: [],
-      images: [
-        {
-          id: "image-1",
-          position: 0,
-          relative_path: "albums/album-1/lamp-slide/image-1.jpg",
-          media_type: "jpeg",
-          byte_size: 12,
-          width: 8,
-          height: 8,
-          alt_text: null,
-          license: "owned",
-          carousel: "bench",
-          license_note: "",
-          intake: "upload",
-          thumbnail_path: "albums/album-1/lamp-slide/image-1-thumb.jpg",
-        },
-      ],
+      relative_path: "albums/album-1/image-1.jpg",
+      media_type: "jpeg",
+      byte_size: 12,
+      width: 8,
+      height: 8,
+      alt_text: "Desk lamp",
+      license: "owned",
+      source: "bench",
+      license_note: "",
+      intake: "upload",
+      thumbnail_path: "albums/album-1/image-1-thumb.jpg",
     },
   ],
 };
-const lamps: SkeletonImageAlbum = skeletonAlbumFromCarousel(uploadedAlbum);
+const lamps: SkeletonImageAlbum = skeletonAlbumFromAlbum(uploadedAlbum);
 assert.equal(lamps.slides.length, 1);
 assert.equal(lamps.slides[0]?.caption, "Desk lamp");
-assert.equal(lamps.asset_refs[0], "albums/album-1/lamp-slide/image-1.jpg");
+assert.equal(lamps.asset_refs[0], "albums/album-1/image-1.jpg");
 assert.equal(lamps.slides[0]?.images[0]?.hasThumbnail, true);
-assert.equal(albumForAssetRef([lamps], "albums/album-1/lamp-slide/image-1.jpg")?.album_id, "album-1");
+assert.equal(albumForAssetRef([lamps], "albums/album-1/image-1.jpg")?.album_id, "album-1");
