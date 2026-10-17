@@ -18,7 +18,7 @@ From this directory:
 
 ```bash
 python3 -m venv .venv
-source .venv/bin/activate
+carousel .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:application --reload --host 127.0.0.1 --port 8000
 ```
@@ -68,7 +68,7 @@ export ARTIFACT_STORAGE_DIR=./data/artifacts
 
 On-box file: `/opt/twerva/database_url.env` (mode 600). It provides
 `DATABASE_URL` for Docker Postgres bound to `127.0.0.1:5432`. Load it into
-the process environment (systemd `EnvironmentFile=` or `source` in a shell).
+the process environment (systemd `EnvironmentFile=` or `carousel` in a shell).
 The app does not open that file itself.
 
 Production deploy, migrate, verify, and rollback (Badger):
@@ -93,7 +93,7 @@ Template: [`docs/planning/carousel_template_v1.md`](../../docs/planning/carousel
 ## Alembic
 
 Run from this directory so `alembic.ini` and `app.settings` resolve.
-Current head: **`theme_elements`** (parent `themes_background`).
+Current head: **`skeleton_elements`** (parent `skeletons_background`).
 
 ```bash
 export DATABASE_URL=postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva
@@ -113,7 +113,7 @@ SSH to `twerva-server` is optional if you already have a shell there. From
 
 ```bash
 set -a
-source /opt/twerva/database_url.env
+carousel /opt/twerva/database_url.env
 set +a
 alembic current
 ```
@@ -173,25 +173,25 @@ Account, Artifact (includes `status`), PostJob (includes `status`), and
 Campaign (includes `status`). Campaign create stores `ready`. Lifecycle
 actions are `POST /api/v1/campaigns/{id}/start|pause|resume|finish`
 (status flip only; HTTP 400 on illegal or already-in-target).
-`POST` + `GET` list + `GET` by id + `PATCH` by id for Theme
-(`/api/v1/themes`). Create requires a name and stores
+`POST` + `GET` list + `GET` by id + `PATCH` by id for Skeleton
+(`/api/v1/skeletons`). Create requires a name and stores
 `advertisement_type=carousel`, `status=draft`, `page_margin=96`,
 `element_gap=0`, `element_margin=0`, `background_kind=color`, and
 `background_color=#F6F1E8` (a status, spacing, or background field on
-the create body is ignored). `PATCH /api/v1/themes/{id}` is partial and
+the create body is ignored). `PATCH /api/v1/skeletons/{id}` is partial and
 may set `status` to `draft` or `live`, the three spacing integers, and
 the background columns. A negative spacing value is HTTP 400. A Live
 background requires the payload for its kind. Optional `template_key`
 must name an existing carousel generator. Upgrade seeds
 `spotmu_paper_v1` and `spotmu_bold_v1` as `draft` with spacing 96 / 0 / 0
-and a paper color background. Elements live on `theme_elements`
-(full width, no coordinates). `GET /api/v1/themes/{id}` includes them
+and a paper color background. Elements live on `skeleton_elements`
+(full width, no coordinates). `GET /api/v1/skeletons/{id}` includes them
 ordered by band then `sort_order`. `POST`, `PATCH`, and `DELETE` under
-`/api/v1/themes/{theme_id}/elements` use the same write gate as theme
+`/api/v1/skeletons/{skeleton_id}/elements` use the same write gate as skeleton
 create. The server compacts `sort_order` from 0 within the band.
-`POST /api/v1/themes/{id}/duplicate` stores a new Draft named
+`POST /api/v1/skeletons/{id}/duplicate` stores a new Draft named
 `Copy of {name}` with a new slug, null `template_key`, the same
-spacing and background, and new element rows. The source theme,
+spacing and background, and new element rows. The carousel skeleton,
 including its status and `updated_at`, stays as it was.
 `POST /api/v1/generate/carousel` renders a draft Artifact from a
 SourceItem. Review-queue approve/reject/PATCH and `POST /api/v1/schedule`
@@ -280,11 +280,11 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/clusters \
   -H 'Content-Type: application/json' \
   -d '{"brand_id":"<brand-id>","slug":"spotmu-general","name":"Spotmu general"}'
 curl -sS -X POST \
-  http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/source-items/<source-item-id>
+  http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/source-items/<carousel-item-id>
 curl -sS http://127.0.0.1:8000/api/v1/clusters/<cluster-id>
 # -> source_item_ids includes the ingested id
 curl -sS -X DELETE \
-  http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/source-items/<source-item-id>
+  http://127.0.0.1:8000/api/v1/clusters/<cluster-id>/source-items/<carousel-item-id>
 ```
 
 ### Ingest smoke (1.3f-i)
@@ -335,7 +335,7 @@ python -m app.generate.carousel_cli <source_item_id> --storage-dir ./data/artifa
 curl -sS -b /tmp/twerva-ops.jar http://127.0.0.1:8000/api/v1/generate/templates
 curl -sS -b /tmp/twerva-ops.jar -X POST http://127.0.0.1:8000/api/v1/generate/carousel \
   -H 'Content-Type: application/json' \
-  -d '{"source_item_id":"<source-item-id>","template_id":"spotmu_bold_v1"}'
+  -d '{"source_item_id":"<carousel-item-id>","template_id":"spotmu_bold_v1"}'
 curl -sS -b /tmp/twerva-ops.jar http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>
 curl -sS -b /tmp/twerva-ops.jar \
   http://127.0.0.1:8000/api/v1/artifacts/<artifact-id>/slides/0/image -o /tmp/slide.png
@@ -566,7 +566,7 @@ TWERVA_API_BASE_URL=http://127.0.0.1:8000 tools/smoke_1_2l_api.sh
 
 The script POSTs Brand `spotmu` (reuses the row if the slug exists) →
 SourceItem → Cluster → Account → Artifact `draft` → PostJob `scheduled`,
-then GETs each id. Cluster/account/source keys use a timestamp suffix so
+then GETs each id. Cluster/account/carousel keys use a timestamp suffix so
 re-runs do not collide.
 
 Equivalent curl sketch (replace UUIDs from each response):
@@ -587,7 +587,7 @@ curl -sS -X POST http://127.0.0.1:8000/api/v1/accounts \
   -d '{"cluster_id":"<cluster-id>","platform":"instagram","handle":"spotmu_example"}'
 curl -sS -X POST http://127.0.0.1:8000/api/v1/artifacts \
   -H 'Content-Type: application/json' \
-  -d '{"brand_id":"<brand-id>","source_item_id":"<source-item-id>","cluster_id":"<cluster-id>","status":"draft"}'
+  -d '{"brand_id":"<brand-id>","source_item_id":"<carousel-item-id>","cluster_id":"<cluster-id>","status":"draft"}'
 curl -sS -X POST http://127.0.0.1:8000/api/v1/post-jobs \
   -H 'Content-Type: application/json' \
   -d '{"artifact_id":"<artifact-id>","account_id":"<account-id>","status":"scheduled"}'
@@ -600,7 +600,7 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
 
 1. Update the Twerva checkout used by systemd `twerva-api`.
 2. In `apps/server`, refresh the venv: `pip install -r requirements.txt`.
-3. Load `/opt/twerva/database_url.env` into the environment (`set -a; source ...; set +a` or systemd `EnvironmentFile=`).
+3. Load `/opt/twerva/database_url.env` into the environment (`set -a; carousel ...; set +a` or systemd `EnvironmentFile=`).
 4. `alembic upgrade head` — head is `ops_users_role_rbac`. Then
    `python -m app.auth.bootstrap`.
 5. `python -m app.seed` (idempotent Spotmu brand + example SourceItem).
@@ -616,7 +616,7 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
     **Pillow**. Optional `ARTIFACT_STORAGE_DIR` (default
     `/opt/twerva/artifacts`). Restart `twerva-api`. Do **not** add
     nginx `/api` or a public artifacts location. Optional loopback:
-    `tools/smoke_1_4_carousel.sh` (DB source only; no Spotmu).
+    `tools/smoke_1_4_carousel.sh` (DB carousel only; no Spotmu).
 11. **1.5:** no new host deps, no Alembic revision, no nginx `/api`.
     Restart `twerva-api` after sync. Optional loopback:
     `tools/smoke_1_5_approve_schedule.sh` (seed/generate path; no Spotmu,
@@ -637,6 +637,6 @@ deferral as 1.2a-v / 1.2k-iii). When applying this revision on the box:
     deps, no Alembic, no nginx `/api`. Optional loopback dry-run after
     generate storage is writable.
 
-`GET /health` must keep working if the unit is ever started without
+`GET /health` must keep working if the slide is ever started without
 `DATABASE_URL` (health-only). Production must keep the env file so
 `/api/v1` mounts in the same process Badger monitors.

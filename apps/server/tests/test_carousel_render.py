@@ -26,20 +26,20 @@ from app.generate.carousel import (
     resolve_carousel_cta_url,
 )
 from app.generate.templates import resolve_carousel_template
-from app.themes.layout import THEME_FRAME_HEIGHT_PIXELS, THEME_FRAME_WIDTH_PIXELS
+from app.skeletons.layout import SKELETON_FRAME_HEIGHT_PIXELS, SKELETON_FRAME_WIDTH_PIXELS
 
 
 PNG_MAGIC: bytes = b"\x89PNG"
 
 
 class CarouselRenderTests(unittest.TestCase):
-    """Fake source payload yields on-disk PNGs and a non-empty caption."""
+    """Fake carousel payload yields on-disk PNGs and a non-empty caption."""
 
-    def test_canvas_is_the_theme_frame(self) -> None:
+    def test_canvas_is_the_skeleton_frame(self) -> None:
         """Shipping slides use the shared 1080×1920 frame, not a square."""
 
-        self.assertEqual(CANVAS_WIDTH_PIXELS, THEME_FRAME_WIDTH_PIXELS)
-        self.assertEqual(CANVAS_HEIGHT_PIXELS, THEME_FRAME_HEIGHT_PIXELS)
+        self.assertEqual(CANVAS_WIDTH_PIXELS, SKELETON_FRAME_WIDTH_PIXELS)
+        self.assertEqual(CANVAS_HEIGHT_PIXELS, SKELETON_FRAME_HEIGHT_PIXELS)
         self.assertEqual((CANVAS_WIDTH_PIXELS, CANVAS_HEIGHT_PIXELS), (1080, 1920))
 
     def test_cover_copy_sits_in_the_open_field(self) -> None:

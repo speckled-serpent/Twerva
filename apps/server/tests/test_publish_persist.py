@@ -124,7 +124,7 @@ class PublishPersistTests(unittest.TestCase):
         self.created_source_item = create_source_item(
             SourceItemCreateRequest(
                 brand_id=self.created_brand.id,
-                title="Publish source",
+                title="Publish carousel",
                 interest_heading="Publish heading",
                 overview_bullets=["one", "two"],
                 canonical_url="https://spotmu.com/interest/example",

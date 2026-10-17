@@ -3,7 +3,7 @@
 Vite + React + TypeScript ops console for the Phase 1 loop:
 
 ```
-source → generate carousel → approve → schedule → mock publish → measure / steer
+carousel → generate carousel → approve → schedule → mock publish → measure / steer
 ```
 
 Operator login against `/api/v1/auth` (session cookie).
@@ -22,7 +22,7 @@ From the repo, with Postgres and `DATABASE_URL` as in
 ```bash
 cd apps/server
 python3 -m venv .venv
-source .venv/bin/activate
+carousel .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env   # set DATABASE_URL; ARTIFACT_STORAGE_DIR=./data/artifacts
 alembic upgrade head
@@ -55,15 +55,15 @@ admin from `OPS_ADMIN_USERNAME` / `OPS_ADMIN_PASSWORD` after
 
 1. **Campaigns** — list all campaigns; open a row for details and
    Start / Pause / Resume / Finish (admin). Readers see data only.
-   **Create campaign** on this page saves a `ready` definition (theme,
-   source, platforms, accounts, live Spotmu interest search). It does
+   **Create campaign** on this page saves a `ready` definition (skeleton,
+   carousel, platforms, accounts, live Spotmu interest search). It does
    not generate. Success opens the new campaign.
-2. **Themes** — list carousel themes. **Create theme** on this page saves
-   a carousel theme (name required, advertisement type locked to
+2. **Skeletons** — list carousel skeletons. **Create Skeleton** on this page saves
+   a carousel skeleton (name required, advertisement type locked to
    Carousel). Seeded Spotmu Paper v1 and Bold v1 appear after
    `alembic upgrade head`. Readers can list; only admins can create.
-3. **Sources** — list theme-bound sources. **Create source** on this page
-   asks for a name and a theme, then opens the source.
+3. **Carousels** — list skeleton-bound carousels. **Create Carousel** on this page
+   asks for a name and a skeleton, then opens the carousel.
 4. **Queue** — edit caption if needed → **Approve** (or Reject).
 5. **Accounts** — create a cluster + account if none exist (set
    `cadence_cap_per_day` if you want the cap enforced).

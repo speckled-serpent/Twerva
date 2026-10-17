@@ -321,13 +321,13 @@ class ApiSchemaTests(unittest.TestCase):
     def test_campaign_create_and_read_round_trip_fields(self) -> None:
         """Campaign create defaults to carousel; read includes counts."""
 
-        theme_id: uuid.UUID = uuid.uuid4()
-        source_id: uuid.UUID = uuid.uuid4()
+        skeleton_id: uuid.UUID = uuid.uuid4()
+        carousel_id: uuid.UUID = uuid.uuid4()
         campaign_create_request: CampaignCreateRequest = CampaignCreateRequest(
             name="My Campaign",
             campaign_type=CampaignType.SPOTMU,
-            theme_id=theme_id,
-            source_id=source_id,
+            skeleton_id=skeleton_id,
+            carousel_id=carousel_id,
             platforms=[Platform.INSTAGRAM],
             interests=[{"slug": "ai-agents", "title": "AI Agents"}],
         )
@@ -355,8 +355,8 @@ class ApiSchemaTests(unittest.TestCase):
         spotmu_test_create_request: CampaignCreateRequest = CampaignCreateRequest(
             name="Throwaway",
             campaign_type=CampaignType.SPOTMU_TEST,
-            theme_id=theme_id,
-            source_id=source_id,
+            skeleton_id=skeleton_id,
+            carousel_id=carousel_id,
             platforms=[Platform.TIKTOK],
             interests=[{"slug": "ai-agents"}],
         )
@@ -366,8 +366,8 @@ class ApiSchemaTests(unittest.TestCase):
             AdvertisementType.CAROUSEL,
         )
         self.assertEqual(campaign_create_request.interests[0].slug, "ai-agents")
-        self.assertEqual(campaign_create_request.theme_id, theme_id)
-        self.assertEqual(campaign_create_request.source_id, source_id)
+        self.assertEqual(campaign_create_request.skeleton_id, skeleton_id)
+        self.assertEqual(campaign_create_request.carousel_id, carousel_id)
         self.assertEqual(campaign_read_response.status, CampaignStatus.READY)
         self.assertEqual(campaign_read_response.hashtag, "#my-campaign")
         self.assertEqual(search_hit.slug, "ai-agents")

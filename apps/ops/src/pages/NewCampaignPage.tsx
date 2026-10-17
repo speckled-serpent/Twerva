@@ -9,8 +9,8 @@ import {
 import {
   createCampaign,
   listAccounts,
-  listAlbums,
-  listThemes,
+  listCarousels,
+  listSkeletons,
   searchSpotmuInterests,
 } from "../api/client";
 import type {
@@ -18,9 +18,9 @@ import type {
   CampaignReadResponse,
   CampaignType,
   Platform,
-  SourceListItemResponse,
+  CarouselListItemResponse,
   SpotmuInterestSearchHit,
-  ThemeReadResponse,
+  SkeletonReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
@@ -41,7 +41,7 @@ export interface NewCampaignPageProps {
 }
 
 /**
- * Create campaign form: pick a theme, then a source bound to it, then save.
+ * Create campaign form: pick a skeleton, then a carousel bound to it, then save.
  *
  * @param props - Success and cancel navigation callbacks
  * @returns The Create campaign form
@@ -54,10 +54,10 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
   const [actionError, setActionError] = useState<unknown>(null);
   const [isBusy, setIsBusy] = useState<boolean>(false);
 
-  const [themes, setThemes] = useState<ThemeReadResponse[]>([]);
-  const [sources, setSources] = useState<SourceListItemResponse[]>([]);
-  const [selectedThemeId, setSelectedThemeId] = useState<string>("");
-  const [selectedSourceId, setSelectedSourceId] = useState<string>("");
+  const [skeletons, setSkeletons] = useState<SkeletonReadResponse[]>([]);
+  const [carousels, setCarousels] = useState<CarouselListItemResponse[]>([]);
+  const [selectedSkeletonId, setSelectedSkeletonId] = useState<string>("");
+  const [selectedCarouselId, setSelectedCarouselId] = useState<string>("");
   const [campaignName, setCampaignName] = useState<string>("");
   const [campaignType, setCampaignType] = useState<CampaignType>("spotmu");
   const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
@@ -85,10 +85,10 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
     const loadPage = async (): Promise<void> => {
 
       try {
-        const [loadedAccounts, loadedThemes, loadedSources] = await Promise.all([
+        const [loadedAccounts, loadedSkeletons, loadedCarousels] = await Promise.all([
           listAccounts(),
-          listThemes(),
-          listAlbums(),
+          listSkeletons(),
+          listCarousels(),
         ]);
 
         if (isCancelled) {
@@ -96,8 +96,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         }
 
         setAccounts(loadedAccounts);
-        setThemes(loadedThemes);
-        setSources(loadedSources);
+        setSkeletons(loadedSkeletons);
+        setCarousels(loadedCarousels);
         setLoadError(null);
       } catch (caughtError: unknown) {
         if (isCancelled) {
@@ -252,8 +252,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
     const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
       readCampaignCreateRequirements(
         campaignName,
-        selectedThemeId,
-        selectedSourceId,
+        selectedSkeletonId,
+        selectedCarouselId,
         selectedPlatforms,
         selectedAccountIds,
         selectedInterests,
@@ -277,8 +277,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         name: campaignName,
         campaign_type: campaignType,
         advertisement_type: "carousel",
-        theme_id: selectedThemeId,
-        source_id: selectedSourceId,
+        skeleton_id: selectedSkeletonId,
+        carousel_id: selectedCarouselId,
         platforms: selectedPlatforms,
         account_ids: selectedAccountIds,
         interests: selectedInterests.map((selectedInterest: SelectedInterest) => {
@@ -301,14 +301,14 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
   const isOtherType: boolean = campaignType === "other";
   const isSpotmuTestType: boolean = campaignType === "spotmu_test";
   const accountsAreRequired: boolean = campaignTypeRequiresLinkedAccount(campaignType);
-  const sourcesForTheme: SourceListItemResponse[] = sources.filter(
-    (source: SourceListItemResponse): boolean => source.theme_id === selectedThemeId,
+  const carouselsForSkeleton: CarouselListItemResponse[] = carousels.filter(
+    (carousel: CarouselListItemResponse): boolean => carousel.skeleton_id === selectedSkeletonId,
   );
   const missingCreateLabels: string[] = listMissingCampaignCreateLabels(
     readCampaignCreateRequirements(
       campaignName,
-      selectedThemeId,
-      selectedSourceId,
+      selectedSkeletonId,
+      selectedCarouselId,
       selectedPlatforms,
       selectedAccountIds,
       selectedInterests,
@@ -324,8 +324,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         <div>
           <h1>Create campaign</h1>
           <p className="lede">
-            Pick a theme, then one source bound to that theme. Run, on the
-            campaign, assembles live units into carousels on that theme.
+            Pick a skeleton, then one carousel bound to that skeleton. Run, on the
+            campaign, assembles live slides into carousels on that skeleton.
             It does not generate text.
           </p>
         </div>
@@ -344,56 +344,56 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         }}
       >
         <label>
-          Theme
+          Skeleton
           <select
-            id="campaign-theme"
-            value={selectedThemeId}
+            id="campaign-skeleton"
+            value={selectedSkeletonId}
             onChange={(changeEvent): void => {
-              const nextThemeId: string = changeEvent.target.value;
+              const nextSkeletonId: string = changeEvent.target.value;
 
-              setSelectedThemeId(nextThemeId);
-              setSelectedSourceId("");
+              setSelectedSkeletonId(nextSkeletonId);
+              setSelectedCarouselId("");
             }}
             required={!isOtherType}
             disabled={!canWrite || isBusy || isOtherType}
           >
-            <option value="">Choose a theme</option>
-            {themes.map((theme: ThemeReadResponse): ReactElement => (
-              <option key={theme.id} value={theme.id}>
-                {theme.name}
+            <option value="">Choose a skeleton</option>
+            {skeletons.map((skeleton: SkeletonReadResponse): ReactElement => (
+              <option key={skeleton.id} value={skeleton.id}>
+                {skeleton.name}
               </option>
             ))}
           </select>
         </label>
 
         <label>
-          Source
+          Carousel
           <select
-            id="campaign-source"
-            value={selectedSourceId}
+            id="campaign-carousel"
+            value={selectedCarouselId}
             onChange={(changeEvent): void => {
-              setSelectedSourceId(changeEvent.target.value);
+              setSelectedCarouselId(changeEvent.target.value);
             }}
             required={!isOtherType}
-            disabled={!canWrite || isBusy || isOtherType || selectedThemeId === ""}
+            disabled={!canWrite || isBusy || isOtherType || selectedSkeletonId === ""}
           >
             <option value="">
-              {selectedThemeId === "" ? "Choose a theme first" : "Choose a source"}
+              {selectedSkeletonId === "" ? "Choose a skeleton first" : "Choose a carousel"}
             </option>
-            {sourcesForTheme.map((source: SourceListItemResponse): ReactElement => (
-              <option key={source.id} value={source.id}>
-                {source.name}
+            {carouselsForSkeleton.map((carousel: CarouselListItemResponse): ReactElement => (
+              <option key={carousel.id} value={carousel.id}>
+                {carousel.name}
               </option>
             ))}
           </select>
         </label>
-        {selectedThemeId !== "" && sourcesForTheme.length === 0 ? (
-          <p className="field-hint" id="campaign-source-empty">
-            No sources are bound to this theme.
+        {selectedSkeletonId !== "" && carouselsForSkeleton.length === 0 ? (
+          <p className="field-hint" id="campaign-carousel-empty">
+            No carousels are bound to this skeleton.
           </p>
         ) : (
           <p className="field-hint">
-            The list is sources that store this theme. Run uses only accepted units.
+            The list is carousels that store this skeleton. Run uses only accepted slides.
           </p>
         )}
 
@@ -525,7 +525,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
             </fieldset>
 
             <fieldset className="form-fieldset">
-              <legend>Interest sources</legend>
+              <legend>Interest carousels</legend>
               <p className="field-hint">
                 Search live Spotmu interests and add at least one. This does not
                 ingest or generate carousels.
@@ -637,8 +637,8 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
 
 interface CampaignCreateRequirements {
   hasName: boolean;
-  hasTheme: boolean;
-  hasSource: boolean;
+  hasSkeleton: boolean;
+  hasCarousel: boolean;
   hasPlatform: boolean;
   hasAccount: boolean;
   hasInterest: boolean;
@@ -646,8 +646,8 @@ interface CampaignCreateRequirements {
 
 function readCampaignCreateRequirements(
   campaignName: string,
-  selectedThemeId: string,
-  selectedSourceId: string,
+  selectedSkeletonId: string,
+  selectedCarouselId: string,
   selectedPlatforms: Platform[],
   selectedAccountIds: string[],
   selectedInterests: SelectedInterest[],
@@ -656,8 +656,8 @@ function readCampaignCreateRequirements(
 
   const campaignCreateRequirements: CampaignCreateRequirements = {
     hasName: campaignName.trim() !== "",
-    hasTheme: selectedThemeId !== "",
-    hasSource: selectedSourceId !== "",
+    hasSkeleton: selectedSkeletonId !== "",
+    hasCarousel: selectedCarouselId !== "",
     hasPlatform: selectedPlatforms.length > 0,
     hasAccount: !accountsAreRequired || selectedAccountIds.length > 0,
     hasInterest: selectedInterests.length > 0,
@@ -672,12 +672,12 @@ function listMissingCampaignCreateLabels(
 
   const missingLabels: string[] = [];
 
-  if (!campaignCreateRequirements.hasTheme) {
-    missingLabels.push("a theme");
+  if (!campaignCreateRequirements.hasSkeleton) {
+    missingLabels.push("a skeleton");
   }
 
-  if (!campaignCreateRequirements.hasSource) {
-    missingLabels.push("a source");
+  if (!campaignCreateRequirements.hasCarousel) {
+    missingLabels.push("a carousel");
   }
 
   if (!campaignCreateRequirements.hasName) {

@@ -11,17 +11,17 @@ it in core (PostgreSQL 13+ also provides ``gen_random_uuid()`` in core).
 Closed vocabularies are native Postgres ENUM types. Allowed values and
 ``PostJobStatus`` / ``CampaignStatus`` transitions live in
 ``app.models.enums`` and ``docs/planning/domain_statuses.md``.
-``ThemeStatus`` (``draft``, ``live``) is stored the same way.
-``theme_elements`` stores band, content kind, Spotmu text source, and
-alignment the same way. ``sources`` require a theme. ``units`` keep a
-stable id and a name. ``unit_element_texts`` stores one value per theme
-text element. ``unit_exclusions`` stores the other unit ids a unit
-cannot be shown with. ``units.text_status`` is ``live`` or ``draft``.
+``SkeletonStatus`` (``draft``, ``live``) is stored the same way.
+``skeleton_elements`` stores band, content kind, Spotmu text source, and
+alignment the same way. ``carousels`` require a skeleton. ``slides`` keep a
+stable id and a name. ``slide_element_texts`` stores one value per skeleton
+text element. ``slide_exclusions`` stores the other slide ids a slide
+cannot be shown with. ``slides.text_status`` is ``live`` or ``draft``.
 A draft is generated text that is not live until a person accepts it.
-``sources.inspiration`` and ``sources.rules`` steer that draft.
-``unit_images`` holds at most one image per unit. A campaign stores
-the theme and the source it runs. ``campaign_carousels`` is the
-latest assembly of live units on that theme.
+``carousels.inspiration`` and ``carousels.rules`` steer that draft.
+``slide_images`` holds at most one image per slide. A campaign stores
+the skeleton and the carousel it runs. ``campaign_carousels`` is the
+latest assembly of live slides on that skeleton.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -43,12 +43,12 @@ from app.models.campaign import (
     CampaignInterest,
 )
 from app.models.cluster import Cluster, cluster_source_items
-from app.models.content_source import (
-    ContentSource,
-    Unit,
-    UnitElementText,
-    UnitExclusion,
-    UnitImage,
+from app.models.carousel import (
+    Carousel,
+    Slide,
+    SlideElementText,
+    SlideExclusion,
+    SlideImage,
 )
 from app.models.enums import (
     ACCOUNT_STATUS_ENUM,
@@ -65,16 +65,16 @@ from app.models.enums import (
     POST_JOB_STATUS_TRANSITIONS,
     SOURCE_TYPE_ENUM,
     STEER_ACTION_TYPE_ENUM,
-    THEME_ELEMENT_ALIGNMENT_ENUM,
-    THEME_ELEMENT_BAND_ENUM,
-    THEME_ELEMENT_CONTENT_KIND_ENUM,
-    THEME_ELEMENT_TEXT_SOURCE_ENUM,
-    THEME_STATUS_ENUM,
+    SKELETON_ELEMENT_ALIGNMENT_ENUM,
+    SKELETON_ELEMENT_BAND_ENUM,
+    SKELETON_ELEMENT_CONTENT_KIND_ENUM,
+    SKELETON_ELEMENT_TEXT_SOURCE_ENUM,
+    SKELETON_STATUS_ENUM,
     RESOURCE_FILE_MEDIA_TYPE_ENUM,
-    UNIT_IMAGE_INTAKE_ENUM,
-    UNIT_IMAGE_LICENSE_ENUM,
-    UNIT_IMAGE_MEDIA_TYPE_ENUM,
-    UNIT_TEXT_STATUS_ENUM,
+    SLIDE_IMAGE_INTAKE_ENUM,
+    SLIDE_IMAGE_LICENSE_ENUM,
+    SLIDE_IMAGE_MEDIA_TYPE_ENUM,
+    SLIDE_TEXT_STATUS_ENUM,
     AccountStatus,
     AdvertisementType,
     ArtifactStatus,
@@ -87,23 +87,23 @@ from app.models.enums import (
     PostJobStatus,
     SourceType,
     SteerActionType,
-    ThemeElementAlignment,
-    ThemeElementBand,
-    ThemeElementContentKind,
-    ThemeElementTextSource,
-    ThemeStatus,
-    UnitImageIntake,
-    UnitImageLicense,
-    UnitImageMediaType,
-    UnitTextStatus,
+    SkeletonElementAlignment,
+    SkeletonElementBand,
+    SkeletonElementContentKind,
+    SkeletonElementTextSource,
+    SkeletonStatus,
+    SlideImageIntake,
+    SlideImageLicense,
+    SlideImageMediaType,
+    SlideTextStatus,
 )
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.ops_user import OpsUser
 from app.models.post_job import PostJob
 from app.models.source_item import SourceItem
 from app.models.steer_action import SteerAction
-from app.models.theme import Theme
-from app.models.theme_element import ThemeElement
+from app.models.skeleton import Skeleton
+from app.models.skeleton_element import SkeletonElement
 
 
 __all__ = [
@@ -132,7 +132,7 @@ __all__ = [
     "CampaignStatus",
     "CampaignType",
     "Cluster",
-    "ContentSource",
+    "Carousel",
     "RESOURCE_FILE_MEDIA_TYPE_ENUM",
     "ResourceFileMediaType",
     "MetricSnapshot",
@@ -147,33 +147,33 @@ __all__ = [
     "PostJobStatus",
     "SOURCE_TYPE_ENUM",
     "STEER_ACTION_TYPE_ENUM",
-    "THEME_ELEMENT_ALIGNMENT_ENUM",
-    "THEME_ELEMENT_BAND_ENUM",
-    "THEME_ELEMENT_CONTENT_KIND_ENUM",
-    "THEME_ELEMENT_TEXT_SOURCE_ENUM",
-    "THEME_STATUS_ENUM",
-    "UNIT_IMAGE_INTAKE_ENUM",
-    "UNIT_IMAGE_LICENSE_ENUM",
-    "UNIT_IMAGE_MEDIA_TYPE_ENUM",
-    "UNIT_TEXT_STATUS_ENUM",
+    "SKELETON_ELEMENT_ALIGNMENT_ENUM",
+    "SKELETON_ELEMENT_BAND_ENUM",
+    "SKELETON_ELEMENT_CONTENT_KIND_ENUM",
+    "SKELETON_ELEMENT_TEXT_SOURCE_ENUM",
+    "SKELETON_STATUS_ENUM",
+    "SLIDE_IMAGE_INTAKE_ENUM",
+    "SLIDE_IMAGE_LICENSE_ENUM",
+    "SLIDE_IMAGE_MEDIA_TYPE_ENUM",
+    "SLIDE_TEXT_STATUS_ENUM",
     "SourceItem",
     "SourceType",
-    "Unit",
-    "UnitElementText",
-    "UnitExclusion",
-    "UnitImage",
-    "UnitImageIntake",
-    "UnitImageLicense",
-    "UnitImageMediaType",
-    "UnitTextStatus",
+    "Slide",
+    "SlideElementText",
+    "SlideExclusion",
+    "SlideImage",
+    "SlideImageIntake",
+    "SlideImageLicense",
+    "SlideImageMediaType",
+    "SlideTextStatus",
     "SteerAction",
     "SteerActionType",
-    "Theme",
-    "ThemeElement",
-    "ThemeElementAlignment",
-    "ThemeElementBand",
-    "ThemeElementContentKind",
-    "ThemeElementTextSource",
-    "ThemeStatus",
+    "Skeleton",
+    "SkeletonElement",
+    "SkeletonElementAlignment",
+    "SkeletonElementBand",
+    "SkeletonElementContentKind",
+    "SkeletonElementTextSource",
+    "SkeletonStatus",
     "cluster_source_items",
 ]

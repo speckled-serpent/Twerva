@@ -114,7 +114,7 @@ class CarouselPersistTests(unittest.TestCase):
         created_source_item = create_source_item(
             SourceItemCreateRequest(
                 brand_id=created_brand.id,
-                title="Carousel persist source",
+                title="Carousel persist carousel",
                 interest_heading="Persist heading",
                 overview_bullets=["first claim", "second claim"],
                 canonical_url="https://spotmu.com/interest/carousel-persist",

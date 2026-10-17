@@ -253,6 +253,24 @@ Run does not generate text.
 Downgrade to `unit_text_drafts` drops the columns and the carousel
 tables. It does not restore a run.
 
+### Skeletons, carousels, and slides
+
+From `apps/server`, run `alembic upgrade head`. The new revision is
+`skeletons_carousels_slides`. No new env var. Restart `twerva-api` and
+replace the ops `dist/` after sync.
+
+The upgrade renames `themes` to `skeletons`, `sources` to `carousels`,
+and `units` to `slides`, with their child tables, columns, enum types,
+indexes, and constraints. Existing rows stay. `campaigns.theme_id` and
+`campaigns.source_id` become `skeleton_id` and `carousel_id`.
+`campaign_carousels` is unchanged: it is still a run's assembly.
+`source_items` and the image provenance column `source` are unchanged.
+API paths move with the tables (`/api/v1/skeletons`, `/api/v1/carousels`,
+and `.../slides`). The old paths are not kept.
+
+Downgrade to `theme_element_text_optional` renames every object back.
+It does not delete rows.
+
 **Do not** add a public artifacts location. After sync,
 `pip install -r requirements.txt` so **Pillow** lands in `.venv`, then
 restart `twerva-api`.

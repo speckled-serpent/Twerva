@@ -10,8 +10,8 @@ import type {
   CampaignReadResponse,
   HealthReadResponse,
   OpsUserReadResponse,
-  SourceReadResponse,
-  ThemeReadResponse,
+  CarouselReadResponse,
+  SkeletonReadResponse,
 } from "./api/types";
 import { NavBar, type OpsPageId } from "./components/NavBar";
 import { AccountPage } from "./pages/AccountPage";
@@ -20,13 +20,13 @@ import { CampaignsPage } from "./pages/CampaignsPage";
 import { campaignStatusLabel } from "./pages/campaignDisplay";
 import { LoginPage } from "./pages/LoginPage";
 import { NewCampaignPage } from "./pages/NewCampaignPage";
-import { NewSourcePage } from "./pages/NewSourcePage";
-import { NewThemePage } from "./pages/NewThemePage";
+import { NewCarouselPage } from "./pages/NewCarouselPage";
+import { NewSkeletonPage } from "./pages/NewSkeletonPage";
 import { QueuePage } from "./pages/QueuePage";
 import { ResultsPage } from "./pages/ResultsPage";
 import { SchedulePage } from "./pages/SchedulePage";
-import { SourcesPage, type SourcesOpenRequest } from "./pages/SourcesPage";
-import { ThemesPage } from "./pages/ThemesPage";
+import { CarouselsPage, type CarouselsOpenRequest } from "./pages/CarouselsPage";
+import { SkeletonsPage } from "./pages/SkeletonsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { OpsSessionContext, isAdminOpsRole } from "./session/OpsSessionContext";
 
@@ -46,8 +46,8 @@ export function App(): ReactElement {
   const [activePageId, setActivePageId] = useState<OpsPageId>("campaigns");
   const [openedCampaignId, setOpenedCampaignId] = useState<string | null>(null);
   const [campaignStatusMessage, setCampaignStatusMessage] = useState<string>("");
-  const [themeStatusMessage, setThemeStatusMessage] = useState<string>("");
-  const [sourceOpenRequest, setSourceOpenRequest] = useState<SourcesOpenRequest | null>(null);
+  const [skeletonStatusMessage, setSkeletonStatusMessage] = useState<string>("");
+  const [sourceOpenRequest, setCarouselOpenRequest] = useState<CarouselsOpenRequest | null>(null);
   const [healthLabel, setHealthLabel] = useState<string>("API: checking…");
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -177,8 +177,8 @@ export function App(): ReactElement {
               setOpenedCampaignId(null);
             }
 
-            if (pageId !== "sources") {
-              setSourceOpenRequest(null);
+            if (pageId !== "carousels") {
+              setCarouselOpenRequest(null);
             }
           }}
           healthLabel={healthLabel}
@@ -194,12 +194,12 @@ export function App(): ReactElement {
             safeActivePageId,
             openedCampaignId,
             campaignStatusMessage,
-            themeStatusMessage,
+            skeletonStatusMessage,
             sourceOpenRequest,
             setOpenedCampaignId,
             setCampaignStatusMessage,
-            setThemeStatusMessage,
-            setSourceOpenRequest,
+            setSkeletonStatusMessage,
+            setCarouselOpenRequest,
             setActivePageId,
           )}
         </main>
@@ -212,12 +212,12 @@ function renderActivePage(
   activePageId: OpsPageId,
   openedCampaignId: string | null,
   campaignStatusMessage: string,
-  themeStatusMessage: string,
-  sourceOpenRequest: SourcesOpenRequest | null,
+  skeletonStatusMessage: string,
+  sourceOpenRequest: CarouselsOpenRequest | null,
   onOpenedCampaignIdChange: (campaignId: string | null) => void,
   onCampaignStatusMessageChange: (statusMessage: string) => void,
-  onThemeStatusMessageChange: (statusMessage: string) => void,
-  onSourceOpenRequestChange: (openRequest: SourcesOpenRequest | null) => void,
+  onSkeletonStatusMessageChange: (statusMessage: string) => void,
+  onCarouselOpenRequestChange: (openRequest: CarouselsOpenRequest | null) => void,
   onNavigate: (pageId: OpsPageId) => void,
 ): ReactElement {
 
@@ -254,54 +254,54 @@ function renderActivePage(
     );
   }
 
-  if (activePageId === "themes") {
+  if (activePageId === "skeletons") {
     return (
-      <ThemesPage
-        statusMessage={themeStatusMessage}
-        onCreateTheme={(): void => {
-          onNavigate("new-theme");
+      <SkeletonsPage
+        statusMessage={skeletonStatusMessage}
+        onCreateSkeleton={(): void => {
+          onNavigate("new-skeleton");
         }}
       />
     );
   }
 
-  if (activePageId === "sources") {
+  if (activePageId === "carousels") {
     return (
-      <SourcesPage
+      <CarouselsPage
         openRequest={sourceOpenRequest}
-        onCreateSource={(): void => {
-          onSourceOpenRequestChange(null);
-          onNavigate("new-source");
+        onCreateCarousel={(): void => {
+          onCarouselOpenRequestChange(null);
+          onNavigate("new-carousel");
         }}
       />
     );
   }
 
-  if (activePageId === "new-source") {
+  if (activePageId === "new-carousel") {
     return (
-      <NewSourcePage
-        onCreated={(createdSource: SourceReadResponse): void => {
-          onSourceOpenRequestChange({
-            sourceId: createdSource.id,
-            statusMessage: `Created source ${createdSource.name}.`,
+      <NewCarouselPage
+        onCreated={(createdCarousel: CarouselReadResponse): void => {
+          onCarouselOpenRequestChange({
+            sourceId: createdCarousel.id,
+            statusMessage: `Created carousel ${createdCarousel.name}.`,
           });
-          onNavigate("sources");
+          onNavigate("carousels");
         }}
         onCancel={(): void => {
-          onNavigate("sources");
+          onNavigate("carousels");
         }}
       />
     );
   }
 
-  if (activePageId === "new-theme") {
+  if (activePageId === "new-skeleton") {
     return (
-      <NewThemePage
-        onCreated={(createdTheme: ThemeReadResponse): void => {
-          onThemeStatusMessageChange(`Created theme ${createdTheme.name}.`);
+      <NewSkeletonPage
+        onCreated={(createdSkeleton: SkeletonReadResponse): void => {
+          onSkeletonStatusMessageChange(`Created skeleton ${createdSkeleton.name}.`);
         }}
         onCancel={(): void => {
-          onNavigate("themes");
+          onNavigate("skeletons");
         }}
       />
     );

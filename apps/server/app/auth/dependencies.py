@@ -21,7 +21,7 @@ READER_ALLOWED_MUTATION_PATHS: frozenset[str] = frozenset(
     {
         "/api/v1/auth/change-password",
         "/api/v1/auth/logout",
-        "/api/v1/themes/preview",
+        "/api/v1/skeletons/preview",
     },
 )
 
@@ -153,15 +153,15 @@ def ops_operator_may_perform_request(ops_operator: OpsUser, request: Request,
 
         return True
 
-    if request_method == "POST" and _is_unit_preview_path(request_path):
+    if request_method == "POST" and _is_slide_preview_path(request_path):
 
         return True
 
     return False
 
 
-def _is_unit_preview_path(request_path: str) -> bool:
-    """True for the in-source unit preview. It writes nothing."""
+def _is_slide_preview_path(request_path: str) -> bool:
+    """True for the in-source slide preview. It writes nothing."""
 
     path_parts: list[str] = [part for part in request_path.split("/") if part != ""]
 
@@ -172,8 +172,8 @@ def _is_unit_preview_path(request_path: str) -> bool:
     is_preview: bool = (
         path_parts[0] == "api"
         and path_parts[1] == "v1"
-        and path_parts[2] == "sources"
-        and path_parts[4] == "units"
+        and path_parts[2] == "carousels"
+        and path_parts[4] == "slides"
         and path_parts[5] == "preview"
     )
 

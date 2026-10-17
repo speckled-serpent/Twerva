@@ -198,7 +198,7 @@ export function QueuePage(): ReactElement {
                 </p>
                 <p className="mono">{draftArtifact.id}</p>
                 <p>
-                  source {draftArtifact.source_item_id ?? "—"} · cluster{" "}
+                  carousel {draftArtifact.source_item_id ?? "—"} · cluster{" "}
                   {draftArtifact.cluster_id ?? "—"}
                 </p>
                 {draftArtifact.cta_url !== null ? <p>CTA {draftArtifact.cta_url}</p> : null}

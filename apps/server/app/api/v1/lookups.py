@@ -11,10 +11,10 @@ from app.models import (
     Brand,
     Campaign,
     Cluster,
-    ContentSource,
+    Carousel,
     PostJob,
     SourceItem,
-    Theme,
+    Skeleton,
 )
 
 
@@ -161,60 +161,60 @@ def fetch_artifact_by_id_or_raise(
     return found_artifact
 
 
-def fetch_theme_by_id_or_raise(
-    theme_id: uuid.UUID,
+def fetch_skeleton_by_id_or_raise(
+    skeleton_id: uuid.UUID,
     our_database_session: Session,
-) -> Theme:
-    """Return a Theme or raise HTTP 404.
+) -> Skeleton:
+    """Return a Skeleton or raise HTTP 404.
 
     Args:
-        theme_id: Primary key to load.
+        skeleton_id: Primary key to load.
         our_database_session: Open SQLAlchemy session.
 
     Returns:
-        The matching Theme row.
+        The matching Skeleton row.
 
     Raises:
-        HTTPException: If no Theme exists for `theme_id`.
+        HTTPException: If no Skeleton exists for `skeleton_id`.
     """
 
-    found_theme: Theme | None = our_database_session.get(Theme, theme_id)
+    found_skeleton: Skeleton | None = our_database_session.get(Skeleton, skeleton_id)
 
-    if found_theme is None:
+    if found_skeleton is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Theme not found: {theme_id}",
+            detail=f"Skeleton not found: {skeleton_id}",
         )
 
-    return found_theme
+    return found_skeleton
 
 
-def fetch_content_source_by_id_or_raise(
-    source_id: uuid.UUID,
+def fetch_carousel_by_id_or_raise(
+    carousel_id: uuid.UUID,
     our_database_session: Session,
-) -> ContentSource:
-    """Return a content source or raise HTTP 404.
+) -> Carousel:
+    """Return a content carousel or raise HTTP 404.
 
     Args:
-        source_id: Primary key to load.
+        carousel_id: Primary key to load.
         our_database_session: Open SQLAlchemy session.
 
     Returns:
-        The matching ``sources`` row.
+        The matching ``carousels`` row.
 
     Raises:
-        HTTPException: If no source exists for `source_id`.
+        HTTPException: If no carousel exists for `carousel_id`.
     """
 
-    found_source: ContentSource | None = our_database_session.get(
-        ContentSource,
-        source_id,
+    found_source: Carousel | None = our_database_session.get(
+        Carousel,
+        carousel_id,
     )
 
     if found_source is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Source not found: {source_id}",
+            detail=f"Carousel not found: {carousel_id}",
         )
 
     return found_source

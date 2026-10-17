@@ -5,10 +5,10 @@ import type { OpsUserRole } from "../api/types";
 export type OpsPageId =
   | "campaigns"
   | "new-campaign"
-  | "themes"
-  | "new-theme"
-  | "sources"
-  | "new-source"
+  | "skeletons"
+  | "new-skeleton"
+  | "carousels"
+  | "new-carousel"
   | "queue"
   | "schedule"
   | "accounts"
@@ -42,8 +42,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Content",
     items: [
       { pageId: "campaigns", label: "Campaigns" },
-      { pageId: "themes", label: "Themes" },
-      { pageId: "sources", label: "Sources" },
+      { pageId: "skeletons", label: "Skeletons" },
+      { pageId: "carousels", label: "Carousels" },
     ],
   },
   {
@@ -75,12 +75,12 @@ function railSectionForPage(activePageId: OpsPageId): OpsPageId {
     return "campaigns";
   }
 
-  if (activePageId === "new-theme") {
-    return "themes";
+  if (activePageId === "new-skeleton") {
+    return "skeletons";
   }
 
-  if (activePageId === "new-source") {
-    return "sources";
+  if (activePageId === "new-carousel") {
+    return "carousels";
   }
 
   return activePageId;

@@ -17,28 +17,28 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/brands/{brand_id}",
         "/api/v1/source-items",
         "/api/v1/source-items/{source_item_id}",
-        "/api/v1/sources",
-        "/api/v1/sources/{source_id}",
-        "/api/v1/sources/{source_id}/units",
-        "/api/v1/sources/{source_id}/units/{unit_id}",
-        "/api/v1/sources/{source_id}/units/{unit_id}/images",
-        "/api/v1/sources/{source_id}/units/{unit_id}/images/import",
-        "/api/v1/sources/{source_id}/units/{unit_id}/images/{image_id}",
-        "/api/v1/sources/{source_id}/units/{unit_id}/images/{image_id}/file",
-        "/api/v1/sources/{source_id}/units/{unit_id}/images/{image_id}/thumbnail",
+        "/api/v1/carousels",
+        "/api/v1/carousels/{carousel_id}",
+        "/api/v1/carousels/{carousel_id}/slides",
+        "/api/v1/carousels/{carousel_id}/slides/{slide_id}",
+        "/api/v1/carousels/{carousel_id}/slides/{slide_id}/images",
+        "/api/v1/carousels/{carousel_id}/slides/{slide_id}/images/import",
+        "/api/v1/carousels/{carousel_id}/slides/{slide_id}/images/{image_id}",
+        "/api/v1/carousels/{carousel_id}/slides/{slide_id}/images/{image_id}/file",
+        "/api/v1/carousels/{carousel_id}/slides/{slide_id}/images/{image_id}/thumbnail",
         "/api/v1/campaigns",
         "/api/v1/campaigns/{campaign_id}",
         "/api/v1/campaigns/{campaign_id}/start",
         "/api/v1/campaigns/{campaign_id}/pause",
         "/api/v1/campaigns/{campaign_id}/resume",
         "/api/v1/campaigns/{campaign_id}/finish",
-        "/api/v1/themes",
-        "/api/v1/themes/{theme_id}",
-        "/api/v1/themes/{theme_id}/duplicate",
-        "/api/v1/themes/{theme_id}/elements",
-        "/api/v1/themes/{theme_id}/elements/{element_id}",
-        "/api/v1/themes/{theme_id}/samples",
-        "/api/v1/themes/{theme_id}/samples/{preview_id}/image",
+        "/api/v1/skeletons",
+        "/api/v1/skeletons/{skeleton_id}",
+        "/api/v1/skeletons/{skeleton_id}/duplicate",
+        "/api/v1/skeletons/{skeleton_id}/elements",
+        "/api/v1/skeletons/{skeleton_id}/elements/{element_id}",
+        "/api/v1/skeletons/{skeleton_id}/samples",
+        "/api/v1/skeletons/{skeleton_id}/samples/{preview_id}/image",
         "/api/v1/spotmu/interests/search",
         "/api/v1/clusters",
         "/api/v1/clusters/{cluster_id}",
@@ -99,7 +99,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/artifacts",
             "/api/v1/post-jobs",
             "/api/v1/campaigns",
-            "/api/v1/themes",
+            "/api/v1/skeletons",
         )
 
         for collection_path in collection_paths:
@@ -184,53 +184,53 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         self.assertIn("post", resume_methods)
         self.assertIn("post", finish_methods)
 
-    def test_theme_item_route_accepts_patch(self) -> None:
-        """1.10a-i: PATCH /api/v1/themes/{theme_id} is registered."""
+    def test_skeleton_item_route_accepts_patch(self) -> None:
+        """1.10a-i: PATCH /api/v1/skeletons/{skeleton_id} is registered."""
 
         methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
-        theme_item_methods: set[str] = methods_by_path["/api/v1/themes/{theme_id}"]
+        skeleton_item_methods: set[str] = methods_by_path["/api/v1/skeletons/{skeleton_id}"]
 
-        self.assertIn("patch", theme_item_methods)
-        self.assertIn("get", theme_item_methods)
-        self.assertIn("delete", theme_item_methods)
+        self.assertIn("patch", skeleton_item_methods)
+        self.assertIn("get", skeleton_item_methods)
+        self.assertIn("delete", skeleton_item_methods)
 
-    def test_theme_element_routes_accept_post_patch_and_delete(self) -> None:
+    def test_skeleton_element_routes_accept_post_patch_and_delete(self) -> None:
         """1.10b-ii: element create, patch, and delete are registered."""
 
         methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
         element_collection_methods: set[str] = methods_by_path[
-            "/api/v1/themes/{theme_id}/elements"
+            "/api/v1/skeletons/{skeleton_id}/elements"
         ]
         element_item_methods: set[str] = methods_by_path[
-            "/api/v1/themes/{theme_id}/elements/{element_id}"
+            "/api/v1/skeletons/{skeleton_id}/elements/{element_id}"
         ]
 
         self.assertIn("post", element_collection_methods)
         self.assertIn("patch", element_item_methods)
         self.assertIn("delete", element_item_methods)
 
-    def test_theme_duplicate_route_accepts_post(self) -> None:
-        """1.10c-i: POST /api/v1/themes/{theme_id}/duplicate is registered."""
+    def test_skeleton_duplicate_route_accepts_post(self) -> None:
+        """1.10c-i: POST /api/v1/skeletons/{skeleton_id}/duplicate is registered."""
 
         methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
         duplicate_methods: set[str] = methods_by_path[
-            "/api/v1/themes/{theme_id}/duplicate"
+            "/api/v1/skeletons/{skeleton_id}/duplicate"
         ]
 
         self.assertIn("post", duplicate_methods)
 
-    def test_theme_sample_routes_accept_post_and_get(self) -> None:
+    def test_skeleton_sample_routes_accept_post_and_get(self) -> None:
         """1.10g-i: sample create and preview image are registered."""
 
         methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
-        sample_methods: set[str] = methods_by_path["/api/v1/themes/{theme_id}/samples"]
+        sample_methods: set[str] = methods_by_path["/api/v1/skeletons/{skeleton_id}/samples"]
         sample_image_methods: set[str] = methods_by_path[
-            "/api/v1/themes/{theme_id}/samples/{preview_id}/image"
+            "/api/v1/skeletons/{skeleton_id}/samples/{preview_id}/image"
         ]
 
         self.assertIn("post", sample_methods)
         self.assertIn("get", sample_image_methods)
-        preview_methods: set[str] = methods_by_path["/api/v1/themes/preview"]
+        preview_methods: set[str] = methods_by_path["/api/v1/skeletons/preview"]
 
         self.assertIn("post", preview_methods)
 
@@ -313,7 +313,7 @@ class ApiRouteSurfaceTests(unittest.TestCase):
             "/api/v1/artifacts/{artifact_id}",
             "/api/v1/post-jobs/{post_job_id}",
             "/api/v1/campaigns/{campaign_id}",
-            "/api/v1/themes/{theme_id}",
+            "/api/v1/skeletons/{skeleton_id}",
         )
 
         for item_path in item_paths:

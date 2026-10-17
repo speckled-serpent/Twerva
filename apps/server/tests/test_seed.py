@@ -122,7 +122,7 @@ class SeedIdempotencyTests(unittest.TestCase):
         self.assertEqual(fake_session.commit_count, 1)
 
     def test_seed_is_idempotent_when_rows_already_exist(self) -> None:
-        """Second run does not insert; it converges name and source fields."""
+        """Second run does not insert; it converges name and carousel fields."""
 
         existing_brand: Brand = Brand(slug=SPOTMU_BRAND_SLUG, name="Old name")
         existing_brand.id = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")

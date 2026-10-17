@@ -132,9 +132,9 @@ class SourceThemeMigrationTests(unittest.TestCase):
             stored_rows = connection.execute(
                 text(
                     """
-                    SELECT theme_element_id::text, value
-                    FROM unit_element_texts
-                    WHERE unit_id = CAST(:unit_id AS uuid)
+                    SELECT skeleton_element_id::text, value
+                    FROM slide_element_texts
+                    WHERE slide_id = CAST(:unit_id AS uuid)
                     """
                 ),
                 {"unit_id": unit_id},
@@ -145,7 +145,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
                         """
                         SELECT COUNT(*)
                         FROM information_schema.columns
-                        WHERE table_name = 'units' AND column_name = 'free_text'
+                        WHERE table_name = 'slides' AND column_name = 'free_text'
                         """
                     ),
                 ).scalar_one(),
@@ -165,8 +165,8 @@ class SourceThemeMigrationTests(unittest.TestCase):
                 text(
                     """
                     SELECT id::text, name
-                    FROM theme_elements
-                    WHERE theme_id = CAST(:theme_id AS uuid)
+                    FROM skeleton_elements
+                    WHERE skeleton_id = CAST(:theme_id AS uuid)
                     """
                 ),
                 {"theme_id": theme_id},
@@ -230,7 +230,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
             connection.execute(
                 text(
                     """
-                    INSERT INTO sources (id, theme_id, name, slug)
+                    INSERT INTO carousels (id, skeleton_id, name, slug)
                     VALUES (
                         CAST(:source_id AS uuid),
                         CAST(:theme_id AS uuid),
@@ -247,7 +247,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
             connection.execute(
                 text(
                     """
-                    INSERT INTO units (id, source_id, position, name)
+                    INSERT INTO slides (id, carousel_id, position, name)
                     VALUES
                         (CAST(:harbor_id AS uuid), CAST(:source_id AS uuid), 0, 'Harbor'),
                         (CAST(:desert_id AS uuid), CAST(:source_id AS uuid), 1, 'Desert')
@@ -262,7 +262,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
             connection.execute(
                 text(
                     """
-                    INSERT INTO unit_exclusions (id, unit_id, excluded_unit_id)
+                    INSERT INTO slide_exclusions (id, slide_id, excluded_slide_id)
                     VALUES
                         (
                             CAST(:forward_id AS uuid),
@@ -284,11 +284,11 @@ class SourceThemeMigrationTests(unittest.TestCase):
                 },
             )
             connection.execute(
-                text("DELETE FROM units WHERE id = CAST(:harbor_id AS uuid)"),
+                text("DELETE FROM slides WHERE id = CAST(:harbor_id AS uuid)"),
                 {"harbor_id": harbor_id},
             )
             remaining: int = int(
-                connection.execute(text("SELECT COUNT(*) FROM unit_exclusions")).scalar_one(),
+                connection.execute(text("SELECT COUNT(*) FROM slide_exclusions")).scalar_one(),
             )
 
         self.assertEqual(remaining, 0)
@@ -320,7 +320,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
             connection.execute(
                 text(
                     """
-                    INSERT INTO sources (id, theme_id, name, slug)
+                    INSERT INTO carousels (id, skeleton_id, name, slug)
                     VALUES (
                         CAST(:source_id AS uuid),
                         CAST(:theme_id AS uuid),
@@ -337,7 +337,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
             connection.execute(
                 text(
                     """
-                    INSERT INTO units (id, source_id, position, name)
+                    INSERT INTO slides (id, carousel_id, position, name)
                     VALUES (
                         CAST(:unit_id AS uuid),
                         CAST(:source_id AS uuid),
@@ -350,12 +350,12 @@ class SourceThemeMigrationTests(unittest.TestCase):
             )
             inspiration: str = str(
                 connection.execute(
-                    text("SELECT inspiration FROM sources WHERE slug = 'guidance'"),
+                    text("SELECT inspiration FROM carousels WHERE slug = 'guidance'"),
                 ).scalar_one(),
             )
             text_status: str = str(
                 connection.execute(
-                    text("SELECT text_status::text FROM units WHERE name = 'Harbor'"),
+                    text("SELECT text_status::text FROM slides WHERE name = 'Harbor'"),
                 ).scalar_one(),
             )
 
@@ -414,10 +414,10 @@ class SourceThemeMigrationTests(unittest.TestCase):
                 {"campaign_id": campaign_id},
             )
             stored_theme_id: object | None = connection.execute(
-                text("SELECT theme_id FROM campaigns WHERE slug = 'old-harbor'"),
+                text("SELECT skeleton_id FROM campaigns WHERE slug = 'old-harbor'"),
             ).scalar_one()
             stored_source_id: object | None = connection.execute(
-                text("SELECT source_id FROM campaigns WHERE slug = 'old-harbor'"),
+                text("SELECT carousel_id FROM campaigns WHERE slug = 'old-harbor'"),
             ).scalar_one()
 
         self.assertIsNone(stored_theme_id)
@@ -469,7 +469,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
         with self._engine().connect() as connection:
             source_slugs: list[str] = [
                 str(row[0])
-                for row in connection.execute(text("SELECT slug FROM sources")).fetchall()
+                for row in connection.execute(text("SELECT slug FROM carousels")).fetchall()
             ]
             resource_tables: int = int(
                 connection.execute(
@@ -521,8 +521,8 @@ class SourceThemeMigrationTests(unittest.TestCase):
             source_row = connection.execute(
                 text(
                     """
-                    SELECT id::text, theme_id::text, slug
-                    FROM sources
+                    SELECT id::text, skeleton_id::text, slug
+                    FROM carousels
                     WHERE slug = :slug
                     """
                 ),
@@ -534,8 +534,8 @@ class SourceThemeMigrationTests(unittest.TestCase):
                     text(
                         """
                         SELECT name
-                        FROM units
-                        WHERE source_id = CAST(:source_id AS uuid)
+                        FROM slides
+                        WHERE carousel_id = CAST(:source_id AS uuid)
                         ORDER BY position
                         """
                     ),
@@ -548,7 +548,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
                         """
                         SELECT COUNT(*)
                         FROM information_schema.columns
-                        WHERE table_name = 'sources' AND column_name = 'kind'
+                        WHERE table_name = 'carousels' AND column_name = 'kind'
                         """
                     ),
                 ).scalar_one(),
@@ -559,8 +559,8 @@ class SourceThemeMigrationTests(unittest.TestCase):
                     text(
                         """
                         SELECT COUNT(*)
-                        FROM unit_images
-                        GROUP BY unit_id
+                        FROM slide_images
+                        GROUP BY slide_id
                         """
                     ),
                 ).fetchall()
