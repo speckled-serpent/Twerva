@@ -75,13 +75,162 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ## 4. Carousel steps and the Content step
 
-**Goal.** Building a carousel is a sequence of steps. Step 2 attaches an album, research, or both.
+**Status.** Checklist. Head revision on main is `research_items` (PR #76 merged). Implement in the order below. Each box is one PR, and the console still works after that PR.
 
-**Scope.** Step 0 is create: a label and a skeleton. Step 3 is the slide editor that already exists, shown as its own step. Step 2 picks or creates an album, and optionally research. An album is required when the skeleton has a picture background or an image element. Research stays optional even when the skeleton has text. Once an album is selected, further uploads happen on that step. Steps 1 and 4 are on the screen and get their behavior in the next phases. A step can omit guidance. The fallback is a built-in default, such as a slide count drawn at random from 5 to 8. This phase does not add a settings screen for those defaults.
+**Goal.** A carousel is built in stages. Step 0 is the label and the skeleton, and the new row is generation 1. Step 2 attaches an album, research, or both. Step 3 is the slide editor that already exists. Steps 1 and 4 are on the stepper and stay closed.
 
-**Migration.** Carousels that received an album in phase 2 already point at it. This phase is the screen, plus an optional research link. Slides that point at an album image still do.
+**What the code does today.** Create (`NewCarouselPage`) asks for a name and a skeleton, then `CarouselsPage` opens one screen: rename, inspiration, rules, Generate slide, and the slide grid. The slide editor (`SlideEditorView`) asks for a name, one text per skeleton text element, exclusions, and — when the skeleton needs a picture — a file upload or a URL import. That upload calls `ensure_carousel_album` in `app/albums/linking.py`, which creates an album named after the carousel the first time a slide gains an image. `carousels.album_id` is already the pointer (nullable, `ON DELETE SET NULL`). It is set by the albums migration and by that helper. The read API returns it. Nothing in the API lets an operator pick an album. `research_items` has a title, a slug, and a body. A carousel has no research link. `test_carousel_has_no_research_link_and_upload_helpers_are_gone` asserts there is no `carousels.research_id` column. There is no generation column and no step column. Inspiration and rules are two text columns, saved from an explicit Save inspiration button. Albums, Research, and skeleton frame edits already autosave through `useSkeletonAutosave` at `SKELETON_AUTOSAVE_DELAY_MS` (700). The ops palette is the Warm Stone and Teal variables in `apps/ops/src/index.css`: `--ops-bg`, `--ops-surface`, `--ops-border`, `--ops-text`, `--ops-text-muted`, `--ops-primary` (`#0d9488`), `--ops-primary-hover`, `--ops-primary-soft`, `--ops-stone-soft`, `--ops-success`. A picture is required when `skeleton_requires_image` is true: `background_kind` picture, or any element with `content_kind` image. The same rule is `skeletonRequiresImage` in `slideSkeletonShape.ts`. The Default carousel (slug `default`) is bound to Spotmu Paper v1 and to the Default album (slug `default`, id from `default_library_album_id()`). Its six slides point at that album's packaged photos.
 
-**Open questions.** Where do defaults live, on the Skeleton or in global settings? What is the built-in default for each step besides the slide-count example? Create is supposed to start generation 1. The snapshot table arrives in phase 8. Until then, does the screen say generation 1, or stay quiet?
+**Working decisions.** Mu can override these in review. The tasks below use them.
+
+- `carousels.album_id` stays the attach. One album. The operator sets it on Content. Slide upload stops creating an album.
+- Research attaches through `carousel_research_items`, an ordered list. There is still no `carousels.research_id` column.
+- `generation_number` is an integer on the carousel. Create stores 1. The shell shows it. Phase 8 still adds the snapshot table and the duplicate action. This phase only stores the number.
+- `editor_step` remembers the last open step: 0 Basic, 2 Content, 3 Slides. Instructions and Final are never stored.
+- Instructions and Final are visible and disabled. They do not block Content or Slides.
+- The album rule is the picture rule above. An attached album with zero images satisfies it. A slide that needs a picture still needs an image chosen from that album before it saves.
+- The skeleton is chosen at create and stays fixed.
+- Inspiration and rules stay columns. Generate text stays on the slide. Their form leaves with the old editor. Phase 5 is where they become the instruction document.
+- Stage guidance has no new table and no settings screen. The only built-in called out in the shell is the later slide-count range, 5 through 8.
+
+### Data model
+
+- [ ] **4.1 Add generation number, editor step, and the research link**
+
+  Alembic revision `carousel_steps`, down-revision `research_items`. On `carousels`: `generation_number` integer, not null, server default 1, check `generation_number >= 1`; `editor_step` integer, not null, server default 3, check `editor_step IN (0, 2, 3)`. New table `carousel_research_items`: id, `carousel_id` (cascade on carousel delete), `research_item_id` (cascade on research delete), `position` (check `position >= 0`). Unique `(carousel_id, research_item_id)` and unique `(carousel_id, position)`. Upgrade sets `generation_number` 1 and `editor_step` 3 on every carousel, including Default. It leaves `album_id`, inspiration, rules, slides, and `album_image_id` as they are, and it inserts no research links. Downgrade drops the join table and the two columns. Albums, slides, and `research_items` stay.
+
+  Acceptance: upgrade, downgrade, upgrade again keeps Default on the Default album with its six slide pointers, keeps a carousel that has an album, and keeps a carousel with a null `album_id`. Every row reads generation 1 and editor step 3. The join table is empty. `Carousel` still has no `research_id` column.
+
+### API
+
+- [ ] **4.2 Return generation, the open step, research, and derived step state**
+
+  `CarouselReadResponse` and `CarouselListItemResponse` gain `generation_number` and `editor_step`. The detail also gains `research`: `{id, title, slug, position}` in position order. One helper, next to `skeleton_requires_image`, returns the five step states: `basic` is `done`; `instructions` is `locked`; `content` is `done` when the album rule passes and `available` otherwise; `slides` is `available` when the album rule passes and `locked` otherwise; `final` is `locked`. The album rule passes when the skeleton needs no picture, or when `album_id` is set. Put that object on the detail as `steps`. Readers can call the existing GET routes.
+
+  Acceptance: a picture skeleton with a null album reads `content: available` and `slides: locked`. A color skeleton with a null album reads `content: done` and `slides: available`. Default reads generation 1, editor step 3, its current `album_id`, and an empty research list.
+
+- [ ] **4.3 Accept a step change**
+
+  `PATCH /api/v1/carousels/{carousel_id}/step` with `{editor_step}` stores 0, 2, or 3. Admin only, same as the other carousel writes. A value of 1 or 4 is 400. Step 3 is 400 while `steps.slides` is `locked`. The stored step is left unchanged on 400. Create still uses the column default, so a carousel created in this PR opens at step 3. Task 4.7 is what points create at step 0. `PATCH /api/v1/carousels/{carousel_id}` stays the rename.
+
+  Acceptance: an admin can store step 0 or 2 on any carousel, and step 3 only when the album rule passes. A reader is rejected. A picture carousel with no album stays on its previous step when step 3 is refused.
+
+- [ ] **4.4 Attach and detach the one album**
+
+  Keep `carousels.album_id`. `PUT /api/v1/carousels/{carousel_id}/album` with `{album_id}` points at an existing album. `POST /api/v1/carousels/{carousel_id}/album` with `{name}` creates an album (same name and slug rules as `POST /api/v1/albums`) and points at it. `DELETE /api/v1/carousels/{carousel_id}/album` clears `album_id` and leaves the album row and its files. Admin only. Unknown album is 404. A blank name is 400. Attach and detach are 409 while any slide has an `album_image_id` that is not in the album that would remain (on detach, while any slide still has an `album_image_id`). Two carousels may point at one album. This PR leaves `ensure_carousel_album` on the slide upload path.
+
+  Acceptance: a second carousel can attach the Default album and the files stay one set. Detach leaves that album listed. Detach on Default is 409 while its six slides still point at those photos, and the pointer stays. A carousel with no slide images can detach and attach another album.
+
+- [ ] **4.5 Attach, reorder, and remove research**
+
+  `POST /api/v1/carousels/{carousel_id}/research` with `{research_item_id}` appends at the next position. `PUT /api/v1/carousels/{carousel_id}/research` with `{research_item_ids}` replaces the order. `DELETE /api/v1/carousels/{carousel_id}/research/{research_item_id}` drops that link. Admin only. Unknown research is 404. The same id twice in one list is 400. Deleting a research item drops its links and leaves the carousel. Update `test_carousel_has_no_research_link_and_upload_helpers_are_gone` so it still rejects a `research_id` column and asserts the join table.
+
+  Acceptance: order round-trips; a duplicate id is 400; deleting the research item removes the link and the carousel remains.
+
+### Step shell
+
+- [ ] **4.6 Put a stepper around the current slide editor**
+
+  The open carousel in `CarouselsPage` shows five steps, labeled with their index: 0 Basic, 1 Instructions, 2 Content, 3 Slides, 4 Final. This PR enables Slides only. The other four controls are visible and disabled. Slides renders the current detail (`AlbumView` and `SlideEditorView`) unchanged, including inspiration, rules, upload, and Save slide. Opening a carousel loads `editor_step`; a stored 3 shows Slides. The list gains the generation number and the open step name, and the lede says the carousel opens on that step. Use the Warm Stone and Teal variables already on `:root`. The current step is `--ops-primary`. A disabled step uses the existing disabled control. A done step uses `--ops-success`. A reader sees `ReadOnlyNotice` and the same disabled controls.
+
+  Acceptance: Default opens on Slides and its six slides still add, edit, preview, and delete as they do now. Basic, Instructions, Content, and Final cannot be selected. The list shows Generation 1 and Slides for every current carousel.
+
+### Basic
+
+- [ ] **4.7 Add the Basic step, and start a new carousel there**
+
+  Enable step 0. `POST /api/v1/carousels` sets `generation_number` 1 and `editor_step` 0, then the create form opens the shell on Basic. Basic shows the generation ("Generation 1"), the skeleton name, and the label. The skeleton is text, with no control to change it. The label autosaves at 700ms through `useSkeletonAutosave` and `SkeletonAutosaveStatus`, writing the existing rename PATCH. A blank name does not save and shows the required-name error. Leaving the step flushes with `leaveAfterAutosave`. Create still requires a trimmed name and a skeleton (`createCarouselFieldError`) and still refuses a reader. The empty list stays "No carousels yet."
+
+  Acceptance: a blank name or a missing skeleton does not create a row. A created carousel reloads on Basic with generation 1, the chosen skeleton, and editor step 0. A renamed label is still there after a reload. The skeleton id is the one from create.
+
+### Instructions
+
+- [ ] **4.8 Add the Instructions step as a closed control**
+
+  Step 1 stays disabled for an admin and a reader. Its accessible name says versioned Markdown instructions are a later phase. There is no panel, no document table, and no provider call. Inspiration and rules are untouched.
+
+  Acceptance: the control does not navigate and does not write. A carousel's inspiration and rules read back the same text.
+
+### Content
+
+- [ ] **4.9 Add the Content step for choosing an album**
+
+  Enable step 2. The operator attaches an existing album or creates one by name, using the task 4.4 routes. The attached album shows its name and image count, and a detach action that surfaces the 409 detail. Copy for the empty and required states: a picture skeleton with no album says the skeleton needs an album and to choose or create one; a skeleton that needs no picture, with no album, says no album is attached and slides for this skeleton do not use a picture; an attached album with zero images says this album has no images yet. Changing step flushes any pending Basic save and PATCHes `editor_step`. A reader can look and cannot attach.
+
+  Acceptance: creating an album here lists it on Albums. Attaching an album sets `album_id` and survives reload. A picture skeleton with no album stays on Content. Detach of an album that still has slide pointers shows the error and keeps the album.
+
+- [ ] **4.9a Edit that album's images on Content**
+
+  Once an album is attached, Content reuses the album detail's add, URL import, reorder, and license, source, alt, and license-note fields, including the 700ms autosave those fields already use. New bytes go through `/api/v1/albums/{album_id}/...`. The slide editor still has its own upload until task 4.12a.
+
+  Acceptance: an upload on Content appears on the album and on the Albums page. License edits reach Saved without a Save button. A second carousel attached to the same album sees the new image.
+
+- [ ] **4.10 Add optional research on Content**
+
+  Under the album, Content shows the attached research in order. The operator adds an existing item, creates one with a title (empty body is allowed, through `POST /api/v1/research`, then attach), removes a link, or reorders. The body stays on the Research page. None attached says research is optional and none is attached. An empty library says no research yet and offers create. A reader can look and cannot change the list.
+
+  Acceptance: two documents stay in the chosen order after reload. Removing a link leaves the research item on the Research page. A picture skeleton can open Slides, once 4.11 lands, with research still empty.
+
+### Slides
+
+- [ ] **4.11 Gate Slides on the album rule**
+
+  The Slides control follows `steps.slides`. Locked, it stays disabled and its name says to attach an album on Content first. A small revision `carousel_editor_step_content` (down-revision `carousel_steps`) sets `editor_step` 2 where the album rule fails, and leaves every other carousel, including Default, on 3. Create of a picture skeleton still lands on Basic (step 0) with Slides disabled until an album is attached. A skeleton that needs no picture can open Slides with a null album.
+
+  Acceptance: PATCH step 3 on a picture carousel with no album is 400 and the shell keeps Slides disabled. After attach, Slides enables. Default still opens on Slides. A color or gradient skeleton with no image element opens Slides with no album.
+
+- [ ] **4.12 Let a slide store an image from the attached album**
+
+  `SlideWriteRequest` and the slide PATCH gain optional `album_image_id`. Null clears the pointer. A set id must be an image on `carousels.album_id`; otherwise 400. A skeleton that needs no picture rejects a set id with the existing image-not-used detail. A skeleton that needs a picture still rejects a save with no image. The existing upload and import routes stay for this PR.
+
+  Acceptance: a slide can point at an image already in the attached album without a new file. An id from another album is 400 and the previous pointer stays. Default's slides still return their six photos.
+
+- [ ] **4.12a Pick that image in the slide editor**
+
+  On Slides, replace `ImageIntakeForm` and the new-slide file drafts with a picker of the attached album's images. Choosing one saves `album_image_id`. The preview and the slide card show that image. Name, text elements, exclusions, the draft banner, Generate text, and Accept stay as they are, including the explicit Save slide button. Add slide requires a chosen image when the skeleton needs a picture. An attached album with no images says this album has no images yet and points the operator at Content. The empty slide list stays "No slides yet."
+
+  Acceptance: a new slide on a picture carousel uses an existing album image and writes no new file. Generate text and Accept still run. The upload form is gone from the slide.
+
+- [ ] **4.13 Autosave the slide's name, text, and exclusions**
+
+  Those three autosave at 700ms through the shared helper. A blank name does not save and shows the required-name error. The image pick saves on selection. Generate, Accept, and Delete stay explicit buttons. Leaving the slide or the step flushes.
+
+  Acceptance: a text edit is stored after the 700ms delay with no Save slide button. A blank name leaves the previous name in place. Accept still marks the slide live.
+
+### Final
+
+- [ ] **4.14 Add the Final step as a closed control**
+
+  Step 4 stays disabled for an admin and a reader. Its accessible name says final assembly is a later phase. It does not call `POST /api/v1/generate/carousel` and it does not write campaign-run rows.
+
+  Acceptance: the control does not navigate. A campaign run and the template generate route behave as they do now.
+
+### Stage guidance
+
+- [ ] **4.15 Show the slide-count fallback on Slides**
+
+  Slides shows one hint: when a later phase needs a slide count and this carousel has no guidance, it draws a count from 5 through 8. The hint does not add or remove slides, and it is the only guidance copy in the shell. No new column and no settings screen.
+
+  Acceptance: the hint is on Slides only. Saving a fourth slide and a ninth slide both succeed.
+
+### Cleanup
+
+- [ ] **4.16 Remove the old carousel editor paths**
+
+  Remove the single-page stack that is still inside Slides from task 4.6: the inspiration and rules form, Save inspiration, and the slide file upload and URL import (`ImageIntakeForm`, the new-slide file drafts, `uploadSlideImages`, `importSlideImage`). Point the slide card and preview at the album file URL the Albums page already uses, then remove the carousel slide upload, import, and metadata-write routes that only that form called. Remove `ensure_carousel_album` so storing a slide image cannot create an album. Keep `PATCH /api/v1/carousels/{carousel_id}/guidance`, the inspiration and rules columns, Generate slide, and Generate text. Keep the album routes, the Research page, and the Default album seed.
+
+  Acceptance: the carousel screen has no inspiration form and no slide file picker. A new image is added on Content and chosen on the slide. Guidance PATCH and Generate text still respond. Default opens on Slides with its six packaged photos.
+
+### Open questions
+
+- The tasks attach an ordered list of research items. Should a carousel attach one research item instead?
+- The shell shows "Generation 1" from `generation_number`. The snapshot table is still phase 8. Should the shell stay quiet until that table exists?
+- Where do built-in defaults live when a later phase needs them, on the skeleton or in global settings? Besides the slide count of 5 through 8, what is the built-in default for Basic, Instructions, Content, and Final?
+- This phase removes the inspiration and rules form and leaves the columns and Generate text in place. Editing that text then waits for phase 5. Is that the cut you want?
+- The skeleton is fixed after create, including while the carousel has no slides. Should Basic allow a different skeleton until the first slide exists?
+- Slides has no done mark and no minimum count while Final is closed. Should a slide count mark the step done?
+- Replacing or clearing the album is 409 while a slide points at an image that would be left behind. Should the operator clear those pointers first, including on Default?
+- Content is done, and Slides is available, as soon as the album rule passes, including when the skeleton needs no picture and the operator has not opened Content. Should opening Content be required first?
 
 ## 5. Instructions
 
