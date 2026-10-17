@@ -28,7 +28,14 @@ from app.api.v1.schemas import (
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.album import AlbumImage
-from app.models.carousel import Carousel, Slide, SlideElementText, SlideExclusion
+from app.models.carousel import (
+    CAROUSEL_EDITOR_STEP_DEFAULT,
+    CAROUSEL_GENERATION_NUMBER_DEFAULT,
+    Carousel,
+    Slide,
+    SlideElementText,
+    SlideExclusion,
+)
 from app.models.enums import SlideImageMediaType, SlideTextStatus
 from app.models.skeleton import Skeleton
 from app.models.ops_user import OpsUser
@@ -128,10 +135,14 @@ def create_carousel(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> CarouselReadResponse:
-    """Create a carousel bound to a skeleton. Readers cannot call this."""
+    """Create a carousel bound to a skeleton. Readers cannot call this.
+
+    Generation and the open step use the column defaults: generation 1
+    and editor step 3.
+    """
 
     _ = current_ops_operator
-    fetch_skeleton_by_id_or_raise(
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
         source_create_request.skeleton_id,
         our_database_session,
     )
@@ -150,8 +161,11 @@ def create_carousel(
         slug=album_slug,
         inspiration="",
         rules="",
+        generation_number=CAROUSEL_GENERATION_NUMBER_DEFAULT,
+        editor_step=CAROUSEL_EDITOR_STEP_DEFAULT,
     )
     created_source.slides = []
+    created_source.research_links = []
     our_database_session.add(created_source)
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -161,7 +175,7 @@ def create_carousel(
 
     from app.api.v1.carousels import serialize_carousel
 
-    return serialize_carousel(created_source)
+    return serialize_carousel(created_source, found_skeleton)
 
 
 def patch_carousel(
@@ -177,6 +191,10 @@ def patch_carousel(
         carousel_id,
         our_database_session,
     )
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
     updated_name: str = _require_name(source_patch_request.name)
     found_source.name = updated_name
     commit_database_session_or_raise_conflict(
@@ -187,7 +205,7 @@ def patch_carousel(
 
     from app.api.v1.carousels import serialize_carousel
 
-    return serialize_carousel(found_source)
+    return serialize_carousel(found_source, found_skeleton)
 
 
 def delete_carousel(

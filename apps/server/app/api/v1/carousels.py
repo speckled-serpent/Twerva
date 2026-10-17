@@ -8,11 +8,16 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.v1.lookups import fetch_carousel_by_id_or_raise
+from app.api.v1.lookups import (
+    fetch_carousel_by_id_or_raise,
+    fetch_skeleton_by_id_or_raise,
+)
 from app.api.v1.carousel_preview import register_source_preview_routes
 from app.api.v1.schemas import (
     CarouselListItemResponse,
     CarouselReadResponse,
+    CarouselResearchReadResponse,
+    CarouselStepsResponse,
     TextGenerationStatusResponse,
     SlideElementTextReadResponse,
     SlideImageReadResponse,
@@ -25,8 +30,11 @@ from app.carousels.text_generation import (
 )
 from app.db import get_our_database_session
 from app.models.album import AlbumImage
-from app.models.carousel import Carousel, Slide, SlideElementText
+from app.models.carousel import Carousel, CarouselResearchItem, Slide, SlideElementText
 from app.models.enums import SlideTextStatus
+from app.models.research_item import ResearchItem
+from app.models.skeleton import Skeleton
+from app.carousels.slide_skeleton import CarouselStepStates, carousel_step_states
 from app.carousels.slide_text_review import live_slides, slide_counts_as_live
 
 
@@ -90,19 +98,33 @@ def get_carousel(
     carousel_id: uuid.UUID,
     our_database_session: Session = Depends(get_our_database_session),
 ) -> CarouselReadResponse:
-    """Return one carousel and its slides. A missing id is HTTP 404."""
+    """Return one carousel and its slides. A missing id is HTTP 404.
+
+    Readers may call this. The response includes the stored generation
+    and open step, the attached research, and the derived step state.
+    """
 
     found_source: Carousel = fetch_carousel_by_id_or_raise(
         carousel_id,
         our_database_session,
     )
-    source_read_response: CarouselReadResponse = serialize_carousel(found_source)
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
+    source_read_response: CarouselReadResponse = serialize_carousel(
+        found_source,
+        found_skeleton,
+    )
 
     return source_read_response
 
 
 def serialize_carousel_list_item(carousel: Carousel) -> CarouselListItemResponse:
-    """Return the list shape, with a count and no slide bodies."""
+    """Return the list shape, with a count and no slide bodies.
+
+    Research and derived step state stay on the detail route.
+    """
 
     list_item: CarouselListItemResponse = CarouselListItemResponse(
         id=carousel.id,
@@ -110,6 +132,8 @@ def serialize_carousel_list_item(carousel: Carousel) -> CarouselListItemResponse
         name=carousel.name,
         slug=carousel.slug,
         album_id=carousel.album_id,
+        generation_number=carousel.generation_number,
+        editor_step=carousel.editor_step,
         slide_count=len(list(carousel.slides)),
         created_at=carousel.created_at,
         updated_at=carousel.updated_at,
@@ -118,27 +142,108 @@ def serialize_carousel_list_item(carousel: Carousel) -> CarouselListItemResponse
     return list_item
 
 
-def serialize_carousel(carousel: Carousel) -> CarouselReadResponse:
-    """Return one carousel with slides, fields, and images in position order."""
+def serialize_carousel(
+    carousel: Carousel,
+    skeleton: Skeleton,
+) -> CarouselReadResponse:
+    """Return one carousel with research, step state, and slides.
+
+    Args:
+        carousel: The carousel row, with slides and research links loaded.
+        skeleton: That carousel's skeleton, with elements loaded.
+
+    Returns:
+        The detail response. ``editor_step`` is the stored open step.
+        ``steps`` is derived from the skeleton, the album, and the slides.
+    """
 
     slide_responses: list[SlideReadResponse] = [
         serialize_slide(slide) for slide in _slides_in_position_order(carousel)
     ]
+    research_responses: list[CarouselResearchReadResponse] = _research_in_position_order(
+        carousel,
+    )
+    step_states: CarouselStepStates = carousel_step_states(
+        skeleton,
+        carousel.album_id,
+        len(slide_responses),
+    )
     source_read_response: CarouselReadResponse = CarouselReadResponse(
         id=carousel.id,
         skeleton_id=carousel.skeleton_id,
         name=carousel.name,
         slug=carousel.slug,
         album_id=carousel.album_id,
+        generation_number=carousel.generation_number,
+        editor_step=carousel.editor_step,
         inspiration=carousel.inspiration or "",
         rules=carousel.rules or "",
         live_slide_count=len(live_slides(list(carousel.slides))),
         created_at=carousel.created_at,
         updated_at=carousel.updated_at,
+        research=research_responses,
+        steps=_steps_response(step_states),
         slides=slide_responses,
     )
 
     return source_read_response
+
+
+def _research_in_position_order(carousel: Carousel) -> list[CarouselResearchReadResponse]:
+    """Return attached research in position order.
+
+    Args:
+        carousel: The carousel, with research links loaded.
+
+    Returns:
+        One entry per link. ``id`` is the research item.
+    """
+
+    ordered_links: list[CarouselResearchItem] = sorted(
+        list(carousel.research_links),
+        key=_research_position,
+    )
+    research_responses: list[CarouselResearchReadResponse] = [
+        _serialize_research_link(link) for link in ordered_links
+    ]
+
+    return research_responses
+
+
+def _research_position(link: CarouselResearchItem) -> int:
+    """Return the sort key for an attached research item."""
+
+    position: int = link.position
+
+    return position
+
+
+def _serialize_research_link(link: CarouselResearchItem) -> CarouselResearchReadResponse:
+    """Return one attached research item."""
+
+    research_item: ResearchItem = link.research_item
+    research_response: CarouselResearchReadResponse = CarouselResearchReadResponse(
+        id=research_item.id,
+        title=research_item.title,
+        slug=research_item.slug,
+        position=link.position,
+    )
+
+    return research_response
+
+
+def _steps_response(step_states: CarouselStepStates) -> CarouselStepsResponse:
+    """Copy derived step states onto the response model."""
+
+    steps_response: CarouselStepsResponse = CarouselStepsResponse(
+        basic=step_states.basic,
+        instructions=step_states.instructions,
+        content=step_states.content,
+        slides=step_states.slides,
+        final=step_states.final,
+    )
+
+    return steps_response
 
 
 def _slides_in_position_order(carousel: Carousel) -> list[Slide]:

@@ -105,7 +105,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### API
 
-- [ ] **4.2 Return generation, the open step, research, and derived step state**
+- [x] **4.2 Return generation, the open step, research, and derived step state**
 
   `CarouselReadResponse` and `CarouselListItemResponse` gain `generation_number` and `editor_step`. The detail also gains `research`: `{id, title, slug, position}` in position order, one entry per attached item. One helper, next to `skeleton_requires_image`, returns the five step states. `basic` is `done`. `instructions` is `locked`. `content` is `done` when the album rule passes and `available` otherwise. `slides` is `locked` when the album rule fails, `available` when the rule passes and the carousel has fewer than two slides, and `done` when the rule passes and the carousel has at least two slides. `final` is `locked`. The album rule passes when the skeleton needs no picture, or when `album_id` is set. A skeleton that needs no picture passes the rule immediately. Put that object on the detail as `steps`. Readers can call the existing GET routes.
 
