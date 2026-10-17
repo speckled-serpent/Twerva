@@ -1,4 +1,7 @@
-"""Create, rename, and delete albums and slides. No new image bytes."""
+"""Create, rename, change the open step, and delete albums and slides.
+
+No new image bytes. The skeleton stays the one chosen at create.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +22,7 @@ from app.api.v1.schemas import (
     CarouselCreateRequest,
     CarouselPatchRequest,
     CarouselReadResponse,
+    CarouselStepPatchRequest,
     SlideImageMetadataPatch,
     SlideImageReadResponse,
     SlideElementTextWrite,
@@ -55,8 +59,11 @@ from app.carousels.editing import (
 from app.carousels.slide_exclusions import normalized_exclusion_ids
 from app.carousels.slide_skeleton import (
     IMAGE_REQUIRED_DETAIL,
-    text_values_for_skeleton,
+    CarouselStepStates,
+    accepted_editor_step,
+    carousel_step_states,
     skeleton_requires_image,
+    text_values_for_skeleton,
 )
 from app.storage.artifacts import ArtifactAssetPathEscapeError
 from app.skeletons.default_images import resolve_skeleton_image_path
@@ -83,6 +90,12 @@ def register_source_write_routes(carousels_router: APIRouter) -> None:
     carousels_router.add_api_route(
         "/{carousel_id}",
         patch_carousel,
+        methods=["PATCH"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/step",
+        patch_carousel_step,
         methods=["PATCH"],
         response_model=CarouselReadResponse,
     )
@@ -200,6 +213,40 @@ def patch_carousel(
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail=CAROUSEL_SLUG_CONFLICT_DETAIL,
+    )
+    our_database_session.refresh(found_source)
+
+    from app.api.v1.carousels import serialize_carousel
+
+    return serialize_carousel(found_source, found_skeleton)
+
+
+def patch_carousel_step(
+    carousel_id: uuid.UUID,
+    step_patch_request: CarouselStepPatchRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Store the open step. A locked step is 400 and leaves the row.
+
+    Readers cannot call this. Create still uses the column default,
+    so a new carousel opens at step 3. The skeleton is not changed.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
+    stored_step: int = _accepted_editor_step(found_source, found_skeleton, step_patch_request)
+    found_source.editor_step = stored_step
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Editor step could not be saved.",
     )
     our_database_session.refresh(found_source)
 
@@ -482,6 +529,45 @@ def get_slide_image_file(
     )
 
     return image_response
+
+
+def _accepted_editor_step(
+    carousel: Carousel,
+    skeleton: Skeleton,
+    step_patch_request: CarouselStepPatchRequest,
+) -> int:
+    """Return a step that may be stored. A refusal writes nothing.
+
+    Args:
+        carousel: The carousel row, with slides loaded.
+        skeleton: That carousel's skeleton, with elements loaded.
+        step_patch_request: The requested open step.
+
+    Returns:
+        0, 2, or 3 when that step is open.
+
+    Raises:
+        HTTPException: 400 when the step is locked or is not stored.
+    """
+
+    step_states: CarouselStepStates = carousel_step_states(
+        skeleton,
+        carousel.album_id,
+        len(list(carousel.slides)),
+    )
+
+    try:
+        stored_step: int = accepted_editor_step(
+            step_patch_request.editor_step,
+            step_states,
+        )
+    except ValueError as step_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(step_error),
+        ) from step_error
+
+    return stored_step
 
 
 def _require_name(raw_name: str) -> str:

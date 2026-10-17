@@ -3,6 +3,7 @@
 An image is required when the skeleton has a picture background or an
 image element. Text is one value per text element. The same picture
 rule decides whether Content is done and whether Slides is open.
+A requested editor step is refused when that step is locked.
 This module does not render or write files.
 """
 
@@ -23,6 +24,26 @@ IMAGE_NOT_USED_DETAIL: str = "This skeleton does not use a slide image."
 UNKNOWN_TEXT_ELEMENT_DETAIL: str = "That text does not belong to this skeleton."
 DUPLICATE_TEXT_ELEMENT_DETAIL: str = "Each skeleton text element is stored once."
 CAROUSEL_SLIDES_DONE_COUNT: int = 2
+EDITOR_STEP_BASIC: int = 0
+EDITOR_STEP_INSTRUCTIONS: int = 1
+EDITOR_STEP_CONTENT: int = 2
+EDITOR_STEP_SLIDES: int = 3
+EDITOR_STEP_FINAL: int = 4
+STORED_EDITOR_STEPS: frozenset[int] = frozenset({
+    EDITOR_STEP_BASIC,
+    EDITOR_STEP_CONTENT,
+    EDITOR_STEP_SLIDES,
+})
+UNKNOWN_EDITOR_STEP_DETAIL: str = "editor_step must be 0, 2, or 3."
+INSTRUCTIONS_LOCKED_DETAIL: str = "Instructions is locked."
+SLIDES_LOCKED_DETAIL: str = "Slides is locked until an album is attached."
+FINAL_LOCKED_DETAIL: str = "Final is locked."
+LOCKED_EDITOR_STEP_DETAIL: str = "That step is locked."
+_LOCKED_DETAIL_BY_STEP: dict[int, str] = {
+    EDITOR_STEP_INSTRUCTIONS: INSTRUCTIONS_LOCKED_DETAIL,
+    EDITOR_STEP_SLIDES: SLIDES_LOCKED_DETAIL,
+    EDITOR_STEP_FINAL: FINAL_LOCKED_DETAIL,
+}
 
 
 class CarouselStepState(enum.StrEnum):
@@ -134,6 +155,85 @@ def carousel_step_states(
     )
 
     return step_states
+
+
+def accepted_editor_step(
+    editor_step: int,
+    step_states: CarouselStepStates,
+) -> int:
+    """Return ``editor_step`` when it may be stored.
+
+    Stored steps are 0 Basic, 2 Content, and 3 Slides. Instructions
+    and Final are locked and are never stored. Slides is refused while
+    its derived state is locked. This does not write the carousel.
+
+    Args:
+        editor_step: The requested open step.
+        step_states: Derived states for this carousel.
+
+    Returns:
+        The same step, when it may be written.
+
+    Raises:
+        ValueError: The step is locked, or it is not 0, 2, or 3.
+    """
+
+    step_state: CarouselStepState | None = _state_for_editor_step(
+        editor_step,
+        step_states,
+    )
+
+    if step_state is None:
+        raise ValueError(UNKNOWN_EDITOR_STEP_DETAIL)
+
+    if step_state == CarouselStepState.LOCKED:
+        raise ValueError(_locked_editor_step_detail(editor_step))
+
+    if editor_step not in STORED_EDITOR_STEPS:
+        raise ValueError(UNKNOWN_EDITOR_STEP_DETAIL)
+
+    return editor_step
+
+
+def _state_for_editor_step(
+    editor_step: int,
+    step_states: CarouselStepStates,
+) -> CarouselStepState | None:
+    """Return the derived state for a step number, or null when it is not a step.
+
+    Args:
+        editor_step: 0 Basic through 4 Final.
+        step_states: Derived states for this carousel.
+
+    Returns:
+        That step's state, or null for a number outside 0 through 4.
+    """
+
+    states_by_step: dict[int, CarouselStepState] = {
+        EDITOR_STEP_BASIC: step_states.basic,
+        EDITOR_STEP_INSTRUCTIONS: step_states.instructions,
+        EDITOR_STEP_CONTENT: step_states.content,
+        EDITOR_STEP_SLIDES: step_states.slides,
+        EDITOR_STEP_FINAL: step_states.final,
+    }
+    found_state: CarouselStepState | None = states_by_step.get(editor_step)
+
+    return found_state
+
+
+def _locked_editor_step_detail(editor_step: int) -> str:
+    """Return the refusal sentence for a locked step.
+
+    Args:
+        editor_step: A step number whose derived state is locked.
+
+    Returns:
+        A sentence naming that step. Slides names the album rule.
+    """
+
+    detail: str = _LOCKED_DETAIL_BY_STEP.get(editor_step, LOCKED_EDITOR_STEP_DETAIL)
+
+    return detail
 
 
 def _album_rule_passes(skeleton: Skeleton, album_id: uuid.UUID | None) -> bool:

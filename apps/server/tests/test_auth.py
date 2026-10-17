@@ -795,6 +795,14 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(create_source_response.status_code, 403)
         self.assertIn("read-only", create_source_response.json()["detail"].lower())
 
+        change_step_response = self.test_client.patch(
+            f"/api/v1/carousels/{uuid.uuid4()}/step",
+            json={"editor_step": 0},
+        )
+
+        self.assertEqual(change_step_response.status_code, 403)
+        self.assertIn("read-only", change_step_response.json()["detail"].lower())
+
         upload_image_response = self.test_client.post(
             f"/api/v1/carousels/{uuid.uuid4()}/slides/{uuid.uuid4()}/images",
             data={"license": "cc0", "carousel": "https://example.com/photo"},
