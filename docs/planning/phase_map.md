@@ -139,7 +139,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Basic
 
-- [ ] **4.7 Add the Basic step, and start a new carousel there**
+- [x] **4.7 Add the Basic step, and start a new carousel there**
 
   Enable step 0. `POST /api/v1/carousels` sets `generation_number` 1 and `editor_step` 0, then the create form opens the shell on Basic. Basic shows "Generation 1", the skeleton name, and the label. The skeleton is locked: the name is text, and there is no control to change it, including when the carousel has no slides. Another skeleton means delete the carousel and create a new one. The label autosaves at 700ms through `useSkeletonAutosave` and `SkeletonAutosaveStatus`, writing the existing rename PATCH, which accepts a name only. A blank name does not save and shows the required-name error. Leaving the step flushes with `leaveAfterAutosave`. Create still requires a trimmed name and a skeleton (`createCarouselFieldError`) and still refuses a reader. The empty list stays "No carousels yet."
 

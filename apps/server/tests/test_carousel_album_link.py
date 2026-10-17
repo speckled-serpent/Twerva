@@ -154,7 +154,7 @@ class CarouselAlbumLinkTests(unittest.TestCase):
         self.assertEqual(kept_album.slug, "first")
         self.assertEqual(attached.album_id, other.id)
         self.assertEqual(loaded.album_id, other.id)
-        self.assertEqual(loaded.editor_step, 3)
+        self.assertEqual(loaded.editor_step, 0)
         self.assertEqual(loaded.steps.content, CarouselStepState.DONE)
         self.assertEqual(loaded.steps.slides, CarouselStepState.DONE)
 
@@ -187,7 +187,7 @@ class CarouselAlbumLinkTests(unittest.TestCase):
         self.assertIsNone(cleared.album_id)
         self.assertEqual(cleared.steps.content, CarouselStepState.AVAILABLE)
         self.assertEqual(cleared.steps.slides, CarouselStepState.LOCKED)
-        self.assertEqual(cleared.editor_step, 3)
+        self.assertEqual(cleared.editor_step, 0)
         self.assertEqual(len(session.albums), 1)
 
     def test_replacing_an_unused_album_leaves_that_album_row(self) -> None:

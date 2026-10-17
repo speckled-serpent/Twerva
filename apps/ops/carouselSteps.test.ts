@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { CarouselStepState, CarouselStepsResponse } from "./src/api/types.ts";
 import {
   CAROUSEL_STEPS,
+  CAROUSEL_STEP_BASIC,
   CAROUSEL_STEP_SLIDES,
   canOpenCarouselStep,
   carouselStepAccessibleName,
@@ -65,12 +66,15 @@ assert.equal(stepStateFor(doneSlides, stepAt(3)), "done");
 assert.equal(canOpenCarouselStep(stepAt(3), doneSlides.slides), true);
 assert.equal(canOpenCarouselStep(stepAt(3), availableSlides.slides), true);
 assert.equal(canOpenCarouselStep(stepAt(3), lockedSlides.slides), false);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_BASIC), "done"), true);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_BASIC), "available"), true);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_BASIC), "locked"), false);
 
 const closedStates: CarouselStepState[] = ["locked", "available", "done"];
 
 for (const step of CAROUSEL_STEPS) {
 
-  if (step.index === CAROUSEL_STEP_SLIDES) {
+  if (step.index === CAROUSEL_STEP_SLIDES || step.index === CAROUSEL_STEP_BASIC) {
     continue;
   }
 
@@ -80,6 +84,10 @@ for (const step of CAROUSEL_STEPS) {
   }
 }
 
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_BASIC), "done", 0, true), false);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_BASIC), "done", 3, true), true);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_BASIC), "done", 3, false), false);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_BASIC), "locked", 3, true), false);
 assert.equal(stepClickStoresEditorStep(stepAt(3), "available", 3, true), true);
 assert.equal(stepClickStoresEditorStep(stepAt(3), "available", 0, true), true);
 assert.equal(stepClickStoresEditorStep(stepAt(3), "done", 3, true), false);

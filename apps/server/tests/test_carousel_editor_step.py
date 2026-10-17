@@ -23,6 +23,7 @@ from app.api.v1.schemas import (
     CarouselStepPatchRequest,
     SlideWriteRequest,
 )
+from app.carousels.editing import BLANK_NAME_DETAIL
 from app.carousels.slide_skeleton import (
     FINAL_LOCKED_DETAIL,
     INSTRUCTIONS_LOCKED_DETAIL,
@@ -94,15 +95,97 @@ class AcceptedEditorStepTests(unittest.TestCase):
 class CarouselEditorStepWriteTests(unittest.TestCase):
     """Admin step changes. A 400 leaves the stored step where it was."""
 
-    def test_create_still_opens_at_step_3(self) -> None:
-        """Create uses the column default. Step 0 waits for task 4.7."""
+    def test_create_opens_on_basic_and_keeps_the_skeleton(self) -> None:
+        """Create stores generation 1 and editor step 0.
+
+        The skeleton is the one from create. A rename body that includes
+        a skeleton id is rejected, including when the carousel has no
+        slides. A renamed label is still there after a reload.
+        """
 
         session: _MemoryCarouselSession = _MemoryCarouselSession()
         created: CarouselReadResponse = _create(session, "Harbor")
+        loaded: CarouselReadResponse = get_carousel(created.id, session)
 
         self.assertEqual(created.generation_number, 1)
-        self.assertEqual(created.editor_step, 3)
+        self.assertEqual(created.editor_step, 0)
         self.assertEqual(created.skeleton_id, session.skeleton.id)
+        self.assertEqual(created.slides, [])
+        self.assertEqual(loaded.generation_number, 1)
+        self.assertEqual(loaded.editor_step, 0)
+        self.assertEqual(loaded.skeleton_id, session.skeleton.id)
+        self.assertEqual(loaded.slides, [])
+
+        with self.assertRaises(ValidationError):
+            CarouselPatchRequest.model_validate({
+                "name": "Harbor",
+                "skeleton_id": str(uuid.uuid4()),
+            })
+
+        renamed: CarouselReadResponse = patch_carousel(
+            created.id,
+            CarouselPatchRequest(name="Outer harbor"),
+            session,
+            None,
+        )
+        reloaded: CarouselReadResponse = get_carousel(created.id, session)
+
+        self.assertEqual(renamed.name, "Outer harbor")
+        self.assertEqual(renamed.editor_step, 0)
+        self.assertEqual(renamed.skeleton_id, session.skeleton.id)
+        self.assertEqual(reloaded.name, "Outer harbor")
+        self.assertEqual(reloaded.editor_step, 0)
+        self.assertEqual(reloaded.skeleton_id, session.skeleton.id)
+        self.assertEqual(reloaded.slides, [])
+
+    def test_blank_name_or_missing_skeleton_does_not_create_a_row(self) -> None:
+        """A blank name is 400. An unknown skeleton is 404. Neither writes."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+
+        with self.assertRaises(HTTPException) as blank:
+            create_carousel(
+                CarouselCreateRequest(name="   ", skeleton_id=session.skeleton.id),
+                session,
+                None,
+            )
+
+        with self.assertRaises(HTTPException) as missing:
+            create_carousel(
+                CarouselCreateRequest(name="Harbor", skeleton_id=uuid.uuid4()),
+                session,
+                None,
+            )
+
+        self.assertEqual(blank.exception.status_code, 400)
+        self.assertEqual(blank.exception.detail, BLANK_NAME_DETAIL)
+        self.assertEqual(missing.exception.status_code, 404)
+        self.assertEqual(session.carousels, [])
+        self.assertEqual(session.commit_count, 0)
+
+    def test_blank_rename_leaves_the_stored_label(self) -> None:
+        """A blank name does not save. The label from create stays."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        created: CarouselReadResponse = _create(session, "Harbor")
+        commits_before: int = session.commit_count
+
+        with self.assertRaises(HTTPException) as blank:
+            patch_carousel(
+                created.id,
+                CarouselPatchRequest(name="   "),
+                session,
+                None,
+            )
+
+        loaded: CarouselReadResponse = get_carousel(created.id, session)
+
+        self.assertEqual(blank.exception.status_code, 400)
+        self.assertEqual(blank.exception.detail, BLANK_NAME_DETAIL)
+        self.assertEqual(session.commit_count, commits_before)
+        self.assertEqual(loaded.name, "Harbor")
+        self.assertEqual(loaded.editor_step, 0)
+        self.assertEqual(loaded.skeleton_id, session.skeleton.id)
 
     def test_admin_stores_step_0_or_2_on_any_carousel(self) -> None:
         """Basic and Content can be stored while Slides is locked or done."""

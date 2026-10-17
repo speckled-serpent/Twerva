@@ -1087,7 +1087,10 @@ class CarouselCreateRequest(BaseModel):
 
 
 class CarouselPatchRequest(BaseModel):
-    """Rename a carousel. The skeleton stays the one chosen at create."""
+    """Rename a carousel. The skeleton stays the one chosen at create.
+
+    Extra fields are rejected, including ``skeleton_id``.
+    """
 
     model_config = ConfigDict(extra="forbid")
 

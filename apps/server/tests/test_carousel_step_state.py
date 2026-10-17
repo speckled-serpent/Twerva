@@ -126,7 +126,10 @@ class CarouselStepReadTests(unittest.TestCase):
     """GET detail returns generation, the open step, research, and steps."""
 
     def test_picture_skeleton_with_null_album_locks_slides(self) -> None:
-        """A picture skeleton with no album reads content available and slides locked."""
+        """A picture skeleton with no album reads content available and slides locked.
+
+        Create opens that carousel on Basic.
+        """
 
         session: _MemoryCarouselSession = _MemoryCarouselSession()
         session.skeleton.background_kind = BackgroundKind.PICTURE
@@ -136,7 +139,7 @@ class CarouselStepReadTests(unittest.TestCase):
 
         self.assertIsNone(loaded.album_id)
         self.assertEqual(loaded.generation_number, 1)
-        self.assertEqual(loaded.editor_step, 3)
+        self.assertEqual(loaded.editor_step, 0)
         self.assertEqual(loaded.research, [])
         self.assertEqual(loaded.steps.basic, CarouselStepState.DONE)
         self.assertEqual(loaded.steps.instructions, CarouselStepState.LOCKED)

@@ -98,7 +98,7 @@ export function NewCarouselPage({ onCreated, onCancel }: NewCarouselPageProps): 
         <div>
           <h1>Create Carousel</h1>
           <p className="lede">
-            A carousel needs a name and a skeleton. After this, it opens so you can add slides.
+            A carousel needs a name and a skeleton. It then opens on Basic.
           </p>
         </div>
         <button type="button" onClick={onCancel}>
@@ -142,7 +142,9 @@ export function NewCarouselPage({ onCreated, onCancel }: NewCarouselPageProps): 
               ))}
             </select>
           </label>
-          <p className="field-hint">The skeleton is required. Slides follow that skeleton.</p>
+          <p className="field-hint">
+            The skeleton is required and stays locked. Slides follow that skeleton.
+          </p>
           <ErrorBanner error={saveError} />
           <div className="button-row">
             <button id="create-carousel-submit" type="submit" disabled={isSaving || skeletons.length === 0}>

@@ -28,9 +28,15 @@ export const CAROUSEL_STEPS: readonly CarouselStepDefinition[] = [
 ];
 
 /**
- * This phase opens Slides only. Basic and Content stay closed until later tasks.
+ * Steps the operator can open in this phase.
+ *
+ * Basic is the label and the locked skeleton. Slides is the editor.
+ * Instructions, Content, and Final stay closed.
  */
-export const ENABLED_EDITOR_STEP: number = CAROUSEL_STEP_SLIDES;
+export const OPENABLE_EDITOR_STEPS: readonly number[] = [
+  CAROUSEL_STEP_BASIC,
+  CAROUSEL_STEP_SLIDES,
+];
 
 /**
  * Shell and list label for the stored generation number.
@@ -133,8 +139,8 @@ export function stepStateFor(
 /**
  * Whether this phase lets the operator open the step.
  *
- * Slides opens when it is available or done. A locked step stays closed.
- * Basic, Instructions, Content, and Final stay closed in this phase.
+ * Basic and Slides open when they are available or done. A locked step
+ * stays closed. Instructions, Content, and Final stay closed.
  *
  * @param step - The step control
  * @param stepState - Derived state for that step
@@ -145,7 +151,7 @@ export function canOpenCarouselStep(
   stepState: CarouselStepState,
 ): boolean {
 
-  if (step.index !== ENABLED_EDITOR_STEP) {
+  if (!OPENABLE_EDITOR_STEPS.includes(step.index)) {
     return false;
   }
 
