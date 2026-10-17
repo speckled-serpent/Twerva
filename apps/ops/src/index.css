@@ -966,6 +966,100 @@ th {
   gap: 0.2rem;
 }
 
+.carousel-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+}
+
+.carousel-heading h1 {
+  margin: 0;
+}
+
+.carousel-generation {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0.12rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--ops-primary) 35%, var(--ops-border));
+  border-radius: var(--ops-radius-pill);
+  background: var(--ops-primary-soft);
+  color: var(--ops-primary-hover);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.carousel-stepper {
+  margin: 0 0 1rem;
+}
+
+.carousel-stepper ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.carousel-step {
+  gap: 0.4rem;
+}
+
+.carousel-step-index {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.carousel-step-mark {
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--ops-radius-pill);
+  background: var(--ops-stone-soft);
+  color: var(--ops-text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.carousel-step.is-current {
+  background: var(--ops-primary);
+  border-color: var(--ops-primary);
+  color: #ffffff;
+}
+
+.carousel-step.is-current:hover:not(:disabled) {
+  background: var(--ops-primary-hover);
+  border-color: var(--ops-primary-hover);
+}
+
+.carousel-step.is-done:not(.is-current) {
+  background: var(--ops-success-soft);
+  border-color: color-mix(in srgb, var(--ops-success) 55%, var(--ops-border));
+  color: #3f6212;
+}
+
+.carousel-step.is-done .carousel-step-mark {
+  background: var(--ops-success);
+  color: #ffffff;
+}
+
+.carousel-step.is-locked:not(.is-current) {
+  background: var(--ops-stone-soft);
+  color: var(--ops-text-muted);
+}
+
+.carousel-step.is-current .carousel-step-mark {
+  background: color-mix(in srgb, #ffffff 22%, transparent);
+  color: #ffffff;
+}
+
+.carousel-step.is-current.is-done .carousel-step-mark {
+  background: var(--ops-success);
+  color: #ffffff;
+}
+
 .slide-grid {
   list-style: none;
   padding: 0;

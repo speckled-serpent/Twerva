@@ -64,6 +64,7 @@ import type {
   SourceItemReadResponse,
   CarouselListItemResponse,
   CarouselPatchRequest,
+  CarouselStepPatchRequest,
   CarouselReadResponse,
   SpotmuInterestSearchHit,
   SteerActionReadResponse,
@@ -246,6 +247,25 @@ export async function renameCarousel(
     "PATCH",
     `/api/v1/carousels/${sourceId}`,
     sourcePatchRequest,
+  );
+}
+
+/**
+ * Store the open carousel step. Admin only. A locked step is refused.
+ *
+ * @param sourceId - Carousel UUID
+ * @param stepPatchRequest - The step to open: 0 Basic, 2 Content, or 3 Slides
+ * @returns The carousel, including the stored step and derived step states
+ */
+export async function patchCarouselStep(
+  sourceId: string,
+  stepPatchRequest: CarouselStepPatchRequest,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "PATCH",
+    `/api/v1/carousels/${sourceId}/step`,
+    stepPatchRequest,
   );
 }
 
