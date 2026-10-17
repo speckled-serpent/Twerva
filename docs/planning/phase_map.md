@@ -131,7 +131,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Step shell
 
-- [ ] **4.6 Put a stepper around the current slide editor**
+- [x] **4.6 Put a stepper around the current slide editor**
 
   The open carousel in `CarouselsPage` shows five steps, labeled with their index: 0 Basic, 1 Instructions, 2 Content, 3 Slides, 4 Final. This PR enables Slides only. The other four controls are visible and disabled. Slides renders the current slide list and slide editor, including upload and Save slide, and hides the inspiration and rules fields and Save inspiration. Generate slide stays on the slide list and still reads the stored columns. Opening a carousel loads `editor_step`; a stored 3 shows Slides. The shell and the list show "Generation 1" from `generation_number`, and the lede says the carousel opens on that step. Use the Warm Stone and Teal variables already on `:root`. The current step is `--ops-primary`. A disabled step uses the existing disabled control. A done step uses `--ops-success`. Default's Slides step is done because it has six slides. A reader sees `ReadOnlyNotice` and the same disabled controls.
 

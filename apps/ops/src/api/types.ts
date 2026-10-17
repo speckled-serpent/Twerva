@@ -735,6 +735,10 @@ export interface CarouselPatchRequest {
   name: string;
 }
 
+export interface CarouselStepPatchRequest {
+  editor_step: number;
+}
+
 export interface SlideElementTextWrite {
   skeleton_element_id: string;
   value: string;

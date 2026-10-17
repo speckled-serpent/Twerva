@@ -8,7 +8,7 @@ import {
   fetchTextGenerationStatus,
   generateCarouselSlide,
   generateSlideText,
-  patchCarouselGuidance,
+  patchCarouselStep,
   deleteCarouselSlide,
   deleteSlideImage,
   fetchCarouselById,
@@ -42,6 +42,8 @@ import {
 } from "./SlideImageDrafts";
 import { firstSlideImageDraftError } from "./slideImageDraft";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
+import { CarouselGeneration, CarouselStepBar } from "./CarouselStepBar";
+import { CAROUSEL_STEP_SLIDES, carouselStepByIndex, generationLabel, openStepSentence, type CarouselStepDefinition } from "./carouselSteps";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import { SlideLivePreview } from "./SlideLivePreview";
 import {
@@ -89,6 +91,8 @@ export function CarouselsPage({
   const [loadError, setLoadError] = useState<unknown>(null);
   const [statusMessage, setStatusMessage] = useState<string>(openRequest?.statusMessage ?? "");
   const [reloadToken, setReloadToken] = useState<number>(0);
+  const [isSavingStep, setIsSavingStep] = useState<boolean>(false);
+  const [stepError, setStepError] = useState<unknown>(null);
   const [heldSlide, setHeldSlide] = useState<SlideReadResponse | null>(null);
   const [textGeneration, setTextGeneration] = useState<TextGenerationStatusResponse>({
     available: false,
@@ -214,6 +218,36 @@ export function CarouselsPage({
     setReloadToken((currentToken: number): number => currentToken + 1);
   };
 
+  const handleOpenStep = async (editorStep: number): Promise<void> => {
+
+    if (openedCarouselId === null) {
+      return;
+    }
+
+    const previousStep: number | null = selectedCarousel?.editor_step ?? null;
+
+    setIsSavingStep(true);
+    setStepError(null);
+
+    try {
+      const updatedCarousel: CarouselReadResponse = await patchCarouselStep(openedCarouselId, {
+        editor_step: editorStep,
+      });
+      const openedStep: CarouselStepDefinition | null = carouselStepByIndex(editorStep);
+      setSelectedCarousel(updatedCarousel);
+
+      if (previousStep !== editorStep && openedStep !== null) {
+        setStatusMessage(`Opened ${openedStep.label}.`);
+      }
+
+      requestReload();
+    } catch (caughtError: unknown) {
+      setStepError(caughtError);
+    } finally {
+      setIsSavingStep(false);
+    }
+  };
+
   if (openedCarouselId !== null && (openedSlideId !== null || isCreatingSlide)) {
     const loadedSlide: SlideReadResponse | null = findSlide(selectedCarousel, openedSlideId);
     const openedSlide: SlideReadResponse | null = isCreatingSlide
@@ -229,6 +263,11 @@ export function CarouselsPage({
         loadError={loadError}
         statusMessage={statusMessage}
         textGeneration={textGeneration}
+        isSavingStep={isSavingStep}
+        stepError={stepError}
+        onOpenStep={(editorStep: number): void => {
+          void handleOpenStep(editorStep);
+        }}
         onBack={(): void => {
           setOpenedSlideId(null);
           setIsCreatingSlide(false);
@@ -265,9 +304,15 @@ export function CarouselsPage({
         loadError={loadError}
         statusMessage={statusMessage}
         textGeneration={textGeneration}
+        isSavingStep={isSavingStep}
+        stepError={stepError}
+        onOpenStep={(editorStep: number): void => {
+          void handleOpenStep(editorStep);
+        }}
         onBack={(): void => {
           setOpenedCarouselId(null);
           setStatusMessage("");
+          setStepError(null);
         }}
         onSlideDrafted={(draftedSlide: SlideReadResponse): void => {
           setHeldSlide(draftedSlide);
@@ -310,6 +355,7 @@ export function CarouselsPage({
       onOpenCarousel={(sourceId: string): void => {
         setOpenedCarouselId(sourceId);
         setStatusMessage("");
+        setStepError(null);
       }}
       onAlbumDeleted={(albumName: string): void => {
         setStatusMessage(`Deleted carousel ${albumName}.`);
@@ -365,6 +411,7 @@ function AlbumListView({
           <thead>
             <tr>
               <th>Name</th>
+              <th>Generation</th>
               <th>Slides</th>
               <th>Open</th>
               <th>Delete</th>
@@ -374,6 +421,7 @@ function AlbumListView({
             {albums.map((album: CarouselListItemResponse): ReactElement => (
               <tr key={album.id}>
                 <td>{album.name}</td>
+                <td>{generationLabel(album.generation_number)}</td>
                 <td>{album.slide_count}</td>
                 <td>
                   <button
@@ -429,6 +477,9 @@ interface AlbumViewProps {
   loadError: unknown;
   statusMessage: string;
   textGeneration: TextGenerationStatusResponse;
+  isSavingStep: boolean;
+  stepError: unknown;
+  onOpenStep: (editorStep: number) => void;
   onBack: () => void;
   onOpenSlide: (slideId: string) => void;
   onCreateSlide: () => void;
@@ -442,6 +493,9 @@ function AlbumView({
   loadError,
   statusMessage,
   textGeneration,
+  isSavingStep,
+  stepError,
+  onOpenStep,
   onBack,
   onOpenSlide,
   onCreateSlide,
@@ -452,19 +506,26 @@ function AlbumView({
 
   const canWrite: boolean = useCanWriteOps();
   const [albumName, setAlbumName] = useState<string>(carousel?.name ?? "");
-  const [inspiration, setInspiration] = useState<string>(carousel?.inspiration ?? "");
-  const [rules, setRules] = useState<string>(carousel?.rules ?? "");
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [pendingSlideDelete, setPendingSlideDelete] = useState<SlideReadResponse | null>(null);
+  const showsSlides: boolean = carousel !== null && carousel.editor_step === CAROUSEL_STEP_SLIDES;
 
   useEffect((): void => {
     setAlbumName(carousel?.name ?? "");
-    setInspiration(carousel?.inspiration ?? "");
-    setRules(carousel?.rules ?? "");
   }, [carousel]);
+
+  let pageLede: string = "Slides in this carousel.";
+
+  if (carousel !== null) {
+    pageLede = openStepSentence(carousel.editor_step);
+
+    if (showsSlides) {
+      pageLede = `${pageLede} A card shows the first image, or the text when there is none. ${carousel.live_slide_count} live.`;
+    }
+  }
 
   const handleRename = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
     submitEvent.preventDefault();
@@ -488,30 +549,8 @@ function AlbumView({
     }
   };
 
-  const handleSaveGuidance = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
-    submitEvent.preventDefault();
-
-    if (!canWrite || carousel === null) {
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    try {
-      await patchCarouselGuidance(carousel.id, {
-        inspiration,
-        rules,
-      });
-      onCarouselChanged("Saved inspiration and rules.");
-    } catch (caughtError: unknown) {
-      setSaveError(caughtError);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleGenerateSlide = async (): Promise<void> => {
+
     if (!canWrite || carousel === null || !textGeneration.available) {
       return;
     }
@@ -533,10 +572,14 @@ function AlbumView({
     <section>
       <div className="page-header-row">
         <div>
-          <h1>{carousel === null ? "Carousel" : carousel.name}</h1>
+          <div className="carousel-heading">
+            <h1>{carousel === null ? "Carousel" : carousel.name}</h1>
+            {carousel === null ? null : (
+              <CarouselGeneration generationNumber={carousel.generation_number} />
+            )}
+          </div>
           <p className="lede">
-            Slides in this carousel. A card shows the first image, or the text when there is none.
-            {carousel === null ? "" : ` ${carousel.live_slide_count} live.`}
+            {pageLede}
           </p>
         </div>
         <button type="button" onClick={onBack}>
@@ -546,80 +589,69 @@ function AlbumView({
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={saveError} />
+      <ErrorBanner error={stepError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
       {carousel === null ? (
         <p>Loading carousel…</p>
       ) : (
         <>
-          {canWrite ? (
-            <form
-              className="stack-form"
-              onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-                void handleRename(submitEvent);
-              }}
-            >
-              <label>
-                Carousel name
-                <input
-                  id="rename-album-name"
-                  value={albumName}
-                  onChange={(changeEvent): void => {
-                    setAlbumName(changeEvent.target.value);
-                  }}
-                />
-              </label>
-              <div className="button-row">
-                <button type="submit" disabled={isSaving || albumName.trim() === ""}>
-                  {isSaving ? "Saving…" : "Rename carousel"}
-                </button>
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={(): void => {
-                    setPendingDelete(true);
+          <CarouselStepBar
+            editorStep={carousel.editor_step}
+            steps={carousel.steps}
+            canWrite={canWrite}
+            isSavingStep={isSavingStep}
+            onOpenStep={onOpenStep}
+          />
+          {showsSlides ? (
+            <>
+              {canWrite ? (
+                <form
+                  className="stack-form"
+                  onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
+                    void handleRename(submitEvent);
                   }}
                 >
-                  Delete carousel
-                </button>
-                <button id="add-slide" type="button" onClick={onCreateSlide}>
-                  Add slide
-                </button>
-              </div>
-            </form>
-          ) : null}
-          {carousel === null ? null : (
-            <form
-              className="stack-form"
-              onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-                void handleSaveGuidance(submitEvent);
-              }}
-            >
-              <label>
-                Inspiration
-                <textarea
-                  id="carousel-inspiration"
-                  rows={3}
-                  value={inspiration}
-                  disabled={!canWrite}
-                  onChange={(changeEvent): void => {
-                    setInspiration(changeEvent.target.value);
-                  }}
-                />
-              </label>
-              <label>
-                Rules
-                <textarea
-                  id="carousel-rules"
-                  rows={3}
-                  value={rules}
-                  disabled={!canWrite}
-                  onChange={(changeEvent): void => {
-                    setRules(changeEvent.target.value);
-                  }}
-                />
-              </label>
+                  <label>
+                    Carousel name
+                    <input
+                      id="rename-album-name"
+                      value={albumName}
+                      onChange={(changeEvent): void => {
+                        setAlbumName(changeEvent.target.value);
+                      }}
+                    />
+                  </label>
+                  <div className="button-row">
+                    <button type="submit" disabled={isSaving || albumName.trim() === ""}>
+                      {isSaving ? "Saving…" : "Rename carousel"}
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={(): void => {
+                        setPendingDelete(true);
+                      }}
+                    >
+                      Delete carousel
+                    </button>
+                    <button id="add-slide" type="button" onClick={onCreateSlide}>
+                      Add slide
+                    </button>
+                    <button
+                      id="generate-slide"
+                      type="button"
+                      disabled={!textGeneration.available || isGenerating}
+                      onClick={(): void => {
+                        void handleGenerateSlide();
+                      }}
+                    >
+                      {isGenerating ? "Generating…" : "Generate slide"}
+                    </button>
+                  </div>
+                </form>
+              ) : null}
               <p className="field-hint">
-                Generate drafts skeleton text from this inspiration and these rules.
+                Generate drafts skeleton text from the stored inspiration and rules.
                 A draft stays off the live slide until you accept it. Images stay a manual upload.
               </p>
               {textGeneration.available ? null : (
@@ -627,55 +659,38 @@ function AlbumView({
                   {textGeneration.detail}
                 </p>
               )}
-              {canWrite ? (
-                <div className="button-row">
-                  <button id="save-carousel-guidance" type="submit" disabled={isSaving}>
-                    {isSaving ? "Saving…" : "Save inspiration"}
-                  </button>
-                  <button
-                    id="generate-slide"
-                    type="button"
-                    disabled={!textGeneration.available || isGenerating}
-                    onClick={(): void => {
-                      void handleGenerateSlide();
-                    }}
-                  >
-                    {isGenerating ? "Generating…" : "Generate slide"}
-                  </button>
-                </div>
-              ) : null}
-            </form>
-          )}
-          {carousel.slides.length === 0 ? (
-            <p>No slides yet.</p>
-          ) : (
-            <ul className="slide-grid">
-              {carousel.slides.map((slide: SlideReadResponse): ReactElement => (
-                <li key={slide.id}>
-                  <button
-                    type="button"
-                    className="slide-card"
-                    onClick={(): void => {
-                      onOpenSlide(slide.id);
-                    }}
-                  >
-                    <SlideCardBody sourceId={carousel.id} slide={slide} />
-                  </button>
-                  {canWrite ? (
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={(): void => {
-                        setPendingSlideDelete(slide);
-                      }}
-                    >
-                      Delete slide
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
+              {carousel.slides.length === 0 ? (
+                <p>No slides yet.</p>
+              ) : (
+                <ul className="slide-grid">
+                  {carousel.slides.map((slide: SlideReadResponse): ReactElement => (
+                    <li key={slide.id}>
+                      <button
+                        type="button"
+                        className="slide-card"
+                        onClick={(): void => {
+                          onOpenSlide(slide.id);
+                        }}
+                      >
+                        <SlideCardBody sourceId={carousel.id} slide={slide} />
+                      </button>
+                      {canWrite ? (
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={(): void => {
+                            setPendingSlideDelete(slide);
+                          }}
+                        >
+                          Delete slide
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : null}
         </>
       )}
       {pendingDelete && carousel !== null ? (
@@ -766,6 +781,9 @@ interface SlideEditorViewProps {
   loadError: unknown;
   statusMessage: string;
   textGeneration: TextGenerationStatusResponse;
+  isSavingStep: boolean;
+  stepError: unknown;
+  onOpenStep: (editorStep: number) => void;
   onBack: () => void;
   onSaved: (savedSlide: SlideReadResponse, message: string) => void;
   onImagesChanged: (message: string) => void;
@@ -778,6 +796,9 @@ function SlideEditorView({
   loadError,
   statusMessage,
   textGeneration,
+  isSavingStep,
+  stepError,
+  onOpenStep,
   onBack,
   onSaved,
   onImagesChanged,
@@ -1013,15 +1034,24 @@ function SlideEditorView({
   };
 
   const pageTitle: string = slide === null ? "New slide" : "Slide";
-  const pageLede: string = (
+  let pageLede: string = (
     "The fields follow this carousel's skeleton. Preview shows the slide on that skeleton."
   );
+
+  if (carousel !== null) {
+    pageLede = `${openStepSentence(carousel.editor_step)} ${pageLede}`;
+  }
 
   return (
     <section>
       <div className="page-header-row">
         <div>
-          <h1>{pageTitle}</h1>
+          <div className="carousel-heading">
+            <h1>{pageTitle}</h1>
+            {carousel === null ? null : (
+              <CarouselGeneration generationNumber={carousel.generation_number} />
+            )}
+          </div>
           <p className="lede">
             {carousel === null ? "Carousel" : carousel.name}
             . {pageLede}
@@ -1035,16 +1065,26 @@ function SlideEditorView({
       <ErrorBanner error={loadError} />
       <ErrorBanner error={skeletonError} />
       <ErrorBanner error={saveError} />
+      <ErrorBanner error={stepError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
       {carousel === null ? (
         <p>Loading carousel…</p>
-      ) : slide === null && !canWrite ? (
-        <p>This slide is not available.</p>
-      ) : !skeletonReady ? (
-        <p>Loading skeleton…</p>
-      ) : skeleton === null ? (
-        <p>This skeleton is not available.</p>
       ) : (
+        <>
+          <CarouselStepBar
+            editorStep={carousel.editor_step}
+            steps={carousel.steps}
+            canWrite={canWrite}
+            isSavingStep={isSavingStep}
+            onOpenStep={onOpenStep}
+          />
+          {slide === null && !canWrite ? (
+            <p>This slide is not available.</p>
+          ) : !skeletonReady ? (
+            <p>Loading skeleton…</p>
+          ) : skeleton === null ? (
+            <p>This skeleton is not available.</p>
+          ) : (
         <div className="skeleton-editor-layout">
           <div className="skeleton-editor-main">
             {slide === null || !needsImage ? null : (
@@ -1225,6 +1265,8 @@ function SlideEditorView({
             texts={textWrites}
           />
         </div>
+          )}
+        </>
       )}
       {pendingDelete && carousel !== null && slide !== null ? (
         <DeleteConfirmDialog
