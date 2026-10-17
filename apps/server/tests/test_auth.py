@@ -738,7 +738,7 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(brands_response.json(), [])
 
     def test_reader_cannot_mutate_domain_routes(self) -> None:
-        """POST brands, themes, and sources are 403 for readers."""
+        """POST brands, skeletons, and carousels are 403 for readers."""
 
         create_brand_response = self.test_client.post(
             "/api/v1/brands",
@@ -748,16 +748,16 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(create_brand_response.status_code, 403)
         self.assertIn("read-only", create_brand_response.json()["detail"].lower())
 
-        patch_theme_response = self.test_client.patch(
-            f"/api/v1/themes/{uuid.uuid4()}",
+        patch_skeleton_response = self.test_client.patch(
+            f"/api/v1/skeletons/{uuid.uuid4()}",
             json={"status": "live"},
         )
 
-        self.assertEqual(patch_theme_response.status_code, 403)
-        self.assertIn("read-only", patch_theme_response.json()["detail"].lower())
+        self.assertEqual(patch_skeleton_response.status_code, 403)
+        self.assertIn("read-only", patch_skeleton_response.json()["detail"].lower())
 
         create_element_response = self.test_client.post(
-            f"/api/v1/themes/{uuid.uuid4()}/elements",
+            f"/api/v1/skeletons/{uuid.uuid4()}/elements",
             json={
                 "name": "Title",
                 "band": "top",
@@ -773,31 +773,31 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(create_element_response.status_code, 403)
         self.assertIn("read-only", create_element_response.json()["detail"].lower())
 
-        duplicate_theme_response = self.test_client.post(
-            f"/api/v1/themes/{uuid.uuid4()}/duplicate",
+        duplicate_skeleton_response = self.test_client.post(
+            f"/api/v1/skeletons/{uuid.uuid4()}/duplicate",
         )
 
-        self.assertEqual(duplicate_theme_response.status_code, 403)
-        self.assertIn("read-only", duplicate_theme_response.json()["detail"].lower())
+        self.assertEqual(duplicate_skeleton_response.status_code, 403)
+        self.assertIn("read-only", duplicate_skeleton_response.json()["detail"].lower())
 
-        delete_theme_response = self.test_client.delete(
-            f"/api/v1/themes/{uuid.uuid4()}",
+        delete_skeleton_response = self.test_client.delete(
+            f"/api/v1/skeletons/{uuid.uuid4()}",
         )
 
-        self.assertEqual(delete_theme_response.status_code, 403)
-        self.assertIn("read-only", delete_theme_response.json()["detail"].lower())
+        self.assertEqual(delete_skeleton_response.status_code, 403)
+        self.assertIn("read-only", delete_skeleton_response.json()["detail"].lower())
 
         create_source_response = self.test_client.post(
-            "/api/v1/sources",
-            json={"name": "Blocked album", "theme_id": str(uuid.uuid4())},
+            "/api/v1/carousels",
+            json={"name": "Blocked album", "skeleton_id": str(uuid.uuid4())},
         )
 
         self.assertEqual(create_source_response.status_code, 403)
         self.assertIn("read-only", create_source_response.json()["detail"].lower())
 
         upload_image_response = self.test_client.post(
-            f"/api/v1/sources/{uuid.uuid4()}/units/{uuid.uuid4()}/images",
-            data={"license": "cc0", "source": "https://example.com/photo"},
+            f"/api/v1/carousels/{uuid.uuid4()}/slides/{uuid.uuid4()}/images",
+            data={"license": "cc0", "carousel": "https://example.com/photo"},
             files=[("files", ("photo.jpg", b"not-an-image", "image/jpeg"))],
         )
 
@@ -805,11 +805,11 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertIn("read-only", upload_image_response.json()["detail"].lower())
 
         import_image_response = self.test_client.post(
-            f"/api/v1/sources/{uuid.uuid4()}/units/{uuid.uuid4()}/images/import",
+            f"/api/v1/carousels/{uuid.uuid4()}/slides/{uuid.uuid4()}/images/import",
             json={
                 "url": "https://example.com/plate.png",
                 "license": "cc0",
-                "source": "https://example.com/plate.png",
+                "carousel": "https://example.com/plate.png",
             },
         )
 
@@ -817,29 +817,29 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertIn("read-only", import_image_response.json()["detail"].lower())
 
         sample_response = self.test_client.post(
-            f"/api/v1/themes/{uuid.uuid4()}/samples",
+            f"/api/v1/skeletons/{uuid.uuid4()}/samples",
             json={"source_item_id": str(uuid.uuid4())},
         )
 
         self.assertEqual(sample_response.status_code, 403)
         self.assertIn("read-only", sample_response.json()["detail"].lower())
 
-    def test_reader_can_preview_a_unit_on_its_theme(self) -> None:
-        """Readers may POST the in-source preview. A missing source is 404."""
+    def test_reader_can_preview_a_slide_on_its_skeleton(self) -> None:
+        """Readers may POST the in-carousel preview. A missing carousel is 404."""
 
         preview_response = self.test_client.post(
-            f"/api/v1/sources/{uuid.uuid4()}/units/preview",
-            json={"texts": [], "unit_id": None},
+            f"/api/v1/carousels/{uuid.uuid4()}/slides/preview",
+            json={"texts": [], "slide_id": None},
         )
 
         self.assertEqual(preview_response.status_code, 404)
         self.assertNotIn("read-only", preview_response.json()["detail"].lower())
 
-    def test_reader_can_preview_a_theme_payload(self) -> None:
-        """Readers may POST /api/v1/themes/preview. No source item is required."""
+    def test_reader_can_preview_a_skeleton_payload(self) -> None:
+        """Readers may POST /api/v1/skeletons/preview. No source item is required."""
 
         preview_response = self.test_client.post(
-            "/api/v1/themes/preview",
+            "/api/v1/skeletons/preview",
             json={"elements": []},
         )
 

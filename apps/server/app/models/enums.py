@@ -104,10 +104,10 @@ class CampaignStatus(enum.StrEnum):
     FINISHED = "finished"
 
 
-class ThemeStatus(enum.StrEnum):
-    """Whether a Theme is still being edited or used for posts that ship.
+class SkeletonStatus(enum.StrEnum):
+    """Whether a Skeleton is still being edited or used for posts that ship.
 
-    A name-only create stores `draft`. `POST /api/v1/themes` may set
+    A name-only create stores `draft`. `POST /api/v1/skeletons` may set
     `draft` or `live` when the body includes `status`. `PATCH` may set
     either value too. Shipping generate does not read this value yet.
     """
@@ -117,7 +117,7 @@ class ThemeStatus(enum.StrEnum):
 
 
 class BackgroundKind(enum.StrEnum):
-    """The one background on a Theme. Picture, color, or gradient.
+    """The one background on a Skeleton. Picture, color, or gradient.
 
     Texture is dropped for now. It may return later as a default album
     of texture images.
@@ -128,22 +128,22 @@ class BackgroundKind(enum.StrEnum):
     GRADIENT = "gradient"
 
 
-class ThemeElementBand(enum.StrEnum):
-    """Vertical band a theme element stacks in. Bands do not push each other."""
+class SkeletonElementBand(enum.StrEnum):
+    """Vertical band a skeleton element stacks in. Bands do not push each other."""
 
     TOP = "top"
     MIDDLE = "middle"
     BOTTOM = "bottom"
 
 
-class ThemeElementContentKind(enum.StrEnum):
-    """Whether a theme element draws text or one image file."""
+class SkeletonElementContentKind(enum.StrEnum):
+    """Whether a skeleton element draws text or one image file."""
 
     TEXT = "text"
     IMAGE = "image"
 
 
-class ThemeElementTextSource(enum.StrEnum):
+class SkeletonElementTextSource(enum.StrEnum):
     """Spotmu field a text element reads. No other source keys.
 
     Maps to ``source_items.title``, ``source_items.interest_heading``,
@@ -156,7 +156,7 @@ class ThemeElementTextSource(enum.StrEnum):
     CANONICAL_URL = "canonical_url"
 
 
-class ThemeElementAlignment(enum.StrEnum):
+class SkeletonElementAlignment(enum.StrEnum):
     """Horizontal alignment of a text element's content."""
 
     LEFT = "left"
@@ -171,16 +171,16 @@ class ResourceFileMediaType(enum.StrEnum):
     PLAIN = "plain"
 
 
-class UnitImageMediaType(enum.StrEnum):
-    """Stored type of one unit image. SVG has no pixel size."""
+class SlideImageMediaType(enum.StrEnum):
+    """Stored type of one slide image. SVG has no pixel size."""
 
     SVG = "svg"
     PNG = "png"
     JPEG = "jpeg"
 
 
-class UnitImageLicense(enum.StrEnum):
-    """Allowlist for a unit image. Anything else cannot be stored."""
+class SlideImageLicense(enum.StrEnum):
+    """Allowlist for a slide image. Anything else cannot be stored."""
 
     CC0 = "cc0"
     PUBLIC_DOMAIN = "public_domain"
@@ -188,18 +188,18 @@ class UnitImageLicense(enum.StrEnum):
     LICENSED = "licensed"
 
 
-class UnitImageIntake(enum.StrEnum):
-    """How a unit image's bytes arrived. Phase 1 seeds ``upload`` only."""
+class SlideImageIntake(enum.StrEnum):
+    """How a slide image's bytes arrived. Phase 1 seeds ``upload`` only."""
 
     UPLOAD = "upload"
     URL = "url"
 
 
-class UnitTextStatus(enum.StrEnum):
-    """Whether a unit's text is approved.
+class SlideTextStatus(enum.StrEnum):
+    """Whether a slide's text is approved.
 
     ``live`` is text a person saved or accepted. ``draft`` is generated
-    text that is not the live unit until someone accepts it.
+    text that is not the live slide until someone accepts it.
     """
 
     LIVE = "live"
@@ -287,38 +287,38 @@ ADVERTISEMENT_TYPE_ENUM: Enum = as_postgres_enum(
     "advertisement_type",
 )
 CAMPAIGN_STATUS_ENUM: Enum = as_postgres_enum(CampaignStatus, "campaign_status")
-THEME_STATUS_ENUM: Enum = as_postgres_enum(ThemeStatus, "theme_status")
+SKELETON_STATUS_ENUM: Enum = as_postgres_enum(SkeletonStatus, "skeleton_status")
 BACKGROUND_KIND_ENUM: Enum = as_postgres_enum(BackgroundKind, "background_kind")
-THEME_ELEMENT_BAND_ENUM: Enum = as_postgres_enum(
-    ThemeElementBand,
-    "theme_element_band",
+SKELETON_ELEMENT_BAND_ENUM: Enum = as_postgres_enum(
+    SkeletonElementBand,
+    "skeleton_element_band",
 )
-THEME_ELEMENT_CONTENT_KIND_ENUM: Enum = as_postgres_enum(
-    ThemeElementContentKind,
-    "theme_element_content_kind",
+SKELETON_ELEMENT_CONTENT_KIND_ENUM: Enum = as_postgres_enum(
+    SkeletonElementContentKind,
+    "skeleton_element_content_kind",
 )
-THEME_ELEMENT_TEXT_SOURCE_ENUM: Enum = as_postgres_enum(
-    ThemeElementTextSource,
-    "theme_element_text_source",
+SKELETON_ELEMENT_TEXT_SOURCE_ENUM: Enum = as_postgres_enum(
+    SkeletonElementTextSource,
+    "skeleton_element_text_source",
 )
-THEME_ELEMENT_ALIGNMENT_ENUM: Enum = as_postgres_enum(
-    ThemeElementAlignment,
-    "theme_element_alignment",
+SKELETON_ELEMENT_ALIGNMENT_ENUM: Enum = as_postgres_enum(
+    SkeletonElementAlignment,
+    "skeleton_element_alignment",
 )
-UNIT_IMAGE_MEDIA_TYPE_ENUM: Enum = as_postgres_enum(
-    UnitImageMediaType,
-    "unit_image_media_type",
+SLIDE_IMAGE_MEDIA_TYPE_ENUM: Enum = as_postgres_enum(
+    SlideImageMediaType,
+    "slide_image_media_type",
 )
-UNIT_IMAGE_LICENSE_ENUM: Enum = as_postgres_enum(
-    UnitImageLicense,
-    "unit_image_license",
+SLIDE_IMAGE_LICENSE_ENUM: Enum = as_postgres_enum(
+    SlideImageLicense,
+    "slide_image_license",
 )
-UNIT_IMAGE_INTAKE_ENUM: Enum = as_postgres_enum(
-    UnitImageIntake,
-    "unit_image_intake",
+SLIDE_IMAGE_INTAKE_ENUM: Enum = as_postgres_enum(
+    SlideImageIntake,
+    "slide_image_intake",
 )
 RESOURCE_FILE_MEDIA_TYPE_ENUM: Enum = as_postgres_enum(
     ResourceFileMediaType,
     "resource_file_media_type",
 )
-UNIT_TEXT_STATUS_ENUM: Enum = as_postgres_enum(UnitTextStatus, "unit_text_status")
+SLIDE_TEXT_STATUS_ENUM: Enum = as_postgres_enum(SlideTextStatus, "slide_text_status")

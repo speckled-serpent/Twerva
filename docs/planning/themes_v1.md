@@ -1,11 +1,11 @@
-# Themes v1
+# Skeletons v1
 
 *Last updated: 2026-10-09*
-*Status: Locked model. Source of truth for how a Theme styles a carousel frame.*
+*Status: Locked model. Carousel of truth for how a Skeleton styles a carousel frame.*
 
-Themes is the styling area. A theme is a named carousel style: background, spacing, and elements. Spotmu is customer zero. Carousel only for now. Short video and other advertisement types are outside this model.
+Skeletons is the styling area. A skeleton is a named carousel style: background, spacing, and elements. Spotmu is customer zero. Carousel only for now. Short video and other advertisement types are outside this model.
 
-This document locks the model. It does not change the Themes screens or the `themes` table. Until a later implementation lands, carousel pixels still come from [`carousel_template_v1.md`](carousel_template_v1.md).
+This document locks the model. It does not change the Skeletons screens or the `skeletons` table. Until a later implementation lands, carousel pixels still come from [`carousel_template_v1.md`](carousel_template_v1.md).
 
 Scope: the posts we ship. That is one full image, or a few lines of text and maybe a logo. Edge layouts stay deferred until someone actually needs them.
 
@@ -13,20 +13,20 @@ Scope: the posts we ship. That is one full image, or a few lines of text and may
 
 ## Draft, Live, and Duplicate
 
-A theme is **Draft** or **Live**.
+A skeleton is **Draft** or **Live**.
 
 | State | Use |
 |---|---|
 | **Draft** | The style the operator is editing. |
 | **Live** | The style generation uses for posts that ship. |
 
-**Duplicate** copies a theme — background, spacing, and elements — into a new Draft. The theme that was copied stays as it was.
+**Duplicate** copies a skeleton — background, spacing, and elements — into a new Draft. The skeleton that was copied stays as it was.
 
 ---
 
 ## Frame
 
-The frame is **1080×1920** pixels, a 9:16 phone portrait. There is no per-theme size.
+The frame is **1080×1920** pixels, a 9:16 phone portrait. There is no per-skeleton size.
 
 Each concrete generated frame is one image:
 
@@ -75,7 +75,7 @@ Element gap sits between element rectangles in the same band. It is not part of 
 
 ## Elements
 
-An element is the layout unit.
+An element is the layout slide.
 
 An element is (text **or** an image file: svg, png, or jpeg) plus a rectangle background. The default rectangle is clear, so only the content shows. A rectangle may be given a background; that paint stays behind the content.
 
@@ -93,7 +93,7 @@ The bands are **Top**, **Middle**, and **Bottom**. Bands are placed independentl
 
 **Middle.** The whole middle collection is centered as a group. Compute the combined height of the middle elements, including element gap between them. Place that block so its center is the vertical center of the content area. Do not center only the first or last middle element.
 
-An empty band adds no rectangles. A theme with elements in only one band still places that band by the rule above.
+An empty band adds no rectangles. A skeleton with elements in only one band still places that band by the rule above.
 
 ### Text element
 
@@ -106,7 +106,7 @@ A text element has:
 - font weight, when the face supports it
 - alignment: left / center / right
 
-Text needs a source. Spotmu sources are fine for now. Other sources are deferred.
+Text needs a carousel. Spotmu carousels are fine for now. Other carousels are deferred.
 
 Text wraps inside the content width (the rectangle width minus element margin on the left and right). Wrapping changes the content height, which changes the element height. Elements in the same band reflow with that new height. Top reflows downward from the first top element. Bottom reflows upward from the lowest element. Middle recenters the whole middle block.
 
@@ -130,28 +130,28 @@ If bands collide because of wrap or too many tall elements — for example sever
 
 Rectangles from different bands overlap when their areas intersect. Sharing an edge is not an overlap. An instance whose bands do not overlap is valid, including a frame with zero elements.
 
-Generation blocks the instances that overlap and highlights them so the operator can adjust the theme or the source for that instance. Instances that do not overlap continue.
+Generation blocks the instances that overlap and highlights them so the operator can adjust the skeleton or the carousel for that instance. Instances that do not overlap continue.
 
 ---
 
 ## Generate samples
 
-**Generate samples** renders previews from the theme and sample source material. Previews are not outbound posts.
+**Generate samples** renders previews from the skeleton and sample carousel material. Previews are not outbound posts.
 
 The same per-instance overlap check applies. Generate samples surfaces the failures and highlights the blocked previews.
 
 ---
 
-## Spotmu sources
+## Spotmu carousels
 
-Spotmu is customer zero. A text element's source binds to Spotmu interest material:
+Spotmu is customer zero. A text element's carousel binds to Spotmu interest material:
 
 - `title`
 - `interest_heading`
 - `overview_bullets`
 - the public interest URL
 
-Other sources are deferred.
+Other carousels are deferred.
 
 ---
 
@@ -160,4 +160,4 @@ Other sources are deferred.
 - Short video and any non-carousel advertisement type
 - Edge layouts (side-by-side elements, free placement, partial-width rectangles)
 - Image upload and storage
-- Text sources other than Spotmu
+- Text carousels other than Spotmu

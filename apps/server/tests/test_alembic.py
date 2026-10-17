@@ -29,6 +29,7 @@ UNIT_TEXT_DRAFTS_REVISION_ID: str = "unit_text_drafts"
 CAMPAIGN_THEME_SOURCE_REVISION_ID: str = "campaign_theme_source"
 THEME_ELEMENT_NAMES_REVISION_ID: str = "theme_element_names"
 THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID: str = "theme_element_text_optional"
+SKELETONS_CAROUSELS_SLIDES_REVISION_ID: str = "skeletons_carousels_slides"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -64,6 +65,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
+                f"{SKELETONS_CAROUSELS_SLIDES_REVISION_ID}.py",
                 f"{SOURCES_DEFAULT_ALBUM_REVISION_ID}.py",
                 f"{SOURCES_RESOURCE_FILES_REVISION_ID}.py",
                 f"{SOURCES_THEME_BOUND_REVISION_ID}.py",
@@ -716,6 +718,35 @@ class AlembicInitializationTests(unittest.TestCase):
             'op.create_check_constraint(\n        CONTENT_CHECK_LOGICAL_NAME,',
             revision_source,
         )
+        self.assertNotIn("op.drop_constraint(", revision_source)
+
+    def test_rename_follows_optional_text_source(self) -> None:
+        """Themes, sources, and units are renamed in place after the last check."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{SKELETONS_CAROUSELS_SLIDES_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            SKELETONS_CAROUSELS_SLIDES_REVISION_ID,
+        )
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID,
+        )
+        self.assertIn('op.rename_table(old_name, new_name)', revision_source)
+        self.assertIn('"themes", "skeletons"', revision_source)
+        self.assertIn('"sources", "carousels"', revision_source)
+        self.assertIn('"units", "slides"', revision_source)
+        self.assertIn("ck_sources_ck_sources_name", revision_source)
+        self.assertIn("ck_sources_name", revision_source)
+        self.assertNotIn("op.create_check_constraint(", revision_source)
         self.assertNotIn("op.drop_constraint(", revision_source)
 
     def test_env_imports_models_package(self) -> None:

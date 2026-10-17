@@ -31,19 +31,19 @@ from app.models import (
     SourceType,
     SteerAction,
     SteerActionType,
-    Theme,
-    ThemeElement,
-    ThemeElementAlignment,
-    ThemeElementBand,
-    ThemeElementContentKind,
-    ThemeElementTextSource,
-    ThemeStatus,
+    Skeleton,
+    SkeletonElement,
+    SkeletonElementAlignment,
+    SkeletonElementBand,
+    SkeletonElementContentKind,
+    SkeletonElementTextSource,
+    SkeletonStatus,
     BackgroundKind,
     cluster_source_items,
 )
-from app.models.theme_element import (
-    THEME_ELEMENT_CONTENT_CHECK_SQL,
-    THEME_ELEMENT_NAME_CHECK_SQL,
+from app.models.skeleton_element import (
+    SKELETON_ELEMENT_CONTENT_CHECK_SQL,
+    SKELETON_ELEMENT_NAME_CHECK_SQL,
 )
 from app.models.account import Account as AccountModel
 
@@ -63,8 +63,8 @@ EXPECTED_TABLE_NAMES: frozenset[str] = frozenset(
         "campaigns",
         "campaign_accounts",
         "campaign_interests",
-        "themes",
-        "theme_elements",
+        "skeletons",
+        "skeleton_elements",
     },
 )
 
@@ -95,8 +95,8 @@ class DomainModelMetadataTests(unittest.TestCase):
         self.assertEqual(Campaign.__tablename__, "campaigns")
         self.assertEqual(CampaignAccount.__tablename__, "campaign_accounts")
         self.assertEqual(CampaignInterest.__tablename__, "campaign_interests")
-        self.assertEqual(Theme.__tablename__, "themes")
-        self.assertEqual(ThemeElement.__tablename__, "theme_elements")
+        self.assertEqual(Skeleton.__tablename__, "skeletons")
+        self.assertEqual(SkeletonElement.__tablename__, "skeleton_elements")
         self.assertIs(Account, AccountModel)
         self.assertIn("template_id", set(Artifact.__table__.columns.keys()))
 
@@ -265,25 +265,25 @@ class DomainEnumTests(unittest.TestCase):
             frozenset(),
         )
 
-    def test_theme_status_values(self) -> None:
-        """Theme status is draft or live, and the column defaults to draft."""
+    def test_skeleton_status_values(self) -> None:
+        """Skeleton status is draft or live, and the column defaults to draft."""
 
         self.assertEqual(
-            {member.value for member in ThemeStatus},
+            {member.value for member in SkeletonStatus},
             {"draft", "live"},
         )
-        self.assertIn("status", set(Theme.__table__.columns.keys()))
-        status_column: Column[object] = Theme.__table__.columns["status"]
+        self.assertIn("status", set(Skeleton.__table__.columns.keys()))
+        status_column: Column[object] = Skeleton.__table__.columns["status"]
         self.assertFalse(status_column.nullable)
         self.assertIsNotNone(status_column.server_default)
-        self.assertEqual(str(status_column.server_default.arg), ThemeStatus.DRAFT.value)
+        self.assertEqual(str(status_column.server_default.arg), SkeletonStatus.DRAFT.value)
 
-    def test_theme_spacing_defaults(self) -> None:
+    def test_skeleton_spacing_defaults(self) -> None:
         """Spacing columns are non-null integers defaulting to 96 / 0 / 0."""
 
-        page_margin_column: Column[object] = Theme.__table__.columns["page_margin"]
-        element_gap_column: Column[object] = Theme.__table__.columns["element_gap"]
-        element_margin_column: Column[object] = Theme.__table__.columns["element_margin"]
+        page_margin_column: Column[object] = Skeleton.__table__.columns["page_margin"]
+        element_gap_column: Column[object] = Skeleton.__table__.columns["element_gap"]
+        element_margin_column: Column[object] = Skeleton.__table__.columns["element_margin"]
 
         self.assertFalse(page_margin_column.nullable)
         self.assertFalse(element_gap_column.nullable)
@@ -292,17 +292,17 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(str(element_gap_column.server_default.arg), "0")
         self.assertEqual(str(element_margin_column.server_default.arg), "0")
 
-    def test_theme_background_defaults(self) -> None:
+    def test_skeleton_background_defaults(self) -> None:
         """Background kind defaults to color and paper; payloads may be null."""
 
         self.assertEqual(
             {member.value for member in BackgroundKind},
             {"picture", "color", "gradient"},
         )
-        kind_column: Column[object] = Theme.__table__.columns["background_kind"]
-        color_column: Column[object] = Theme.__table__.columns["background_color"]
-        gradient_column: Column[object] = Theme.__table__.columns["background_gradient"]
-        asset_column: Column[object] = Theme.__table__.columns["background_asset_ref"]
+        kind_column: Column[object] = Skeleton.__table__.columns["background_kind"]
+        color_column: Column[object] = Skeleton.__table__.columns["background_color"]
+        gradient_column: Column[object] = Skeleton.__table__.columns["background_gradient"]
+        asset_column: Column[object] = Skeleton.__table__.columns["background_asset_ref"]
 
         self.assertFalse(kind_column.nullable)
         self.assertTrue(color_column.nullable)
@@ -313,13 +313,13 @@ class DomainEnumTests(unittest.TestCase):
         self.assertIsNone(gradient_column.server_default)
         self.assertIsNone(asset_column.server_default)
 
-    def test_theme_element_maps_columns_and_content_check(self) -> None:
-        """theme_elements maps the locked columns and rejects placement fields."""
+    def test_skeleton_element_maps_columns_and_content_check(self) -> None:
+        """skeleton_elements maps the locked columns and rejects placement fields."""
 
-        column_names: set[str] = set(ThemeElement.__table__.columns.keys())
+        column_names: set[str] = set(SkeletonElement.__table__.columns.keys())
         expected_column_names: set[str] = {
             "id",
-            "theme_id",
+            "skeleton_id",
             "band",
             "sort_order",
             "content_kind",
@@ -345,48 +345,48 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(column_names, expected_column_names)
         self.assertTrue({"x", "y", "width"}.isdisjoint(column_names))
         self.assertEqual(
-            {member.value for member in ThemeElementBand},
+            {member.value for member in SkeletonElementBand},
             {"top", "middle", "bottom"},
         )
         self.assertEqual(
-            {member.value for member in ThemeElementContentKind},
+            {member.value for member in SkeletonElementContentKind},
             {"text", "image"},
         )
         self.assertEqual(
-            {member.value for member in ThemeElementTextSource},
+            {member.value for member in SkeletonElementTextSource},
             {"title", "interest_heading", "overview_bullets", "canonical_url"},
         )
         self.assertEqual(
-            {member.value for member in ThemeElementAlignment},
+            {member.value for member in SkeletonElementAlignment},
             {"left", "center", "right"},
         )
         self.assertIn(
-            ("theme_id", "band", "sort_order"),
-            _unique_column_tuples(ThemeElement.__table__),
+            ("skeleton_id", "band", "sort_order"),
+            _unique_column_tuples(SkeletonElement.__table__),
         )
 
-        theme_id_column: Column[object] = ThemeElement.__table__.columns["theme_id"]
-        theme_foreign_key: ForeignKey = next(iter(theme_id_column.foreign_keys))
+        skeleton_id_column: Column[object] = SkeletonElement.__table__.columns["skeleton_id"]
+        skeleton_foreign_key: ForeignKey = next(iter(skeleton_id_column.foreign_keys))
 
-        self.assertEqual(theme_foreign_key.column.table.name, "themes")
-        self.assertEqual(theme_foreign_key.ondelete, "CASCADE")
-        self.assertFalse(ThemeElement.__table__.columns["sort_order"].nullable)
-        self.assertFalse(ThemeElement.__table__.columns["name"].nullable)
-        self.assertTrue(ThemeElement.__table__.columns["rectangle_color"].nullable)
-        opacity_column: Column[object] = ThemeElement.__table__.columns["rectangle_opacity"]
-        radius_column: Column[object] = ThemeElement.__table__.columns["rectangle_radius"]
+        self.assertEqual(skeleton_foreign_key.column.table.name, "skeletons")
+        self.assertEqual(skeleton_foreign_key.ondelete, "CASCADE")
+        self.assertFalse(SkeletonElement.__table__.columns["sort_order"].nullable)
+        self.assertFalse(SkeletonElement.__table__.columns["name"].nullable)
+        self.assertTrue(SkeletonElement.__table__.columns["rectangle_color"].nullable)
+        opacity_column: Column[object] = SkeletonElement.__table__.columns["rectangle_opacity"]
+        radius_column: Column[object] = SkeletonElement.__table__.columns["rectangle_radius"]
 
         self.assertFalse(opacity_column.nullable)
         self.assertFalse(radius_column.nullable)
         self.assertEqual(str(opacity_column.server_default.arg), "100")
         self.assertEqual(str(radius_column.server_default.arg), "0")
-        self.assertTrue(ThemeElement.__table__.columns["text_source"].nullable)
-        self.assertTrue(ThemeElement.__table__.columns["font_weight"].nullable)
-        self.assertTrue(ThemeElement.__table__.columns["image_asset_ref"].nullable)
-        self.assertTrue(ThemeElement.__table__.columns["alignment"].nullable)
+        self.assertTrue(SkeletonElement.__table__.columns["text_source"].nullable)
+        self.assertTrue(SkeletonElement.__table__.columns["font_weight"].nullable)
+        self.assertTrue(SkeletonElement.__table__.columns["image_asset_ref"].nullable)
+        self.assertTrue(SkeletonElement.__table__.columns["alignment"].nullable)
 
         for style_column_name in ("bold", "italic", "underline", "strikethrough"):
-            style_column: Column[object] = ThemeElement.__table__.columns[
+            style_column: Column[object] = SkeletonElement.__table__.columns[
                 style_column_name
             ]
 
@@ -396,7 +396,7 @@ class DomainEnumTests(unittest.TestCase):
 
         content_checks: list[CheckConstraint] = [
             table_constraint
-            for table_constraint in ThemeElement.__table__.constraints
+            for table_constraint in SkeletonElement.__table__.constraints
             if isinstance(table_constraint, CheckConstraint)
         ]
 
@@ -409,41 +409,41 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(
             set(checks_by_name),
             {
-                "ck_theme_elements_content",
-                "ck_theme_elements_rectangle_style",
-                "ck_theme_elements_name",
+                "ck_skeleton_elements_content",
+                "ck_skeleton_elements_rectangle_style",
+                "ck_skeleton_elements_name",
             },
         )
         self.assertEqual(
-            str(checks_by_name["ck_theme_elements_content"].sqltext),
-            THEME_ELEMENT_CONTENT_CHECK_SQL,
+            str(checks_by_name["ck_skeleton_elements_content"].sqltext),
+            SKELETON_ELEMENT_CONTENT_CHECK_SQL,
         )
         self.assertIn(
             "rectangle_opacity >= 0 AND rectangle_opacity <= 100",
-            str(checks_by_name["ck_theme_elements_rectangle_style"].sqltext),
+            str(checks_by_name["ck_skeleton_elements_rectangle_style"].sqltext),
         )
         self.assertIn(
             "rectangle_radius >= 0 AND rectangle_radius <= 10000",
-            str(checks_by_name["ck_theme_elements_rectangle_style"].sqltext),
+            str(checks_by_name["ck_skeleton_elements_rectangle_style"].sqltext),
         )
         self.assertIn(
-            "content_kind = 'text'::theme_element_content_kind",
-            THEME_ELEMENT_CONTENT_CHECK_SQL,
+            "content_kind = 'text'::skeleton_element_content_kind",
+            SKELETON_ELEMENT_CONTENT_CHECK_SQL,
         )
-        self.assertIn("text_source IS NULL", THEME_ELEMENT_CONTENT_CHECK_SQL)
-        self.assertIn("font_size > 0", THEME_ELEMENT_CONTENT_CHECK_SQL)
+        self.assertIn("text_source IS NULL", SKELETON_ELEMENT_CONTENT_CHECK_SQL)
+        self.assertIn("font_size > 0", SKELETON_ELEMENT_CONTENT_CHECK_SQL)
         self.assertIn(
             "font_weight >= 1 AND font_weight <= 1000",
-            THEME_ELEMENT_CONTENT_CHECK_SQL,
+            SKELETON_ELEMENT_CONTENT_CHECK_SQL,
         )
         self.assertIn(
             "strpos(image_asset_ref, '..') = 0",
-            THEME_ELEMENT_CONTENT_CHECK_SQL,
+            SKELETON_ELEMENT_CONTENT_CHECK_SQL,
         )
-        self.assertIn(".jpeg", THEME_ELEMENT_CONTENT_CHECK_SQL)
+        self.assertIn(".jpeg", SKELETON_ELEMENT_CONTENT_CHECK_SQL)
         self.assertEqual(
-            str(checks_by_name["ck_theme_elements_name"].sqltext),
-            THEME_ELEMENT_NAME_CHECK_SQL,
+            str(checks_by_name["ck_skeleton_elements_name"].sqltext),
+            SKELETON_ELEMENT_NAME_CHECK_SQL,
         )
 
 

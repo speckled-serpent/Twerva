@@ -13,23 +13,25 @@ Build in the order below. The rename is a real change to the tables and the rout
 
 ## Done
 
-A theme is the shape of a carousel frame: one background (picture, solid color, or gradient), spacing, and named elements. An element is text or an image, and the name is required. The theme editor covers that frame, autosaves frame and element edits, and previews the frame with lorem ipsum at a word count per text element. It does not ask the operator to mark the theme Draft or Live. The status column is still on the row. A campaign can pick any theme. Adding a text element adds an empty text on every unit of every source bound to that theme. Removing an element removes that text. A text element may omit a Spotmu text source. Unit text is the value stored for that element, under its name. A picture background or an image element stores a concrete image path.
+A skeleton is the shape of a carousel frame: one background (picture, solid color, or gradient), spacing, and named elements. An element is text or an image, and the name is required. The skeleton editor covers that frame, autosaves frame and element edits, and previews the frame with lorem ipsum at a word count per text element. It does not ask the operator to mark the skeleton Draft or Live. The status column is still on the row. A campaign can pick any skeleton. Adding a text element adds an empty text on every slide of every carousel bound to that skeleton. Removing an element removes that text. A text element may omit a Spotmu text source. Slide text is the value stored for that element, under its name. A picture background or an image element stores a concrete image path.
 
-A source is bound to one theme. Create asks for a name and that theme. There is one kind of source. Album and resource are gone, and the `resource_files` table is gone. A unit has a name, at most one image, and one text per named text element. The image field is there only when the theme has a picture background or an image element. A unit can name other units in the same source that it cannot be shown with. Images are a manual upload or a URL import, with a license and a source note, stored on disk. The path prefix is `albums/…`, or `theme-defaults/…` for the packaged photos. Opening a unit previews that theme with this unit and does not write an artifact.
+A carousel is bound to one skeleton. Create asks for a name and that skeleton. There is one kind of carousel. Album and resource are gone, and the `resource_files` table is gone. A slide has a name, at most one image, and one text per named text element. The image field is there only when the skeleton has a picture background or an image element. A slide can name other slides in the same carousel that it cannot be shown with. Images are a manual upload or a URL import, with a license and a source note, stored on disk. The path prefix is `albums/…`, or `theme-defaults/…` for the packaged photos. Opening a slide previews that skeleton with this slide and does not write an artifact.
 
-The Default source (slug `default`) is six packaged photos, bound to Spotmu Paper v1, so the required theme has a row to point at. Its paths stay `theme-defaults/…`.
+The Default carousel (slug `default`) is six packaged photos, bound to Spotmu Paper v1, so the required skeleton has a row to point at. Its paths stay `theme-defaults/…`.
 
-The source stores inspiration and rules as two text fields. Generate drafts the unit's name and text from those. Accept makes that text the live text. Leaving it unreviewed keeps the unit off a run. The call uses OpenAI when `OPENAI_API_KEY` is set (`TEXT_GENERATION_PROVIDER` is `openai` or `fake`; the model defaults to `gpt-4o-mini`) and stays off otherwise. Images are not generated.
+The carousel stores inspiration and rules as two text fields. Generate drafts the slide's name and text from those. Accept makes that text the live text. Leaving it unreviewed keeps the slide off a run. The call uses OpenAI when `OPENAI_API_KEY` is set (`TEXT_GENERATION_PROVIDER` is `openai` or `fake`; the model defaults to `gpt-4o-mini`) and stays off otherwise. Images are not generated.
 
-A campaign stores the chosen theme and one source bound to that theme. Older rows can have both empty. Run groups the live units into `campaign_carousels` that respect the exclusion rules. It does not call the model and does not draw slides. Those rows are a run's assembly, not the source. Create still asks for platforms and at least one Spotmu interest. A production Spotmu campaign also asks for an account. A Spotmu test campaign does not. Run does not read the interests.
+A campaign stores the chosen skeleton and one carousel bound to that skeleton. Older rows can have both empty. Run groups the live slides into `campaign_carousels` that respect the exclusion rules. It does not call the model and does not draw frames. Those rows are a run's assembly, not the carousel. Create still asks for platforms and at least one Spotmu interest. A production Spotmu campaign also asks for an account. A Spotmu test campaign does not. Run does not read the interests.
 
-The ops console is signed in. An admin can change rows. A reader can look. The left rail is Content (Campaigns, Themes, Sources), Run (Queue, Schedule, Results), and Setup (Accounts, Users).
+The ops console is signed in. An admin can change rows. A reader can look. The left rail is Content (Campaigns, Skeletons, Carousels), Run (Queue, Schedule, Results), and Setup (Accounts, Users).
 
 An earlier loop still renders a shipping carousel from `carousel_template_v1` off one Spotmu interest. The caption is that interest's title, a fixed hashtag set, and the interest URL. The ops console can approve that draft, set a time, mock-publish, and record a metric by hand. An account can carry a per-day cadence cap. It does not store a login. Publish is a mock adapter. An Ayrshare adapter is in the tree and refuses the live call. Metric rows, a manual entry route, and a cluster median of the latest view counts exist. A stub can copy mock views onto a mock-published job. Clusters, brands, ingest, and steer from that loop are still in the API. The phases below replace that loop for the new model.
 
 ---
 
 ## 1. Rename to Skeletons, Carousels, and Slides
+
+**Status.** Done. Revision `skeletons_carousels_slides`.
 
 **Goal.** Use the new names in the database, the API, and the rail, without changing what the rows do.
 
@@ -57,7 +59,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 **Scope.** Minimal. A name and a body of text. Its own rail section. An operator can write and edit it. No upload rules beyond plain text, no synthesis, and no link to a carousel until the Content step.
 
-**Migration.** None. `resource_files` was dropped when sources became theme-bound. Do not recreate it. The API does not use the leftover helpers under `app/sources/resource_files.py`, `resource_store.py`, and `resource_markdown.py`. Remove them here so Research is not that old upload.
+**Migration.** None. `resource_files` was dropped when sources became theme-bound. Do not recreate it. The API does not use the leftover helpers under `app/carousels/resource_files.py`, `resource_store.py`, and `resource_markdown.py`. Remove them here so Research is not that old upload.
 
 **Open questions.** Mu will detail Research. Is one row one document, or can one research item hold several? Is there a size limit?
 

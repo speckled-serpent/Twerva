@@ -122,7 +122,7 @@ class ApproveSchedulePersistTests(unittest.TestCase):
         self.created_source_item = create_source_item(
             SourceItemCreateRequest(
                 brand_id=self.created_brand.id,
-                title="Approve source",
+                title="Approve carousel",
                 interest_heading="Approve heading",
                 overview_bullets=["a", "b", "c"],
                 canonical_url="https://spotmu.com/interest/example",

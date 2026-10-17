@@ -1,7 +1,7 @@
-"""Place live units into carousels for one theme.
+"""Place live slides into carousels for one skeleton.
 
-A carousel is an ordered pick of units that can be shown together.
-Draft units are not passed in. Exclusion pairs split a pick. This
+A carousel is an ordered pick of slides that can be shown together.
+Draft slides are not passed in. Exclusion pairs split a pick. This
 module does not call a model, write rows, or generate text.
 """
 
@@ -10,63 +10,63 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from app.sources.unit_exclusions import assert_unit_pick_allowed
+from app.carousels.slide_exclusions import assert_slide_pick_allowed
 
 
 def assemble_carousels(
-    live_unit_ids: Sequence[uuid.UUID],
+    live_slide_ids: Sequence[uuid.UUID],
     exclusion_pairs: Sequence[tuple[uuid.UUID, uuid.UUID]],
 ) -> list[list[uuid.UUID]]:
-    """Group live units so each carousel passes the exclusion check.
+    """Group live slides so each carousel passes the exclusion check.
 
-    Units stay in the order they were given. A unit joins the first
+    Slides stay in the order they were given. A slide joins the first
     carousel that still allows the pair. Otherwise it starts the next
-    carousel. A unit alone is always one carousel.
+    carousel. A slide alone is always one carousel.
 
     Args:
-        live_unit_ids: Approved units, in source order. Drafts are
+        live_slide_ids: Approved slides, in carousel order. Drafts are
             already left out.
-        exclusion_pairs: ``(unit_id, excluded_unit_id)`` rows. Both
+        exclusion_pairs: ``(slide_id, excluded_slide_id)`` rows. Both
             directions may be present.
 
     Returns:
-        One list of unit ids per carousel. Empty when nothing is live.
+        One list of slide ids per carousel. Empty when nothing is live.
     """
 
     carousels: list[list[uuid.UUID]] = []
 
-    for unit_id in live_unit_ids:
-        placed_unit: bool = False
+    for slide_id in live_slide_ids:
+        placed_slide: bool = False
 
         for carousel in carousels:
-            candidate_ids: list[uuid.UUID] = [*carousel, unit_id]
+            candidate_ids: list[uuid.UUID] = [*carousel, slide_id]
             candidate_allowed: bool = _pick_is_allowed(candidate_ids, exclusion_pairs)
 
             if not candidate_allowed:
                 continue
 
-            carousel.append(unit_id)
-            placed_unit = True
+            carousel.append(slide_id)
+            placed_slide = True
 
             break
 
-        if placed_unit:
+        if placed_slide:
             continue
 
-        assert_unit_pick_allowed([unit_id], exclusion_pairs)
-        carousels.append([unit_id])
+        assert_slide_pick_allowed([slide_id], exclusion_pairs)
+        carousels.append([slide_id])
 
     return carousels
 
 
 def _pick_is_allowed(
-    unit_ids: Sequence[uuid.UUID],
+    slide_ids: Sequence[uuid.UUID],
     exclusion_pairs: Sequence[tuple[uuid.UUID, uuid.UUID]],
 ) -> bool:
     """Return whether this pick contains no excluded pair."""
 
     try:
-        assert_unit_pick_allowed(unit_ids, exclusion_pairs)
+        assert_slide_pick_allowed(slide_ids, exclusion_pairs)
     except ValueError:
 
         return False

@@ -1,4 +1,4 @@
-"""Bundled theme fonts resolve from the package, then fall back."""
+"""Bundled skeleton fonts resolve from the package, then fall back."""
 
 import os
 import unittest
@@ -8,7 +8,7 @@ os.environ.setdefault("TWERVA_ENV", "test")
 
 from PIL import ImageFont
 
-from app.themes.bundled_fonts import (
+from app.skeletons.bundled_fonts import (
     BUNDLED_FONT_FAMILIES,
     DEFAULT_FONT_FAMILY_NAME,
     FALLBACK_FONT_FAMILY_NAME,
@@ -18,15 +18,15 @@ from app.themes.bundled_fonts import (
     find_bundled_font_family,
     list_bundled_font_families,
 )
-from app.themes.elements import (
-    ThemeElementError,
-    resolve_theme_element,
+from app.skeletons.elements import (
+    SkeletonElementError,
+    resolve_skeleton_element,
 )
-from app.themes.measure import load_theme_face
+from app.skeletons.measure import load_skeleton_face
 from app.models.enums import (
-    ThemeElementAlignment,
-    ThemeElementContentKind,
-    ThemeElementTextSource,
+    SkeletonElementAlignment,
+    SkeletonElementContentKind,
+    SkeletonElementTextSource,
 )
 
 
@@ -72,42 +72,42 @@ class BundledFontTests(unittest.TestCase):
     def test_bundled_family_loads_from_the_package(self) -> None:
         """A catalog family does not use a system font of the same name."""
 
-        regular_face: ImageFont.ImageFont = load_theme_face(
+        regular_face: ImageFont.ImageFont = load_skeleton_face(
             "Source Sans 3",
             48,
             False,
             False,
             None,
         )
-        italic_face: ImageFont.ImageFont = load_theme_face(
+        italic_face: ImageFont.ImageFont = load_skeleton_face(
             "Source Sans 3",
             48,
             False,
             True,
             None,
         )
-        bold_face: ImageFont.ImageFont = load_theme_face(
+        bold_face: ImageFont.ImageFont = load_skeleton_face(
             "Source Sans 3",
             64,
             True,
             False,
             None,
         )
-        regular_width_face: ImageFont.ImageFont = load_theme_face(
+        regular_width_face: ImageFont.ImageFont = load_skeleton_face(
             "Source Sans 3",
             64,
             False,
             False,
             None,
         )
-        comic_bold_italic: ImageFont.ImageFont = load_theme_face(
+        comic_bold_italic: ImageFont.ImageFont = load_skeleton_face(
             "Comic Neue",
             48,
             True,
             True,
             None,
         )
-        pacifico_face: ImageFont.ImageFont = load_theme_face(
+        pacifico_face: ImageFont.ImageFont = load_skeleton_face(
             "Pacifico",
             48,
             True,
@@ -141,9 +141,9 @@ class BundledFontTests(unittest.TestCase):
         )
 
     def test_unknown_family_falls_back_without_raising(self) -> None:
-        """An old theme name still loads a face. It is not a bundled file."""
+        """An old skeleton name still loads a face. It is not a bundled file."""
 
-        fallback_face: ImageFont.ImageFont = load_theme_face(
+        fallback_face: ImageFont.ImageFont = load_skeleton_face(
             "No Such Preview Face",
             32,
             False,
@@ -161,10 +161,10 @@ class BundledFontTests(unittest.TestCase):
     def test_rectangle_opacity_and_radius_are_bounded(self) -> None:
         """Opacity and radius reject values outside the stored range."""
 
-        resolved_element = resolve_theme_element(
-            ThemeElementContentKind.TEXT,
+        resolved_element = resolve_skeleton_element(
+            SkeletonElementContentKind.TEXT,
             "#00FF00",
-            ThemeElementTextSource.TITLE,
+            SkeletonElementTextSource.TITLE,
             "Source Sans 3",
             32,
             "#112233",
@@ -173,18 +173,18 @@ class BundledFontTests(unittest.TestCase):
             False,
             False,
             None,
-            ThemeElementAlignment.LEFT,
+            SkeletonElementAlignment.LEFT,
             None,
         )
 
         self.assertEqual(resolved_element.rectangle_opacity, 100)
         self.assertEqual(resolved_element.rectangle_radius, 0)
 
-        with self.assertRaises(ThemeElementError) as opacity_error:
-            resolve_theme_element(
-                ThemeElementContentKind.TEXT,
+        with self.assertRaises(SkeletonElementError) as opacity_error:
+            resolve_skeleton_element(
+                SkeletonElementContentKind.TEXT,
                 "#00FF00",
-                ThemeElementTextSource.TITLE,
+                SkeletonElementTextSource.TITLE,
                 "Source Sans 3",
                 32,
                 "#112233",
@@ -193,17 +193,17 @@ class BundledFontTests(unittest.TestCase):
                 False,
                 False,
                 None,
-                ThemeElementAlignment.LEFT,
+                SkeletonElementAlignment.LEFT,
                 None,
                 101,
                 0,
             )
 
-        with self.assertRaises(ThemeElementError) as radius_error:
-            resolve_theme_element(
-                ThemeElementContentKind.TEXT,
+        with self.assertRaises(SkeletonElementError) as radius_error:
+            resolve_skeleton_element(
+                SkeletonElementContentKind.TEXT,
                 "#00FF00",
-                ThemeElementTextSource.TITLE,
+                SkeletonElementTextSource.TITLE,
                 "Source Sans 3",
                 32,
                 "#112233",
@@ -212,7 +212,7 @@ class BundledFontTests(unittest.TestCase):
                 False,
                 False,
                 None,
-                ThemeElementAlignment.LEFT,
+                SkeletonElementAlignment.LEFT,
                 None,
                 100,
                 -1,

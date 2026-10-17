@@ -1,7 +1,7 @@
 """Named Spotmu carousel templates (internal, restricted set).
 
 Phase 1–2: Spotmu-only variants that share the 1080×1920 text-led rules
-in `docs/planning/carousel_template_v1.md`. The canvas is the theme frame.
+in `docs/planning/carousel_template_v1.md`. The canvas is the skeleton frame.
 No freeform brand designer.
 """
 
@@ -10,14 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.generate.errors import CarouselUnknownTemplateError
-from app.themes.layout import THEME_FRAME_HEIGHT_PIXELS, THEME_FRAME_WIDTH_PIXELS
+from app.skeletons.layout import SKELETON_FRAME_HEIGHT_PIXELS, SKELETON_FRAME_WIDTH_PIXELS
 
 
 TEMPLATE_ID_SPOTMU_PAPER_V1: str = "spotmu_paper_v1"
 TEMPLATE_ID_SPOTMU_BOLD_V1: str = "spotmu_bold_v1"
 DEFAULT_CAROUSEL_TEMPLATE_ID: str = TEMPLATE_ID_SPOTMU_PAPER_V1
-CANVAS_WIDTH_PIXELS: int = THEME_FRAME_WIDTH_PIXELS
-CANVAS_HEIGHT_PIXELS: int = THEME_FRAME_HEIGHT_PIXELS
+CANVAS_WIDTH_PIXELS: int = SKELETON_FRAME_WIDTH_PIXELS
+CANVAS_HEIGHT_PIXELS: int = SKELETON_FRAME_HEIGHT_PIXELS
 
 
 @dataclass(frozen=True)

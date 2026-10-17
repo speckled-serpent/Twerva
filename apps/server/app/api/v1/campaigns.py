@@ -12,14 +12,14 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.v1.lookups import (
     fetch_account_by_id_or_raise,
     fetch_campaign_by_id_or_raise,
-    fetch_content_source_by_id_or_raise,
-    fetch_theme_by_id_or_raise,
+    fetch_carousel_by_id_or_raise,
+    fetch_skeleton_by_id_or_raise,
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
     CampaignAccountReadResponse,
     CampaignCarouselRead,
-    CampaignCarouselUnitRead,
+    CampaignCarouselSlideRead,
     CampaignCreateRequest,
     CampaignInterestReadResponse,
     CampaignInterestWrite,
@@ -52,14 +52,14 @@ from app.models import (
     CampaignInterest,
     CampaignStatus,
     CampaignType,
-    ContentSource,
+    Carousel,
     OpsUser,
     Platform,
-    Theme,
-    Unit,
+    Skeleton,
+    Slide,
 )
-from app.sources.editing import new_row_id
-from app.sources.unit_text_review import live_units
+from app.carousels.editing import new_row_id
+from app.carousels.slide_text_review import live_slides
 
 
 CAMPAIGN_TYPE_OTHER_NOT_IMPLEMENTED: str = (
@@ -74,9 +74,9 @@ CAMPAIGN_INTERESTS_REQUIRED_DETAIL: str = (
 DUPLICATE_ACCOUNT_PLATFORM_DETAIL: str = (
     "Account platform is not in the campaign platform list."
 )
-SOURCE_THEME_MISMATCH_DETAIL: str = "That source is not bound to this theme."
+CAROUSEL_SKELETON_MISMATCH_DETAIL: str = "That carousel is not bound to this skeleton."
 CAMPAIGN_RUN_REQUIRES_BINDING_DETAIL: str = (
-    "Pick a theme and a source before running."
+    "Pick a skeleton and a carousel before running."
 )
 
 campaigns_router: APIRouter = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -131,8 +131,8 @@ def create_campaign(
     )
     _raise_if_account_platforms_mismatch(selected_accounts, platform_values)
     resolve_campaign_binding(
-        campaign_create_request.theme_id,
-        campaign_create_request.source_id,
+        campaign_create_request.skeleton_id,
+        campaign_create_request.carousel_id,
         our_database_session,
     )
 
@@ -150,8 +150,8 @@ def create_campaign(
         status=CampaignStatus.READY,
         platforms=platform_values,
         created_by=None if current_ops_operator is None else current_ops_operator.id,
-        theme_id=campaign_create_request.theme_id,
-        source_id=campaign_create_request.source_id,
+        skeleton_id=campaign_create_request.skeleton_id,
+        carousel_id=campaign_create_request.carousel_id,
     )
     created_campaign.carousels = []
     our_database_session.add(created_campaign)
@@ -235,10 +235,10 @@ def run_campaign(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> CampaignReadResponse:
-    """Assemble live units from the campaign source into carousels.
+    """Assemble live slides from the campaign carousel into carousels.
 
-    Draft units stay out. Each carousel is a pick that
-    ``assert_unit_pick_allowed`` accepts. The theme on the campaign
+    Draft slides stay out. Each carousel is a pick that
+    ``assert_slide_pick_allowed`` accepts. The skeleton on the campaign
     is the frame. This does not call a text model.
     """
 
@@ -248,18 +248,18 @@ def run_campaign(
         our_database_session,
     )
 
-    if found_campaign.theme_id is None or found_campaign.source_id is None:
+    if found_campaign.skeleton_id is None or found_campaign.carousel_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=CAMPAIGN_RUN_REQUIRES_BINDING_DETAIL,
         )
 
-    bound_theme, bound_source = resolve_campaign_binding(
-        found_campaign.theme_id,
-        found_campaign.source_id,
+    bound_skeleton, bound_source = resolve_campaign_binding(
+        found_campaign.skeleton_id,
+        found_campaign.carousel_id,
         our_database_session,
     )
-    _ = bound_theme
+    _ = bound_skeleton
     _replace_campaign_carousels(found_campaign, bound_source, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -380,8 +380,8 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
     platform_values: list[Platform] = [
         Platform(platform_value) for platform_value in campaign.platforms
     ]
-    theme_name: str | None = None if campaign.theme is None else campaign.theme.name
-    source_name: str | None = None if campaign.source is None else campaign.source.name
+    skeleton_name: str | None = None if campaign.skeleton is None else campaign.skeleton.name
+    carousel_name: str | None = None if campaign.carousel is None else campaign.carousel.name
     carousel_responses: list[CampaignCarouselRead] = [
         _serialize_carousel(carousel) for carousel in list(campaign.carousels)
     ]
@@ -394,10 +394,10 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
         advertisement_type=campaign.advertisement_type,
         status=campaign.status,
         platforms=platform_values,
-        theme_id=campaign.theme_id,
-        source_id=campaign.source_id,
-        theme_name=theme_name,
-        source_name=source_name,
+        skeleton_id=campaign.skeleton_id,
+        carousel_id=campaign.carousel_id,
+        skeleton_name=skeleton_name,
+        carousel_name=carousel_name,
         account_count=len(account_responses),
         interest_count=len(interest_responses),
         accounts=account_responses,
@@ -485,38 +485,38 @@ def _load_campaign_with_joins(
 
 
 def resolve_campaign_binding(
-    theme_id: uuid.UUID,
-    source_id: uuid.UUID,
+    skeleton_id: uuid.UUID,
+    carousel_id: uuid.UUID,
     our_database_session: Session,
-) -> tuple[Theme, ContentSource]:
-    """Load the theme and the source, and require that source's theme.
+) -> tuple[Skeleton, Carousel]:
+    """Load the skeleton and the carousel, and require that carousel's skeleton.
 
     Args:
-        theme_id: Theme the operator picked.
-        source_id: Source the operator picked from that theme's list.
+        skeleton_id: Skeleton the operator picked.
+        carousel_id: Carousel the operator picked from that skeleton's list.
         our_database_session: Request-scoped SQLAlchemy session.
 
     Returns:
-        The theme and the source.
+        The skeleton and the carousel.
 
     Raises:
         HTTPException: 404 when either row is missing. 400 when the
-            source is bound to a different theme.
+            carousel is bound to a different skeleton.
     """
 
-    found_theme: Theme = fetch_theme_by_id_or_raise(theme_id, our_database_session)
-    found_source: ContentSource = fetch_content_source_by_id_or_raise(
-        source_id,
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(skeleton_id, our_database_session)
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
         our_database_session,
     )
 
-    if found_source.theme_id != found_theme.id:
+    if found_source.skeleton_id != found_skeleton.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=SOURCE_THEME_MISMATCH_DETAIL,
+            detail=CAROUSEL_SKELETON_MISMATCH_DETAIL,
         )
 
-    return found_theme, found_source
+    return found_skeleton, found_source
 
 
 def _campaign_read_options() -> tuple[object, ...]:
@@ -525,11 +525,11 @@ def _campaign_read_options() -> tuple[object, ...]:
     read_options: tuple[object, ...] = (
         selectinload(Campaign.account_links).selectinload(CampaignAccount.account),
         selectinload(Campaign.interest_links),
-        selectinload(Campaign.theme),
-        selectinload(Campaign.source),
+        selectinload(Campaign.skeleton),
+        selectinload(Campaign.carousel),
         selectinload(Campaign.carousels)
         .selectinload(CampaignCarousel.slides)
-        .selectinload(CampaignCarouselSlide.unit),
+        .selectinload(CampaignCarouselSlide.slide),
     )
 
     return read_options
@@ -537,33 +537,33 @@ def _campaign_read_options() -> tuple[object, ...]:
 
 def _replace_campaign_carousels(
     campaign: Campaign,
-    source: ContentSource,
+    carousel: Carousel,
     our_database_session: Session,
 ) -> None:
-    """Replace the stored carousels with a fresh assembly of live units."""
+    """Replace the stored carousels with a fresh assembly of live slides."""
 
     for existing_carousel in list(campaign.carousels):
         our_database_session.delete(existing_carousel)
 
     campaign.carousels = []
     our_database_session.flush()
-    ordered_live_units: list[Unit] = sorted(
-        live_units(list(source.units)),
-        key=lambda unit: (unit.position, str(unit.id)),
+    ordered_live_slides: list[Slide] = sorted(
+        live_slides(list(carousel.slides)),
+        key=lambda slide: (slide.position, str(slide.id)),
     )
     exclusion_pairs: list[tuple[uuid.UUID, uuid.UUID]] = []
 
-    for source_unit in list(source.units):
+    for source_slide in list(carousel.slides):
 
-        for exclusion in list(source_unit.exclusions):
-            exclusion_pairs.append((exclusion.unit_id, exclusion.excluded_unit_id))
+        for exclusion in list(source_slide.exclusions):
+            exclusion_pairs.append((exclusion.slide_id, exclusion.excluded_slide_id))
 
-    live_unit_ids: list[uuid.UUID] = [unit.id for unit in ordered_live_units]
+    live_slide_ids: list[uuid.UUID] = [slide.id for slide in ordered_live_slides]
     carousel_groups: list[list[uuid.UUID]] = assemble_carousels(
-        live_unit_ids,
+        live_slide_ids,
         exclusion_pairs,
     )
-    units_by_id: dict[uuid.UUID, Unit] = {unit.id: unit for unit in ordered_live_units}
+    slides_by_id: dict[uuid.UUID, Slide] = {slide.id: slide for slide in ordered_live_slides}
 
     for carousel_position, grouped_ids in enumerate(carousel_groups):
         created_carousel: CampaignCarousel = CampaignCarousel(
@@ -573,14 +573,14 @@ def _replace_campaign_carousels(
         )
         created_slides: list[CampaignCarouselSlide] = []
 
-        for slide_position, unit_id in enumerate(grouped_ids):
+        for slide_position, slide_id in enumerate(grouped_ids):
             created_slide: CampaignCarouselSlide = CampaignCarouselSlide(
                 id=new_row_id(),
                 carousel_id=created_carousel.id,
-                unit_id=unit_id,
+                slide_id=slide_id,
                 position=slide_position,
             )
-            created_slide.unit = units_by_id[unit_id]
+            created_slide.slide = slides_by_id[slide_id]
             created_slides.append(created_slide)
             our_database_session.add(created_slide)
 
@@ -592,10 +592,10 @@ def _replace_campaign_carousels(
 def _serialize_carousel(carousel: CampaignCarousel) -> CampaignCarouselRead:
     """Map one stored carousel to its slide names."""
 
-    unit_reads: list[CampaignCarouselUnitRead] = [
-        CampaignCarouselUnitRead(
-            unit_id=slide.unit_id,
-            name=slide.unit.name,
+    slide_reads: list[CampaignCarouselSlideRead] = [
+        CampaignCarouselSlideRead(
+            slide_id=slide.slide_id,
+            name=slide.slide.name,
             position=slide.position,
         )
         for slide in list(carousel.slides)
@@ -603,7 +603,7 @@ def _serialize_carousel(carousel: CampaignCarousel) -> CampaignCarouselRead:
     carousel_read: CampaignCarouselRead = CampaignCarouselRead(
         id=carousel.id,
         position=carousel.position,
-        units=unit_reads,
+        slides=slide_reads,
     )
 
     return carousel_read

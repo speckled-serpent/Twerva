@@ -45,12 +45,12 @@ from app.api.v1.schemas import (
     CampaignInterestWrite,
     ClusterCreateRequest,
     PostJobCreateRequest,
-    SourceCreateRequest,
+    CarouselCreateRequest,
     SourceItemCreateRequest,
-    ThemeCreateRequest,
+    SkeletonCreateRequest,
 )
-from app.api.v1.source_writes import create_content_source
-from app.api.v1.themes import create_theme
+from app.api.v1.carousel_writes import create_carousel
+from app.api.v1.skeletons import create_skeleton
 from app.api.v1.source_items import create_source_item, get_source_item_by_id
 from app.models.enums import (
     AdvertisementType,
@@ -155,7 +155,7 @@ class ApiPersistTests(unittest.TestCase):
         created_source_item = create_source_item(
             SourceItemCreateRequest(
                 brand_id=created_brand.id,
-                title="Persist source",
+                title="Persist carousel",
                 interest_heading="Persist heading",
                 overview_bullets=["a", "b", "c"],
                 canonical_url="https://spotmu.com/interest/example",
@@ -287,9 +287,9 @@ class ApiPersistTests(unittest.TestCase):
             ),
             self.our_database_session,
         )
-        theme_id: uuid.UUID
-        source_id: uuid.UUID
-        theme_id, source_id = _persist_theme_and_source(
+        skeleton_id: uuid.UUID
+        carousel_id: uuid.UUID
+        skeleton_id, carousel_id = _persist_skeleton_and_source(
             self.our_database_session,
             run_suffix,
         )
@@ -298,8 +298,8 @@ class ApiPersistTests(unittest.TestCase):
                 name=f"My Campaign {run_suffix}",
                 campaign_type=CampaignType.SPOTMU,
                 advertisement_type=AdvertisementType.CAROUSEL,
-                theme_id=theme_id,
-                source_id=source_id,
+                skeleton_id=skeleton_id,
+                carousel_id=carousel_id,
                 platforms=[Platform.INSTAGRAM],
                 account_ids=[created_account.id],
                 interests=[
@@ -362,9 +362,9 @@ class ApiPersistTests(unittest.TestCase):
             ),
             self.our_database_session,
         )
-        theme_id: uuid.UUID
-        source_id: uuid.UUID
-        theme_id, source_id = _persist_theme_and_source(
+        skeleton_id: uuid.UUID
+        carousel_id: uuid.UUID
+        skeleton_id, carousel_id = _persist_skeleton_and_source(
             self.our_database_session,
             run_suffix,
         )
@@ -373,8 +373,8 @@ class ApiPersistTests(unittest.TestCase):
                 name=f"Lifecycle Campaign {run_suffix}",
                 campaign_type=CampaignType.SPOTMU,
                 advertisement_type=AdvertisementType.CAROUSEL,
-                theme_id=theme_id,
-                source_id=source_id,
+                skeleton_id=skeleton_id,
+                carousel_id=carousel_id,
                 platforms=[Platform.INSTAGRAM],
                 account_ids=[created_account.id],
                 interests=[
@@ -421,9 +421,9 @@ class ApiPersistTests(unittest.TestCase):
         """Spotmu-test persists ready with zero accounts and still lists."""
 
         run_suffix: str = uuid.uuid4().hex[:8]
-        theme_id: uuid.UUID
-        source_id: uuid.UUID
-        theme_id, source_id = _persist_theme_and_source(
+        skeleton_id: uuid.UUID
+        carousel_id: uuid.UUID
+        skeleton_id, carousel_id = _persist_skeleton_and_source(
             self.our_database_session,
             run_suffix,
         )
@@ -432,8 +432,8 @@ class ApiPersistTests(unittest.TestCase):
                 name=f"Throwaway {run_suffix}",
                 campaign_type=CampaignType.SPOTMU_TEST,
                 advertisement_type=AdvertisementType.CAROUSEL,
-                theme_id=theme_id,
-                source_id=source_id,
+                skeleton_id=skeleton_id,
+                carousel_id=carousel_id,
                 platforms=[Platform.INSTAGRAM, Platform.TIKTOK],
                 account_ids=[],
                 interests=[
@@ -465,27 +465,27 @@ class ApiPersistTests(unittest.TestCase):
         )
 
 
-def _persist_theme_and_source(
+def _persist_skeleton_and_source(
     our_database_session: Session,
     run_suffix: str,
 ) -> tuple[uuid.UUID, uuid.UUID]:
-    """Create one theme and one source bound to it."""
+    """Create one skeleton and one carousel bound to it."""
 
-    created_theme = create_theme(
-        ThemeCreateRequest(name=f"Campaign theme {run_suffix}"),
+    created_skeleton = create_skeleton(
+        SkeletonCreateRequest(name=f"Campaign skeleton {run_suffix}"),
         our_database_session,
         None,
     )
-    created_source = create_content_source(
-        SourceCreateRequest(
-            name=f"Campaign source {run_suffix}",
-            theme_id=created_theme.id,
+    created_source = create_carousel(
+        CarouselCreateRequest(
+            name=f"Campaign carousel {run_suffix}",
+            skeleton_id=created_skeleton.id,
         ),
         our_database_session,
         None,
     )
 
-    return created_theme.id, created_source.id
+    return created_skeleton.id, created_source.id
 
 
 if __name__ == "__main__":

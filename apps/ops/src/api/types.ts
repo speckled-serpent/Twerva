@@ -240,15 +240,15 @@ export interface CampaignCreateRequest {
   name: string;
   campaign_type: CampaignType;
   advertisement_type?: AdvertisementType;
-  theme_id: string;
-  source_id: string;
+  skeleton_id: string;
+  carousel_id: string;
   platforms: Platform[];
   account_ids: string[];
   interests: CampaignInterestWrite[];
 }
 
-export interface CampaignCarouselUnitRead {
-  unit_id: string;
+export interface CampaignCarouselSlideRead {
+  slide_id: string;
   name: string;
   position: number;
 }
@@ -256,7 +256,7 @@ export interface CampaignCarouselUnitRead {
 export interface CampaignCarouselRead {
   id: string;
   position: number;
-  units: CampaignCarouselUnitRead[];
+  slides: CampaignCarouselSlideRead[];
 }
 
 export interface CampaignInterestReadResponse {
@@ -280,10 +280,10 @@ export interface CampaignReadResponse {
   advertisement_type: AdvertisementType;
   status: CampaignStatus;
   platforms: Platform[];
-  theme_id: string | null;
-  source_id: string | null;
-  theme_name: string | null;
-  source_name: string | null;
+  skeleton_id: string | null;
+  carousel_id: string | null;
+  skeleton_name: string | null;
+  carousel_name: string | null;
   account_count: number;
   interest_count: number;
   accounts: CampaignAccountReadResponse[];
@@ -294,67 +294,67 @@ export interface CampaignReadResponse {
   created_by: string | null;
 }
 
-export type ThemeStatus = "draft" | "live";
+export type SkeletonStatus = "draft" | "live";
 
 export type BackgroundKind = "picture" | "color" | "gradient";
 
-export interface ThemeGradientStop {
+export interface SkeletonGradientStop {
   offset: number;
   color: string;
 }
 
-export interface ThemeGradient {
+export interface SkeletonGradient {
   angle_deg: number;
-  stops: ThemeGradientStop[];
+  stops: SkeletonGradientStop[];
 }
 
-export interface ThemeCreateRequest {
+export interface SkeletonCreateRequest {
   name: string;
   advertisement_type?: AdvertisementType;
   template_key?: string | null;
-  status?: ThemeStatus;
+  status?: SkeletonStatus;
   page_margin?: number;
   element_gap?: number;
   element_margin?: number;
   background_kind?: BackgroundKind;
   background_color?: string | null;
-  background_gradient?: ThemeGradient | null;
+  background_gradient?: SkeletonGradient | null;
   background_asset_ref?: string | null;
-  elements?: ThemeElementCreateRequest[];
+  elements?: SkeletonElementCreateRequest[];
 }
 
-export interface ThemePatchRequest {
-  status?: ThemeStatus | null;
+export interface SkeletonPatchRequest {
+  status?: SkeletonStatus | null;
   page_margin?: number | null;
   element_gap?: number | null;
   element_margin?: number | null;
   background_kind?: BackgroundKind | null;
   background_color?: string | null;
-  background_gradient?: ThemeGradient | null;
+  background_gradient?: SkeletonGradient | null;
   background_asset_ref?: string | null;
 }
 
-export type ThemeElementBand = "top" | "middle" | "bottom";
+export type SkeletonElementBand = "top" | "middle" | "bottom";
 
-export type ThemeElementContentKind = "text" | "image";
+export type SkeletonElementContentKind = "text" | "image";
 
-export type ThemeElementTextSource =
+export type SkeletonElementTextSource =
   | "title"
   | "interest_heading"
   | "overview_bullets"
   | "canonical_url";
 
-export type ThemeElementAlignment = "left" | "center" | "right";
+export type SkeletonElementAlignment = "left" | "center" | "right";
 
-export interface ThemeElementCreateRequest {
+export interface SkeletonElementCreateRequest {
   name: string;
-  band: ThemeElementBand;
-  content_kind: ThemeElementContentKind;
+  band: SkeletonElementBand;
+  content_kind: SkeletonElementContentKind;
   sort_order?: number | null;
   rectangle_color?: string | null;
   rectangle_opacity?: number | null;
   rectangle_radius?: number | null;
-  text_source?: ThemeElementTextSource | null;
+  text_source?: SkeletonElementTextSource | null;
   font_family?: string | null;
   font_size?: number | null;
   font_color?: string | null;
@@ -363,19 +363,19 @@ export interface ThemeElementCreateRequest {
   underline?: boolean | null;
   strikethrough?: boolean | null;
   font_weight?: number | null;
-  alignment?: ThemeElementAlignment | null;
+  alignment?: SkeletonElementAlignment | null;
   image_asset_ref?: string | null;
 }
 
-export interface ThemeElementPatchRequest {
+export interface SkeletonElementPatchRequest {
   name?: string | null;
-  band?: ThemeElementBand | null;
-  content_kind?: ThemeElementContentKind | null;
+  band?: SkeletonElementBand | null;
+  content_kind?: SkeletonElementContentKind | null;
   sort_order?: number | null;
   rectangle_color?: string | null;
   rectangle_opacity?: number | null;
   rectangle_radius?: number | null;
-  text_source?: ThemeElementTextSource | null;
+  text_source?: SkeletonElementTextSource | null;
   font_family?: string | null;
   font_size?: number | null;
   font_color?: string | null;
@@ -384,21 +384,21 @@ export interface ThemeElementPatchRequest {
   underline?: boolean | null;
   strikethrough?: boolean | null;
   font_weight?: number | null;
-  alignment?: ThemeElementAlignment | null;
+  alignment?: SkeletonElementAlignment | null;
   image_asset_ref?: string | null;
 }
 
-export interface ThemeElementReadResponse {
+export interface SkeletonElementReadResponse {
   id: string;
-  theme_id: string;
-  band: ThemeElementBand;
+  skeleton_id: string;
+  band: SkeletonElementBand;
   sort_order: number;
-  content_kind: ThemeElementContentKind;
+  content_kind: SkeletonElementContentKind;
   name: string;
   rectangle_color: string | null;
   rectangle_opacity: number;
   rectangle_radius: number;
-  text_source: ThemeElementTextSource | null;
+  text_source: SkeletonElementTextSource | null;
   font_family: string | null;
   font_size: number | null;
   font_color: string | null;
@@ -407,92 +407,92 @@ export interface ThemeElementReadResponse {
   underline: boolean;
   strikethrough: boolean;
   font_weight: number | null;
-  alignment: ThemeElementAlignment | null;
+  alignment: SkeletonElementAlignment | null;
   image_asset_ref: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type ThemeSampleBlockReason = "overlap" | "missing_asset" | "measure_error";
+export type SkeletonSampleBlockReason = "overlap" | "missing_asset" | "measure_error";
 
-export interface ThemeSampleRequest {
+export interface SkeletonSampleRequest {
   source_item_id: string;
 }
 
-export interface ThemeSampleOverlap {
-  band_a: ThemeElementBand;
-  band_b: ThemeElementBand;
+export interface SkeletonSampleOverlap {
+  band_a: SkeletonElementBand;
+  band_b: SkeletonElementBand;
   element_ids: string[];
 }
 
-export interface ThemeSampleResponse {
+export interface SkeletonSampleResponse {
   preview_id: string;
   blocked: boolean;
-  block_reason: ThemeSampleBlockReason | null;
+  block_reason: SkeletonSampleBlockReason | null;
   detail: string | null;
-  overlaps: ThemeSampleOverlap[];
+  overlaps: SkeletonSampleOverlap[];
 }
 
-export interface ThemePreviewElementRequest extends ThemeElementCreateRequest {
+export interface SkeletonPreviewElementRequest extends SkeletonElementCreateRequest {
   preview_text?: string | null;
 }
 
-export interface ThemePreviewRequest {
-  status?: ThemeStatus;
+export interface SkeletonPreviewRequest {
+  status?: SkeletonStatus;
   page_margin?: number;
   element_gap?: number;
   element_margin?: number;
   background_kind?: BackgroundKind;
   background_color?: string | null;
-  background_gradient?: ThemeGradient | null;
+  background_gradient?: SkeletonGradient | null;
   background_asset_ref?: string | null;
-  elements?: ThemePreviewElementRequest[];
+  elements?: SkeletonPreviewElementRequest[];
 }
 
-export interface ThemePreviewResponse {
+export interface SkeletonPreviewResponse {
   blocked: boolean;
-  block_reason: ThemeSampleBlockReason | null;
+  block_reason: SkeletonSampleBlockReason | null;
   detail: string | null;
-  overlaps: ThemeSampleOverlap[];
+  overlaps: SkeletonSampleOverlap[];
   image_png_base64: string;
 }
 
-export interface ThemeImageAlbumResponse {
+export interface SkeletonImageAlbumResponse {
   album_id: string;
   name: string;
   asset_refs: string[];
 }
 
-export interface ThemeDefaultImagesResponse {
-  albums: ThemeImageAlbumResponse[];
+export interface SkeletonDefaultImagesResponse {
+  albums: SkeletonImageAlbumResponse[];
 }
 
-export interface ThemeFontFamilyResponse {
+export interface SkeletonFontFamilyResponse {
   family_id: string;
   name: string;
   category: string;
 }
 
-export interface ThemeFontFamiliesResponse {
-  families: ThemeFontFamilyResponse[];
+export interface SkeletonFontFamiliesResponse {
+  families: SkeletonFontFamilyResponse[];
   fallback_name: string;
 }
 
-export interface ThemeReadResponse {
+export interface SkeletonReadResponse {
   id: string;
   name: string;
   slug: string;
   advertisement_type: AdvertisementType;
   template_key: string | null;
-  status: ThemeStatus;
+  status: SkeletonStatus;
   page_margin: number;
   element_gap: number;
   element_margin: number;
   background_kind: BackgroundKind;
   background_color: string | null;
-  background_gradient: ThemeGradient | null;
+  background_gradient: SkeletonGradient | null;
   background_asset_ref: string | null;
-  elements: ThemeElementReadResponse[];
+  elements: SkeletonElementReadResponse[];
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -543,70 +543,70 @@ export interface OpsUserResetPasswordRequest {
   new_password: string;
 }
 
-export type UnitImageLicense = "cc0" | "public_domain" | "owned" | "licensed";
+export type SlideImageLicense = "cc0" | "public_domain" | "owned" | "licensed";
 
-export type UnitImageMediaType = "svg" | "png" | "jpeg";
+export type SlideImageMediaType = "svg" | "png" | "jpeg";
 
-export type UnitImageIntake = "upload" | "url";
+export type SlideImageIntake = "upload" | "url";
 
-export interface UnitElementTextReadResponse {
-  theme_element_id: string;
+export interface SlideElementTextReadResponse {
+  skeleton_element_id: string;
   value: string;
 }
 
-export interface UnitImageReadResponse {
+export interface SlideImageReadResponse {
   id: string;
   position: number;
   relative_path: string;
-  media_type: UnitImageMediaType;
+  media_type: SlideImageMediaType;
   byte_size: number;
   width: number | null;
   height: number | null;
   alt_text: string | null;
-  license: UnitImageLicense;
+  license: SlideImageLicense;
   source: string;
   license_note: string;
-  intake: UnitImageIntake;
+  intake: SlideImageIntake;
   thumbnail_path: string | null;
 }
 
-export type UnitTextStatus = "live" | "draft";
+export type SlideTextStatus = "live" | "draft";
 
-export interface UnitReadResponse {
+export interface SlideReadResponse {
   id: string;
   position: number;
   name: string;
-  text_status: UnitTextStatus;
-  texts: UnitElementTextReadResponse[];
-  draft_texts: UnitElementTextReadResponse[];
-  excluded_unit_ids: string[];
-  images: UnitImageReadResponse[];
+  text_status: SlideTextStatus;
+  texts: SlideElementTextReadResponse[];
+  draft_texts: SlideElementTextReadResponse[];
+  excluded_slide_ids: string[];
+  images: SlideImageReadResponse[];
 }
 
-export interface SourceListItemResponse {
+export interface CarouselListItemResponse {
   id: string;
-  theme_id: string;
+  skeleton_id: string;
   name: string;
   slug: string;
-  unit_count: number;
+  slide_count: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface SourceReadResponse {
+export interface CarouselReadResponse {
   id: string;
-  theme_id: string;
+  skeleton_id: string;
   name: string;
   slug: string;
   inspiration: string;
   rules: string;
-  live_unit_count: number;
+  live_slide_count: number;
   created_at: string;
   updated_at: string;
-  units: UnitReadResponse[];
+  slides: SlideReadResponse[];
 }
 
-export interface SourceGuidancePatchRequest {
+export interface CarouselGuidancePatchRequest {
   inspiration: string;
   rules: string;
 }
@@ -616,55 +616,55 @@ export interface TextGenerationStatusResponse {
   detail: string;
 }
 
-export interface UnitAcceptTextRequest {
-  texts: UnitElementTextWrite[];
+export interface SlideAcceptTextRequest {
+  texts: SlideElementTextWrite[];
 }
 
-export interface SourceCreateRequest {
+export interface CarouselCreateRequest {
   name: string;
-  theme_id: string;
+  skeleton_id: string;
 }
 
-export interface SourcePatchRequest {
+export interface CarouselPatchRequest {
   name: string;
 }
 
-export interface UnitElementTextWrite {
-  theme_element_id: string;
+export interface SlideElementTextWrite {
+  skeleton_element_id: string;
   value: string;
 }
 
-export interface UnitWriteRequest {
+export interface SlideWriteRequest {
   name: string;
-  texts: UnitElementTextWrite[];
-  excluded_unit_ids: string[];
+  texts: SlideElementTextWrite[];
+  excluded_slide_ids: string[];
 }
 
-export interface UnitPreviewRequest {
-  texts: UnitElementTextWrite[];
-  unit_id: string | null;
+export interface SlidePreviewRequest {
+  texts: SlideElementTextWrite[];
+  slide_id: string | null;
 }
 
-export interface UnitImageMetadataPatch {
+export interface SlideImageMetadataPatch {
   alt_text: string | null;
-  license: UnitImageLicense;
+  license: SlideImageLicense;
   source: string;
   license_note: string;
 }
 
-export interface UnitImageImportRequest {
+export interface SlideImageImportRequest {
   url: string;
   alt_text: string | null;
-  license: UnitImageLicense;
+  license: SlideImageLicense;
   source: string;
   license_note: string;
 }
 
-export interface UnitImageCreatePayload {
+export interface SlideImageCreatePayload {
   kind: "file" | "url";
   file: File | null;
   url: string | null;
-  license: UnitImageLicense;
+  license: SlideImageLicense;
   source: string;
   license_note: string;
 }

@@ -217,19 +217,19 @@ lifecycle values in `campaign_status_lifecycle`):
 
 Create persists a definition with status **`ready`**. `other` is
 rejected by the API (`400`). `spotmu` and `spotmu_test` share the
-create flow (name, carousel, platforms, ≥1 Spotmu interest, a theme,
-and one source bound to that theme). `spotmu` also requires ≥1 linked
+create flow (name, carousel, platforms, ≥1 Spotmu interest, a skeleton,
+and one carousel bound to that skeleton). `spotmu` also requires ≥1 linked
 account; `spotmu_test` may persist with an empty `account_ids` list
 (provided accounts still must match the selected platforms). `slug`
 and `hashtag` (`#slug`) are unique and derived from `name`. Platforms
 are a JSONB list of `instagram` / `tiktok`. Accounts and Spotmu
 interests live on `campaign_accounts` and `campaign_interests`.
 
-`campaigns.theme_id` and `campaigns.source_id` are nullable.
+`campaigns.skeleton_id` and `campaigns.carousel_id` are nullable.
 Campaigns saved before `campaign_theme_source` keep both null. They
-are not deleted and they are not given a theme. `POST .../run` is
-400 until both are set. A source on a different theme is 400. Run
-loads live units only, calls `assert_unit_pick_allowed` for each
+are not deleted and they are not given a skeleton. `POST .../run` is
+400 until both are set. A carousel on a different skeleton is 400. Run
+loads live slides only, calls `assert_slide_pick_allowed` for each
 carousel, and does not generate text. The latest assembly is
 `campaign_carousels` and `campaign_carousel_slides`. A later run
 replaces that assembly.
@@ -252,16 +252,16 @@ Allowed transitions (also `CAMPAIGN_STATUS_TRANSITIONS`):
 
 `ready` cannot jump to `finished`. `finished` is terminal.
 
-## Theme
+## Skeleton
 
-`themes` (Alembic `themes_create`, status in `themes_status`, spacing
+`skeletons` (Alembic `themes_create`, status in `themes_status`, spacing
 in `themes_spacing`, background in `themes_background`) stores visual
 styling for carousels. Short video is not implemented. The table reuses
 `advertisement_type` (`carousel` only).
 
 | Enum | Values |
 |---|---|
-| `theme_status` | `draft`, `live` |
+| `skeleton_status` | `draft`, `live` |
 | `background_kind` | `picture`, `color`, `gradient`. Texture is dropped for now and may return as a default album of texture images. |
 
 | Column | Notes |
@@ -269,8 +269,8 @@ styling for carousels. Short video is not implemented. The table reuses
 | `name` | Required, operator-facing |
 | `slug` | Unique, derived from `name` |
 | `advertisement_type` | `carousel` |
-| `template_key` | Optional unique link to a carousel generator (`spotmu_paper_v1`, `spotmu_bold_v1`). Null when the theme is not tied to a generator yet |
-| `status` | `ThemeStatus`. Default `draft`. A name-only create stores `draft`. `POST /api/v1/themes` stores a present `status`. `PATCH /api/v1/themes/{id}` may set `draft` or `live` |
+| `template_key` | Optional unique link to a carousel generator (`spotmu_paper_v1`, `spotmu_bold_v1`). Null when the skeleton is not tied to a generator yet |
+| `status` | `SkeletonStatus`. Default `draft`. A name-only create stores `draft`. `POST /api/v1/skeletons` stores a present `status`. `PATCH /api/v1/skeletons/{id}` may set `draft` or `live` |
 | `page_margin` | One integer, applied on every edge of the frame. Default **96**. `PATCH` may change it. Negative is HTTP 400 |
 | `element_gap` | One integer, applied between elements. Default **0**. Negative is HTTP 400 |
 | `element_margin` | One integer, applied on every edge of an element rectangle. Default **0**. Negative is HTTP 400 |
@@ -280,85 +280,85 @@ styling for carousels. Short video is not implemented. The table reuses
 | `background_asset_ref` | Nullable text. Relative path, no `..`, no scheme, suffix `.svg`, `.png`, `.jpg`, or `.jpeg` |
 | `created_by` | Nullable `ops_users` id |
 
-The ops console does not show or edit `status`. Campaign theme
-pickers, theme samples, and `POST /api/v1/generate/carousel` do not
-filter on it, so every saved theme stays usable. The column remains:
+The ops console does not show or edit `status`. Campaign skeleton
+pickers, skeleton samples, and `POST /api/v1/generate/carousel` do not
+filter on it, so every saved skeleton stays usable. The column remains:
 a name-only create still stores `draft`, and a Live row still
 requires the background payload for its kind.
 
-`POST /api/v1/themes` requires a non-empty name. Omitted frame fields
+`POST /api/v1/skeletons` requires a non-empty name. Omitted frame fields
 use the defaults. A name-only create stores `page_margin` 96,
 `element_gap` 0, and `element_margin` 0, kind `color`, color
 `#F6F1E8`, null gradient and asset ref, status `draft`, and zero
 elements. Present `status`, spacing, background, and `elements`
 fields are stored in that same write. A Live create requires the
 payload for its kind. A validation error stores no row.
-`DELETE /api/v1/themes/{id}` removes the theme and its elements.
-Another table that referenced the theme would block the delete.
-`POST /api/v1/themes/preview` renders one 1080 frame from a frame and
+`DELETE /api/v1/skeletons/{id}` removes the skeleton and its elements.
+Another table that referenced the skeleton would block the delete.
+`POST /api/v1/skeletons/preview` renders one 1080 frame from a frame and
 element payload and returns the PNG inline. Text elements draw
 `preview_text` when that field is set. The string is not stored. The
-request does not take a source item. It does not insert a theme,
+request does not take a source item. It does not insert a skeleton,
 artifact, or post job, and it does not write a preview file. Readers
-may call it. `POST /api/v1/themes/{id}/samples` still renders a saved
-theme and writes a preview file; that route stays admin-only.
-`PATCH /api/v1/themes/{id}` may set any of those integers and the
+may call it. `POST /api/v1/skeletons/{id}/samples` still renders a saved
+skeleton and writes a preview file; that route stays admin-only.
+`PATCH /api/v1/skeletons/{id}` may set any of those integers and the
 background columns; omitted fields stay as they are. Zero is allowed.
 A negative spacing value is HTTP 400 and does not write. A Draft may
 save a background kind with that kind's payload still empty. A row
 that is Live after the patch requires the payload for its kind: a
 color hex, a valid gradient, or a non-empty asset ref for `picture`.
 Readers may
-`GET /api/v1/themes` and `/api/v1/themes/{id}`; writes, including
+`GET /api/v1/skeletons` and `/api/v1/skeletons/{id}`; writes, including
 `PATCH`, stay admin-only via the existing ops RBAC gate
 (`require_authenticated_ops_operator` plus the reader mutation check).
 Upgrade seeds Spotmu Paper v1 and Spotmu Bold v1, then backfills every
 existing row — those two included — to `draft`, spacing 96 / 0 / 0, and
 paper background `#F6F1E8`.
-Creating a theme does not render slides or attach a campaign.
+Creating a skeleton does not render slides or attach a campaign.
 Both `draft` → `live` and `live` → `draft` are allowed. Layout math is
 not applied here.
 
-## Theme elements (`theme_elements`)
+## Skeleton elements (`skeleton_elements`)
 
 Alembic `theme_elements` (parent `themes_background`). One row is one
 full-width element. There is no `x`, `y`, or `width` column.
-`theme_id` references `themes` **ON DELETE CASCADE**. Unique
-(`theme_id`, `band`, `sort_order`). `rectangle_color` null means the
+`skeleton_id` references `skeletons` **ON DELETE CASCADE**. Unique
+(`skeleton_id`, `band`, `sort_order`). `rectangle_color` null means the
 rectangle is clear.
 
-`GET /api/v1/themes/{id}` includes `elements` ordered by band
+`GET /api/v1/skeletons/{id}` includes `elements` ordered by band
 (`top`, `middle`, `bottom`) then `sort_order`. Writes are
-`POST /api/v1/themes/{theme_id}/elements`,
-`PATCH /api/v1/themes/{theme_id}/elements/{element_id}`, and
+`POST /api/v1/skeletons/{skeleton_id}/elements`,
+`PATCH /api/v1/skeletons/{skeleton_id}/elements/{element_id}`, and
 `DELETE` on that element path. They use the same admin write gate as
-`POST /api/v1/themes`. `sort_order` is 0-based within the band; the
+`POST /api/v1/skeletons`. `sort_order` is 0-based within the band; the
 server compacts it after a create, a move, or a delete. Unknown
 `text_source` values, `x` / `y` / `width`, and image refs that are not
 svg, png, or jpeg are rejected. This does not measure text or read
 image bytes.
 
-`POST /api/v1/themes/{id}/duplicate` inserts a new Draft. The name is
+`POST /api/v1/skeletons/{id}/duplicate` inserts a new Draft. The name is
 `Copy of {name}`. The slug comes from the existing slug helper.
 `template_key` is null. Spacing, background, and every element are
 copied; element ids are new and band, order, and content stay the
-same. The source row is not updated.
+same. The carousel row is not updated.
 
 | Enum | Values |
 |---|---|
-| `theme_element_band` | `top`, `middle`, `bottom` |
-| `theme_element_content_kind` | `text`, `image` |
-| `theme_element_text_source` | `title`, `interest_heading`, `overview_bullets`, `canonical_url` |
-| `theme_element_alignment` | `left`, `center`, `right` |
+| `skeleton_element_band` | `top`, `middle`, `bottom` |
+| `skeleton_element_content_kind` | `text`, `image` |
+| `skeleton_element_text_source` | `title`, `interest_heading`, `overview_bullets`, `canonical_url` |
+| `skeleton_element_alignment` | `left`, `center`, `right` |
 
 `text_source` maps to `source_items.title`, `.interest_heading`,
-`.overview_bullets`, and `.canonical_url`. No other source keys.
+`.overview_bullets`, and `.canonical_url`. No other carousel keys.
 
-Check `ck_theme_elements_content`:
+Check `ck_skeleton_elements_content`:
 
 - `text` requires a non-blank `font_family`, `font_size` greater than
   0, a non-blank `font_color`, and `alignment`. `text_source` may be
-  null. Unit text is stored by element id. Generation labels the
+  null. Slide text is stored by element id. Generation labels the
   element by `name`. Spotmu source-item preview reads `text_source`
   when it is set, and uses the element name when it is null.
 - `bold`, `italic`, `underline`, and `strikethrough` are not null and
@@ -369,65 +369,65 @@ Check `ck_theme_elements_content`:
   scheme, suffix `.svg`, `.png`, `.jpg`, or `.jpeg` (same rule as
   `background_asset_ref`).
 
-## Content sources (`sources`)
+## Content carousels (`carousels`)
 
 Alembic `sources_default_album`, then `sources_resource_files`, then
 `sources_theme_bound`, then `unit_element_texts`, then
 `unit_exclusions`, then `unit_text_drafts`, then
-`campaign_theme_source`. A source requires
-`theme_id`. `kind` and
-`resource_files` are gone. A unit keeps its id and has a required
-`name`. `unit_images` allows one row per unit.
-`unit_element_texts` stores one value per theme text element
-(`unit_id`, `theme_element_id`, `value`), unique on that pair, and
-cascades when the unit or the element is deleted. `units.free_text`,
-`units.tags`, and `unit_fields` are gone. `unit_exclusions` stores
-the other unit ids a unit cannot be shown with. Each pair is written
-in both directions (`unit_id`, `excluded_unit_id`), unique on that
-pair, and both foreign keys cascade when either unit is deleted. A
-unit cannot exclude itself, and the other id must be a unit in the
-same source. A pick that contains either direction of a stored pair
-is refused. `sources.inspiration` and `sources.rules` are text the
-operator saves for drafting. `units.text_status` is `live` or
-`draft`. Existing units stay `live`. Generate writes
-`unit_element_texts.draft_value` and sets the unit to `draft`. The
-approved `value` stays until a person accepts the draft. A draft unit
+`campaign_theme_source`. A carousel requires
+`skeleton_id`. `kind` and
+`resource_files` are gone. A slide keeps its id and has a required
+`name`. `slide_images` allows one row per slide.
+`slide_element_texts` stores one value per skeleton text element
+(`slide_id`, `skeleton_element_id`, `value`), unique on that pair, and
+cascades when the slide or the element is deleted. `slides.free_text`,
+`slides.tags`, and `slide_fields` are gone. `slide_exclusions` stores
+the other slide ids a slide cannot be shown with. Each pair is written
+in both directions (`slide_id`, `excluded_slide_id`), unique on that
+pair, and both foreign keys cascade when either slide is deleted. A
+slide cannot exclude itself, and the other id must be a slide in the
+same carousel. A pick that contains either direction of a stored pair
+is refused. `carousels.inspiration` and `carousels.rules` are text the
+operator saves for drafting. `slides.text_status` is `live` or
+`draft`. Existing slides stay `live`. Generate writes
+`slide_element_texts.draft_value` and sets the slide to `draft`. The
+approved `value` stays until a person accepts the draft. A draft slide
 does not count as live. Accept copies the draft onto `value`, clears
-the draft, and sets `text_status` to `live`. A theme that needs an
+the draft, and sets `text_status` to `live`. A skeleton that needs an
 image still requires that image before accept. Images stay a manual
 upload. Generate uses `TEXT_GENERATION_PROVIDER` (`openai` or
 `fake`). `openai` calls api.openai.com when `OPENAI_API_KEY` is set.
 `OPENAI_MODEL` defaults to `gpt-4o-mini`. An empty key leaves Generate
 off. The Default album, slug `default`, stays and is bound to
-Spotmu Paper v1 when that theme exists.
+Spotmu Paper v1 when that skeleton exists.
 
 | Enum | Values |
 |---|---|
-| `unit_image_media_type` | `svg`, `png`, `jpeg` |
-| `unit_image_license` | `cc0`, `public_domain`, `owned`, `licensed` |
-| `unit_image_intake` | `upload`, `url` |
-| `unit_text_status` | `live`, `draft` |
+| `slide_image_media_type` | `svg`, `png`, `jpeg` |
+| `slide_image_license` | `cc0`, `public_domain`, `owned`, `licensed` |
+| `slide_image_intake` | `upload`, `url` |
+| `slide_text_status` | `live`, `draft` |
 
-`unit_images.license_note` is empty unless `license` is `licensed`, in
+`slide_images.license_note` is empty unless `license` is `licensed`, in
 which case it is required. `relative_path` is unique. SVG rows have
-null width, height, and thumbnail. Readers may GET a source, the
+null width, height, and thumbnail. Readers may GET a carousel, the
 original file, and a thumbnail when one exists. They may also
-`POST /api/v1/sources/{id}/units/preview`, which returns one inline
-PNG of the source theme filled with the submitted text and, when the
-theme uses an image, the unit's saved file. That route writes no unit,
+`POST /api/v1/carousels/{id}/slides/preview`, which returns one inline
+PNG of the carousel skeleton filled with the submitted text and, when the
+skeleton uses an image, the slide's saved file. That route writes no slide,
 artifact, post job, or preview file. Admins may create, rename, and
-delete sources and units, edit the unit name, one text value per
-theme text element, and the units in the same source it cannot be
+delete carousels and slides, edit the slide name, one text value per
+skeleton text element, and the slides in the same carousel it cannot be
 shown with, save inspiration and rules, generate a draft, accept
 that draft, edit license metadata, upload SVG/PNG/JPEG (8 MB),
-and import one http(s) URL. An image is required when the theme has a
+and import one http(s) URL. An image is required when the skeleton has a
 picture background or an image element, and refused when it does not.
 New bytes go under `ARTIFACT_STORAGE_DIR` at
-`albums/<source_id>/<unit_id>/<image_id>.<ext>`. A failure writes no
-row and no file. Delete of an image, unit, or album is 409 while a
-theme or artifact stores that path, including an uploaded
-`albums/…` path and a packaged `theme-defaults/…` path. The theme
-picture and image controls list those albums, then units that have an
+`albums/<carousel_id>/<slide_id>/<image_id>.<ext>`. A failure writes no
+row and no file. Delete of an image, slide, or album is 409 while a
+skeleton or artifact stores that path, including an uploaded
+`albums/…` path and a packaged `theme-defaults/…` path. The skeleton
+picture and image controls list those albums, then slides that have an
 image, then the images. Pick and Shuffle store one concrete path.
-Samples and theme live preview read that path from the package for
+Samples and skeleton live preview read that path from the package for
 `theme-defaults/` and from `ARTIFACT_STORAGE_DIR` otherwise.

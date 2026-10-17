@@ -10,26 +10,26 @@ import type {
   BrandReadResponse,
   CampaignCreateRequest,
   CampaignReadResponse,
-  ThemeCreateRequest,
-  ThemeElementCreateRequest,
-  ThemeElementPatchRequest,
-  ThemeElementReadResponse,
-  ThemePreviewRequest,
-  ThemePreviewResponse,
-  ThemeDefaultImagesResponse,
-  ThemeFontFamiliesResponse,
-  ThemePatchRequest,
-  ThemeReadResponse,
-  ThemeSampleRequest,
-  ThemeSampleResponse,
-  UnitImageCreatePayload,
-  UnitImageImportRequest,
-  UnitImageLicense,
-  UnitImageMetadataPatch,
-  UnitImageReadResponse,
-  UnitPreviewRequest,
-  UnitReadResponse,
-  UnitWriteRequest,
+  SkeletonCreateRequest,
+  SkeletonElementCreateRequest,
+  SkeletonElementPatchRequest,
+  SkeletonElementReadResponse,
+  SkeletonPreviewRequest,
+  SkeletonPreviewResponse,
+  SkeletonDefaultImagesResponse,
+  SkeletonFontFamiliesResponse,
+  SkeletonPatchRequest,
+  SkeletonReadResponse,
+  SkeletonSampleRequest,
+  SkeletonSampleResponse,
+  SlideImageCreatePayload,
+  SlideImageImportRequest,
+  SlideImageLicense,
+  SlideImageMetadataPatch,
+  SlideImageReadResponse,
+  SlidePreviewRequest,
+  SlideReadResponse,
+  SlideWriteRequest,
   CarouselGenerateRequest,
   ClusterAgentSummaryResponse,
   ClusterCreateRequest,
@@ -47,15 +47,15 @@ import type {
   OpsUserRolePatchRequest,
   PostJobReadResponse,
   SchedulePostJobRequest,
-  SourceCreateRequest,
-  SourceGuidancePatchRequest,
+  CarouselCreateRequest,
+  CarouselGuidancePatchRequest,
   TextGenerationStatusResponse,
-  UnitAcceptTextRequest,
+  SlideAcceptTextRequest,
   SourceItemCreateRequest,
   SourceItemReadResponse,
-  SourceListItemResponse,
-  SourcePatchRequest,
-  SourceReadResponse,
+  CarouselListItemResponse,
+  CarouselPatchRequest,
+  CarouselReadResponse,
   SpotmuInterestSearchHit,
   SteerActionReadResponse,
 } from "./types";
@@ -211,31 +211,31 @@ export async function runCampaign(campaignId: string): Promise<CampaignReadRespo
   return requestJson<CampaignReadResponse>("POST", `/api/v1/campaigns/${campaignId}/run`);
 }
 
-export async function listAlbums(): Promise<SourceListItemResponse[]> {
+export async function listCarousels(): Promise<CarouselListItemResponse[]> {
 
-  return requestJson<SourceListItemResponse[]>("GET", "/api/v1/sources");
+  return requestJson<CarouselListItemResponse[]>("GET", "/api/v1/carousels");
 }
 
-export async function fetchSourceById(sourceId: string): Promise<SourceReadResponse> {
+export async function fetchCarouselById(sourceId: string): Promise<CarouselReadResponse> {
 
-  return requestJson<SourceReadResponse>("GET", `/api/v1/sources/${sourceId}`);
+  return requestJson<CarouselReadResponse>("GET", `/api/v1/carousels/${sourceId}`);
 }
 
-export async function createAlbum(
-  sourceCreateRequest: SourceCreateRequest,
-): Promise<SourceReadResponse> {
+export async function createCarousel(
+  sourceCreateRequest: CarouselCreateRequest,
+): Promise<CarouselReadResponse> {
 
-  return requestJson<SourceReadResponse>("POST", "/api/v1/sources", sourceCreateRequest);
+  return requestJson<CarouselReadResponse>("POST", "/api/v1/carousels", sourceCreateRequest);
 }
 
-export async function renameSource(
+export async function renameCarousel(
   sourceId: string,
-  sourcePatchRequest: SourcePatchRequest,
-): Promise<SourceReadResponse> {
+  sourcePatchRequest: CarouselPatchRequest,
+): Promise<CarouselReadResponse> {
 
-  return requestJson<SourceReadResponse>(
+  return requestJson<CarouselReadResponse>(
     "PATCH",
-    `/api/v1/sources/${sourceId}`,
+    `/api/v1/carousels/${sourceId}`,
     sourcePatchRequest,
   );
 }
@@ -244,96 +244,96 @@ export async function fetchTextGenerationStatus(): Promise<TextGenerationStatusR
 
   return requestJson<TextGenerationStatusResponse>(
     "GET",
-    "/api/v1/sources/text-generation",
+    "/api/v1/carousels/text-generation",
   );
 }
 
-export async function patchSourceGuidance(
+export async function patchCarouselGuidance(
   sourceId: string,
-  guidanceRequest: SourceGuidancePatchRequest,
-): Promise<SourceReadResponse> {
+  guidanceRequest: CarouselGuidancePatchRequest,
+): Promise<CarouselReadResponse> {
 
-  return requestJson<SourceReadResponse>(
+  return requestJson<CarouselReadResponse>(
     "PATCH",
-    `/api/v1/sources/${sourceId}/guidance`,
+    `/api/v1/carousels/${sourceId}/guidance`,
     guidanceRequest,
   );
 }
 
-export async function generateSourceUnit(sourceId: string): Promise<UnitReadResponse> {
+export async function generateCarouselSlide(sourceId: string): Promise<SlideReadResponse> {
 
-  return requestJson<UnitReadResponse>(
+  return requestJson<SlideReadResponse>(
     "POST",
-    `/api/v1/sources/${sourceId}/units/generate`,
+    `/api/v1/carousels/${sourceId}/slides/generate`,
   );
 }
 
-export async function generateUnitText(
+export async function generateSlideText(
   sourceId: string,
-  unitId: string,
-): Promise<UnitReadResponse> {
+  slideId: string,
+): Promise<SlideReadResponse> {
 
-  return requestJson<UnitReadResponse>(
+  return requestJson<SlideReadResponse>(
     "POST",
-    `/api/v1/sources/${sourceId}/units/${unitId}/generate`,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/generate`,
   );
 }
 
-export async function acceptUnitText(
+export async function acceptSlideText(
   sourceId: string,
-  unitId: string,
-  acceptRequest: UnitAcceptTextRequest,
-): Promise<UnitReadResponse> {
+  slideId: string,
+  acceptRequest: SlideAcceptTextRequest,
+): Promise<SlideReadResponse> {
 
-  return requestJson<UnitReadResponse>(
+  return requestJson<SlideReadResponse>(
     "POST",
-    `/api/v1/sources/${sourceId}/units/${unitId}/accept-text`,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/accept-text`,
     acceptRequest,
   );
 }
 
-export async function deleteSource(sourceId: string): Promise<void> {
+export async function deleteCarousel(sourceId: string): Promise<void> {
 
-  await requestJson<undefined>("DELETE", `/api/v1/sources/${sourceId}`);
+  await requestJson<undefined>("DELETE", `/api/v1/carousels/${sourceId}`);
 }
 
-export async function createSourceUnit(
+export async function createCarouselSlide(
   sourceId: string,
-  unitWriteRequest: UnitWriteRequest,
-): Promise<UnitReadResponse> {
+  slideWriteRequest: SlideWriteRequest,
+): Promise<SlideReadResponse> {
 
-  return requestJson<UnitReadResponse>(
+  return requestJson<SlideReadResponse>(
     "POST",
-    `/api/v1/sources/${sourceId}/units`,
-    unitWriteRequest,
+    `/api/v1/carousels/${sourceId}/slides`,
+    slideWriteRequest,
   );
 }
 
-interface UnitImageCreateItemJson {
+interface SlideImageCreateItemJson {
   kind: "file" | "url";
   file_index: number | null;
   url: string | null;
-  license: UnitImageLicense;
+  license: SlideImageLicense;
   source: string;
   license_note: string;
 }
 
 /**
- * Create a unit and its image in one multipart call. Disk storage.
+ * Create a slide and its image in one multipart call. Disk storage.
  *
- * @param sourceId - Source UUID
- * @param unitWriteRequest - Name and one value per theme text element
- * @param images - The one image when the theme requires one
- * @returns The created unit, including the stored image
+ * @param sourceId - Carousel UUID
+ * @param slideWriteRequest - Name and one value per skeleton text element
+ * @param images - The one image when the skeleton requires one
+ * @returns The created slide, including the stored image
  */
-export async function createUnitWithImages(
+export async function createSlideWithImages(
   sourceId: string,
-  unitWriteRequest: UnitWriteRequest,
-  images: UnitImageCreatePayload[],
-): Promise<UnitReadResponse> {
+  slideWriteRequest: SlideWriteRequest,
+  images: SlideImageCreatePayload[],
+): Promise<SlideReadResponse> {
 
   const formData: FormData = new FormData();
-  const imageItems: UnitImageCreateItemJson[] = [];
+  const imageItems: SlideImageCreateItemJson[] = [];
   let fileIndex: number = 0;
 
   for (const image of images) {
@@ -364,76 +364,76 @@ export async function createUnitWithImages(
     }
   }
 
-  formData.append("unit_json", JSON.stringify({
-    name: unitWriteRequest.name,
-    texts: unitWriteRequest.texts,
-    excluded_unit_ids: unitWriteRequest.excluded_unit_ids,
+  formData.append("slide_json", JSON.stringify({
+    name: slideWriteRequest.name,
+    texts: slideWriteRequest.texts,
+    excluded_slide_ids: slideWriteRequest.excluded_slide_ids,
     images: imageItems,
   }));
 
-  return requestForm<UnitReadResponse>(
+  return requestForm<SlideReadResponse>(
     "POST",
-    `/api/v1/sources/${sourceId}/units/with-images`,
+    `/api/v1/carousels/${sourceId}/slides/with-images`,
     formData,
   );
 }
 
-export async function patchSourceUnit(
+export async function patchCarouselSlide(
   sourceId: string,
-  unitId: string,
-  unitWriteRequest: UnitWriteRequest,
-): Promise<UnitReadResponse> {
+  slideId: string,
+  slideWriteRequest: SlideWriteRequest,
+): Promise<SlideReadResponse> {
 
-  return requestJson<UnitReadResponse>(
+  return requestJson<SlideReadResponse>(
     "PATCH",
-    `/api/v1/sources/${sourceId}/units/${unitId}`,
-    unitWriteRequest,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}`,
+    slideWriteRequest,
   );
 }
 
-export async function deleteSourceUnit(sourceId: string, unitId: string): Promise<void> {
+export async function deleteCarouselSlide(sourceId: string, slideId: string): Promise<void> {
 
   await requestJson<undefined>(
     "DELETE",
-    `/api/v1/sources/${sourceId}/units/${unitId}`,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}`,
   );
 }
 
-export async function patchUnitImageMetadata(
+export async function patchSlideImageMetadata(
   sourceId: string,
-  unitId: string,
+  slideId: string,
   imageId: string,
-  imagePatchRequest: UnitImageMetadataPatch,
-): Promise<UnitImageReadResponse> {
+  imagePatchRequest: SlideImageMetadataPatch,
+): Promise<SlideImageReadResponse> {
 
-  return requestJson<UnitImageReadResponse>(
+  return requestJson<SlideImageReadResponse>(
     "PATCH",
-    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}`,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}`,
     imagePatchRequest,
   );
 }
 
-export async function deleteUnitImage(
+export async function deleteSlideImage(
   sourceId: string,
-  unitId: string,
+  slideId: string,
   imageId: string,
 ): Promise<void> {
 
   await requestJson<undefined>(
     "DELETE",
-    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}`,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}`,
   );
 }
 
-export async function uploadUnitImages(
+export async function uploadSlideImages(
   sourceId: string,
-  unitId: string,
+  slideId: string,
   files: File[],
-  imageLicense: UnitImageLicense,
+  imageLicense: SlideImageLicense,
   source: string,
   altText: string,
   licenseNote: string,
-): Promise<UnitImageReadResponse[]> {
+): Promise<SlideImageReadResponse[]> {
 
   const formData: FormData = new FormData();
 
@@ -446,22 +446,22 @@ export async function uploadUnitImages(
   formData.append("alt_text", altText);
   formData.append("license_note", licenseNote);
 
-  return requestForm<UnitImageReadResponse[]>(
+  return requestForm<SlideImageReadResponse[]>(
     "POST",
-    `/api/v1/sources/${sourceId}/units/${unitId}/images`,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/images`,
     formData,
   );
 }
 
-export async function importUnitImage(
+export async function importSlideImage(
   sourceId: string,
-  unitId: string,
-  imageImportRequest: UnitImageImportRequest,
-): Promise<UnitImageReadResponse> {
+  slideId: string,
+  imageImportRequest: SlideImageImportRequest,
+): Promise<SlideImageReadResponse> {
 
-  return requestJson<UnitImageReadResponse>(
+  return requestJson<SlideImageReadResponse>(
     "POST",
-    `/api/v1/sources/${sourceId}/units/${unitId}/images/import`,
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/import`,
     imageImportRequest,
   );
 }
@@ -471,18 +471,18 @@ export async function importUnitImage(
  * is sent with the request. This is not an upload.
  *
  * @param sourceId - Album UUID
- * @param unitId - Unit UUID
+ * @param slideId - Slide UUID
  * @param imageId - Image UUID
  * @returns Path the grid can use as an img src
  */
-export function unitImageFileUrl(
+export function slideImageFileUrl(
   sourceId: string,
-  unitId: string,
+  slideId: string,
   imageId: string,
 ): string {
 
   const requestPath: string =
-    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}/file`;
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}/file`;
 
   return `${resolveApiBaseUrl()}${requestPath}`;
 }
@@ -491,18 +491,18 @@ export function unitImageFileUrl(
  * Thumbnail URL when the row has one. SVG and packaged defaults do not.
  *
  * @param sourceId - Album UUID
- * @param unitId - Unit UUID
+ * @param slideId - Slide UUID
  * @param imageId - Image UUID
  * @returns Path the grid can use as an img src
  */
-export function unitImageThumbnailUrl(
+export function slideImageThumbnailUrl(
   sourceId: string,
-  unitId: string,
+  slideId: string,
   imageId: string,
 ): string {
 
   const requestPath: string =
-    `/api/v1/sources/${sourceId}/units/${unitId}/images/${imageId}/thumbnail`;
+    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}/thumbnail`;
 
   return `${resolveApiBaseUrl()}${requestPath}`;
 }
@@ -511,161 +511,161 @@ export function unitImageThumbnailUrl(
  * Prefer the thumbnail. Fall back to the original file.
  *
  * @param sourceId - Album UUID
- * @param unitId - Unit UUID
+ * @param slideId - Slide UUID
  * @param image - Image row
  * @returns img src for the grid or editor
  */
-export function unitImageDisplayUrl(
+export function slideImageDisplayUrl(
   sourceId: string,
-  unitId: string,
-  image: UnitImageReadResponse,
+  slideId: string,
+  image: SlideImageReadResponse,
 ): string {
 
   if (image.thumbnail_path !== null && image.thumbnail_path !== "") {
-    return unitImageThumbnailUrl(sourceId, unitId, image.id);
+    return slideImageThumbnailUrl(sourceId, slideId, image.id);
   }
 
-  return unitImageFileUrl(sourceId, unitId, image.id);
+  return slideImageFileUrl(sourceId, slideId, image.id);
 }
 
-export async function listThemes(): Promise<ThemeReadResponse[]> {
+export async function listSkeletons(): Promise<SkeletonReadResponse[]> {
 
-  return requestJson<ThemeReadResponse[]>("GET", "/api/v1/themes");
+  return requestJson<SkeletonReadResponse[]>("GET", "/api/v1/skeletons");
 }
 
-export async function fetchThemeById(themeId: string): Promise<ThemeReadResponse> {
+export async function fetchSkeletonById(skeletonId: string): Promise<SkeletonReadResponse> {
 
-  return requestJson<ThemeReadResponse>("GET", `/api/v1/themes/${themeId}`);
+  return requestJson<SkeletonReadResponse>("GET", `/api/v1/skeletons/${skeletonId}`);
 }
 
-export async function fetchThemeDefaultImages(): Promise<ThemeDefaultImagesResponse> {
+export async function fetchSkeletonDefaultImages(): Promise<SkeletonDefaultImagesResponse> {
 
-  return requestJson<ThemeDefaultImagesResponse>("GET", "/api/v1/themes/default-images");
+  return requestJson<SkeletonDefaultImagesResponse>("GET", "/api/v1/skeletons/default-images");
 }
 
-export async function fetchThemeFontFamilies(): Promise<ThemeFontFamiliesResponse> {
+export async function fetchSkeletonFontFamilies(): Promise<SkeletonFontFamiliesResponse> {
 
-  return requestJson<ThemeFontFamiliesResponse>("GET", "/api/v1/themes/font-families");
+  return requestJson<SkeletonFontFamiliesResponse>("GET", "/api/v1/skeletons/font-families");
 }
 
-export async function createTheme(
-  themeCreateRequest: ThemeCreateRequest,
-): Promise<ThemeReadResponse> {
+export async function createSkeleton(
+  skeletonCreateRequest: SkeletonCreateRequest,
+): Promise<SkeletonReadResponse> {
 
-  return requestJson<ThemeReadResponse>(
+  return requestJson<SkeletonReadResponse>(
     "POST",
-    "/api/v1/themes",
-    themeCreateRequest,
+    "/api/v1/skeletons",
+    skeletonCreateRequest,
   );
 }
 
-export async function patchTheme(
-  themeId: string,
-  themePatchRequest: ThemePatchRequest,
-): Promise<ThemeReadResponse> {
+export async function patchSkeleton(
+  skeletonId: string,
+  skeletonPatchRequest: SkeletonPatchRequest,
+): Promise<SkeletonReadResponse> {
 
-  return requestJson<ThemeReadResponse>(
+  return requestJson<SkeletonReadResponse>(
     "PATCH",
-    `/api/v1/themes/${themeId}`,
-    themePatchRequest,
+    `/api/v1/skeletons/${skeletonId}`,
+    skeletonPatchRequest,
   );
 }
 
 /**
- * Copy one theme into a new Draft. The source row is not modified.
+ * Copy one skeleton into a new Draft. The carousel row is not modified.
  *
- * @param themeId - Source theme UUID
- * @returns The new Draft theme
+ * @param skeletonId - Carousel skeleton UUID
+ * @returns The new Draft skeleton
  */
 /**
- * Delete one theme and its elements.
+ * Delete one skeleton and its elements.
  *
- * @param themeId - Theme UUID
- * @returns Nothing when the theme is gone
+ * @param skeletonId - Skeleton UUID
+ * @returns Nothing when the skeleton is gone
  */
-export async function deleteTheme(themeId: string): Promise<void> {
+export async function deleteSkeleton(skeletonId: string): Promise<void> {
 
-  await requestJson<undefined>("DELETE", `/api/v1/themes/${themeId}`);
+  await requestJson<undefined>("DELETE", `/api/v1/skeletons/${skeletonId}`);
 }
 
-export async function duplicateTheme(themeId: string): Promise<ThemeReadResponse> {
+export async function duplicateSkeleton(skeletonId: string): Promise<SkeletonReadResponse> {
 
-  return requestJson<ThemeReadResponse>(
+  return requestJson<SkeletonReadResponse>(
     "POST",
-    `/api/v1/themes/${themeId}/duplicate`,
+    `/api/v1/skeletons/${skeletonId}/duplicate`,
   );
 }
 
 /**
- * Render one theme preview. Does not create an artifact or a post job.
+ * Render one skeleton preview. Does not create an artifact or a post job.
  *
- * @param themeId - Theme UUID
- * @param themeSampleRequest - The one Spotmu source item to render
+ * @param skeletonId - Skeleton UUID
+ * @param skeletonSampleRequest - The one Spotmu source item to render
  * @returns The preview id and any block reason
  */
 /**
- * Render one frame from the form payload. Does not save a theme.
+ * Render one frame from the form payload. Does not save a skeleton.
  *
- * @param themePreviewRequest - Frame, elements, and preview text as they stand
+ * @param skeletonPreviewRequest - Frame, elements, and preview text as they stand
  * @returns The PNG and any block reason
  */
 /**
- * Draw the source theme with this unit's text and saved image.
+ * Draw the carousel skeleton with this slide's text and saved image.
  *
- * The PNG is inline. No unit, artifact, or preview file is written.
+ * The PNG is inline. No slide, artifact, or preview file is written.
  *
- * @param sourceId - Source UUID
- * @param previewRequest - Unsaved text and an optional saved unit id
+ * @param sourceId - Carousel UUID
+ * @param previewRequest - Unsaved text and an optional saved slide id
  * @returns The frame and any block reason
  */
-export async function previewSourceUnit(
+export async function previewCarouselSlide(
   sourceId: string,
-  previewRequest: UnitPreviewRequest,
-): Promise<ThemePreviewResponse> {
+  previewRequest: SlidePreviewRequest,
+): Promise<SkeletonPreviewResponse> {
 
-  return requestJson<ThemePreviewResponse>(
+  return requestJson<SkeletonPreviewResponse>(
     "POST",
-    `/api/v1/sources/${sourceId}/units/preview`,
+    `/api/v1/carousels/${sourceId}/slides/preview`,
     previewRequest,
   );
 }
 
-export async function createThemePreview(
-  themePreviewRequest: ThemePreviewRequest,
-): Promise<ThemePreviewResponse> {
+export async function createSkeletonPreview(
+  skeletonPreviewRequest: SkeletonPreviewRequest,
+): Promise<SkeletonPreviewResponse> {
 
-  return requestJson<ThemePreviewResponse>(
+  return requestJson<SkeletonPreviewResponse>(
     "POST",
-    "/api/v1/themes/preview",
-    themePreviewRequest,
+    "/api/v1/skeletons/preview",
+    skeletonPreviewRequest,
   );
 }
 
-export async function createThemeSample(
-  themeId: string,
-  themeSampleRequest: ThemeSampleRequest,
-): Promise<ThemeSampleResponse> {
+export async function createSkeletonSample(
+  skeletonId: string,
+  skeletonSampleRequest: SkeletonSampleRequest,
+): Promise<SkeletonSampleResponse> {
 
-  return requestJson<ThemeSampleResponse>(
+  return requestJson<SkeletonSampleResponse>(
     "POST",
-    `/api/v1/themes/${themeId}/samples`,
-    themeSampleRequest,
+    `/api/v1/skeletons/${skeletonId}/samples`,
+    skeletonSampleRequest,
   );
 }
 
 /**
  * Load one preview PNG. The session cookie is required.
  *
- * @param themeId - Theme UUID
+ * @param skeletonId - Skeleton UUID
  * @param previewId - Preview UUID from the samples response
  * @returns PNG bytes
  */
-export async function fetchThemeSampleImageBlob(
-  themeId: string,
+export async function fetchSkeletonSampleImageBlob(
+  skeletonId: string,
   previewId: string,
 ): Promise<Blob> {
 
-  const requestPath: string = `/api/v1/themes/${themeId}/samples/${previewId}/image`;
+  const requestPath: string = `/api/v1/skeletons/${skeletonId}/samples/${previewId}/image`;
   const response: Response = await sendApiRequest("GET", requestPath);
 
   await throwIfResponseFailed(response, requestPath);
@@ -675,39 +675,39 @@ export async function fetchThemeSampleImageBlob(
   return imageBlob;
 }
 
-export async function createThemeElement(
-  themeId: string,
-  themeElementCreateRequest: ThemeElementCreateRequest,
-): Promise<ThemeElementReadResponse> {
+export async function createSkeletonElement(
+  skeletonId: string,
+  skeletonElementCreateRequest: SkeletonElementCreateRequest,
+): Promise<SkeletonElementReadResponse> {
 
-  return requestJson<ThemeElementReadResponse>(
+  return requestJson<SkeletonElementReadResponse>(
     "POST",
-    `/api/v1/themes/${themeId}/elements`,
-    themeElementCreateRequest,
+    `/api/v1/skeletons/${skeletonId}/elements`,
+    skeletonElementCreateRequest,
   );
 }
 
-export async function patchThemeElement(
-  themeId: string,
+export async function patchSkeletonElement(
+  skeletonId: string,
   elementId: string,
-  themeElementPatchRequest: ThemeElementPatchRequest,
-): Promise<ThemeElementReadResponse> {
+  skeletonElementPatchRequest: SkeletonElementPatchRequest,
+): Promise<SkeletonElementReadResponse> {
 
-  return requestJson<ThemeElementReadResponse>(
+  return requestJson<SkeletonElementReadResponse>(
     "PATCH",
-    `/api/v1/themes/${themeId}/elements/${elementId}`,
-    themeElementPatchRequest,
+    `/api/v1/skeletons/${skeletonId}/elements/${elementId}`,
+    skeletonElementPatchRequest,
   );
 }
 
-export async function deleteThemeElement(
-  themeId: string,
+export async function deleteSkeletonElement(
+  skeletonId: string,
   elementId: string,
 ): Promise<void> {
 
   await requestJson<undefined>(
     "DELETE",
-    `/api/v1/themes/${themeId}/elements/${elementId}`,
+    `/api/v1/skeletons/${skeletonId}/elements/${elementId}`,
   );
 }
 

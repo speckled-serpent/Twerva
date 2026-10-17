@@ -18,17 +18,17 @@ from app.models.enums import (
     PostJobStatus,
     SourceType,
     SteerActionType,
-    ThemeElementAlignment,
-    ThemeElementBand,
-    ThemeElementContentKind,
-    ThemeElementTextSource,
-    ThemeStatus,
-    UnitImageIntake,
-    UnitImageLicense,
-    UnitImageMediaType,
-    UnitTextStatus,
+    SkeletonElementAlignment,
+    SkeletonElementBand,
+    SkeletonElementContentKind,
+    SkeletonElementTextSource,
+    SkeletonStatus,
+    SlideImageIntake,
+    SlideImageLicense,
+    SlideImageMediaType,
+    SlideTextStatus,
 )
-from app.models.theme import (
+from app.models.skeleton import (
     DEFAULT_BACKGROUND_COLOR,
     DEFAULT_ELEMENT_GAP,
     DEFAULT_ELEMENT_MARGIN,
@@ -53,15 +53,15 @@ class CampaignCreateRequest(BaseModel):
     platform and interest after the handler strips and dedupes. Spotmu
     also requires at least one account; Spotmu-test may send an empty
     ``account_ids`` list. Empty lists stay allowed on the model so
-    ``other`` still parses. ``theme_id`` and ``source_id`` are required.
-    The source has to be bound to that theme.
+    ``other`` still parses. ``skeleton_id`` and ``carousel_id`` are required.
+    The carousel has to be bound to that skeleton.
     """
 
     name: str = Field(min_length=1)
     campaign_type: CampaignType
     advertisement_type: AdvertisementType = AdvertisementType.CAROUSEL
-    theme_id: uuid.UUID
-    source_id: uuid.UUID
+    skeleton_id: uuid.UUID
+    carousel_id: uuid.UUID
     platforms: list[Platform] = Field(default_factory=list)
     account_ids: list[uuid.UUID] = Field(default_factory=list)
     interests: list[CampaignInterestWrite] = Field(default_factory=list)
@@ -85,20 +85,20 @@ class CampaignAccountReadResponse(BaseModel):
     handle: str
 
 
-class CampaignCarouselUnitRead(BaseModel):
-    """One live unit placed on a carousel frame."""
+class CampaignCarouselSlideRead(BaseModel):
+    """One live slide placed on a carousel frame."""
 
-    unit_id: uuid.UUID
+    slide_id: uuid.UUID
     name: str
     position: int
 
 
 class CampaignCarouselRead(BaseModel):
-    """One carousel from the latest run, in theme frame order."""
+    """One carousel from the latest run, in skeleton frame order."""
 
     id: uuid.UUID
     position: int
-    units: list[CampaignCarouselUnitRead] = Field(default_factory=list)
+    slides: list[CampaignCarouselSlideRead] = Field(default_factory=list)
 
 
 class CampaignReadResponse(BaseModel):
@@ -114,10 +114,10 @@ class CampaignReadResponse(BaseModel):
     advertisement_type: AdvertisementType
     status: CampaignStatus
     platforms: list[Platform]
-    theme_id: uuid.UUID | None = None
-    source_id: uuid.UUID | None = None
-    theme_name: str | None = None
-    source_name: str | None = None
+    skeleton_id: uuid.UUID | None = None
+    carousel_id: uuid.UUID | None = None
+    skeleton_name: str | None = None
+    carousel_name: str | None = None
     account_count: int
     interest_count: int
     accounts: list[CampaignAccountReadResponse] = Field(default_factory=list)
@@ -128,8 +128,8 @@ class CampaignReadResponse(BaseModel):
     created_by: uuid.UUID | None
 
 
-class ThemeCreateRequest(BaseModel):
-    """Body for `POST /api/v1/themes`.
+class SkeletonCreateRequest(BaseModel):
+    """Body for `POST /api/v1/skeletons`.
 
     Slug is generated from ``name``. ``advertisement_type`` defaults to
     carousel (the only implemented format). ``template_key`` is optional
@@ -147,7 +147,7 @@ class ThemeCreateRequest(BaseModel):
     name: str = Field(min_length=1)
     advertisement_type: AdvertisementType = AdvertisementType.CAROUSEL
     template_key: str | None = None
-    status: ThemeStatus | None = None
+    status: SkeletonStatus | None = None
     page_margin: int | None = None
     element_gap: int | None = None
     element_margin: int | None = None
@@ -155,11 +155,11 @@ class ThemeCreateRequest(BaseModel):
     background_color: str | None = None
     background_gradient: dict[str, object] | None = None
     background_asset_ref: str | None = None
-    elements: list["ThemeElementCreateRequest"] = Field(default_factory=list)
+    elements: list["SkeletonElementCreateRequest"] = Field(default_factory=list)
 
 
-class ThemeGradientStop(BaseModel):
-    """One stop in ``themes.background_gradient``.
+class SkeletonGradientStop(BaseModel):
+    """One stop in ``skeletons.background_gradient``.
 
     ``offset`` is 0 through 1. ``color`` is ``#`` plus six hex digits.
     """
@@ -168,31 +168,31 @@ class ThemeGradientStop(BaseModel):
     color: str
 
 
-class ThemeGradient(BaseModel):
-    """Locked shape for ``themes.background_gradient``.
+class SkeletonGradient(BaseModel):
+    """Locked shape for ``skeletons.background_gradient``.
 
     ``{"angle_deg": <0–360>, "stops": [{"offset": <0–1>, "color": "#rrggbb"}, ...]}``
     with at least two stops. Hex colors are ``#`` plus six hex digits.
     """
 
     angle_deg: float
-    stops: list[ThemeGradientStop]
+    stops: list[SkeletonGradientStop]
 
 
-class ThemePatchRequest(BaseModel):
-    """Body for `PATCH /api/v1/themes/{id}`.
+class SkeletonPatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/skeletons/{id}`.
 
     Partial. Only fields present in the body are written. Omitted fields
     leave the row unchanged. Null ``status``, kind, or spacing is rejected
     by the handler. Spacing integers must be zero or greater. Background
     color is ``#`` plus six hex digits, or blank to clear it. Gradient
-    uses the locked ``ThemeGradient`` shape. ``background_asset_ref`` is
+    uses the locked ``SkeletonGradient`` shape. ``background_asset_ref`` is
     a relative path with no ``..`` and no scheme, ending in ``.svg``,
     ``.png``, ``.jpg``, or ``.jpeg``. Draft may leave the payload for the
     chosen kind empty. Live requires that payload.
     """
 
-    status: ThemeStatus | None = None
+    status: SkeletonStatus | None = None
     page_margin: int | None = None
     element_gap: int | None = None
     element_margin: int | None = None
@@ -202,28 +202,28 @@ class ThemePatchRequest(BaseModel):
     background_asset_ref: str | None = None
 
 
-THEME_ELEMENT_NAME_REQUIRED_DETAIL: str = "Name is required."
+SKELETON_ELEMENT_NAME_REQUIRED_DETAIL: str = "Name is required."
 
 
-def stripped_theme_element_name(name: str | None) -> str:
+def stripped_skeleton_element_name(name: str | None) -> str:
     """Return a trimmed element name. Blank and null are rejected."""
 
     if name is None:
-        raise ValueError(THEME_ELEMENT_NAME_REQUIRED_DETAIL)
+        raise ValueError(SKELETON_ELEMENT_NAME_REQUIRED_DETAIL)
 
     stripped_name: str = name.strip()
 
     if stripped_name == "":
-        raise ValueError(THEME_ELEMENT_NAME_REQUIRED_DETAIL)
+        raise ValueError(SKELETON_ELEMENT_NAME_REQUIRED_DETAIL)
 
     return stripped_name
 
 
-class ThemeElementCreateRequest(BaseModel):
-    """Body for `POST /api/v1/themes/{theme_id}/elements`.
+class SkeletonElementCreateRequest(BaseModel):
+    """Body for `POST /api/v1/skeletons/{skeleton_id}/elements`.
 
     ``name``, ``band``, and ``content_kind`` are required. ``name`` is
-    the label operators see when they edit a unit. Blank and
+    the label operators see when they edit a slide. Blank and
     whitespace-only names are rejected. ``sort_order`` is optional
     and 0-based within the band; omitted means append. ``rectangle_color``
     null means the rectangle is clear. Text requires a family, a
@@ -235,13 +235,13 @@ class ThemeElementCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    band: ThemeElementBand
-    content_kind: ThemeElementContentKind
+    band: SkeletonElementBand
+    content_kind: SkeletonElementContentKind
     sort_order: int | None = None
     rectangle_color: str | None = None
     rectangle_opacity: int | None = 100
     rectangle_radius: int | None = 0
-    text_source: ThemeElementTextSource | None = None
+    text_source: SkeletonElementTextSource | None = None
     font_family: str | None = None
     font_size: int | None = None
     font_color: str | None = None
@@ -250,7 +250,7 @@ class ThemeElementCreateRequest(BaseModel):
     underline: bool | None = None
     strikethrough: bool | None = None
     font_weight: int | None = None
-    alignment: ThemeElementAlignment | None = None
+    alignment: SkeletonElementAlignment | None = None
     image_asset_ref: str | None = None
 
     @field_validator("name")
@@ -258,16 +258,16 @@ class ThemeElementCreateRequest(BaseModel):
     def name_is_non_blank(cls, name: str) -> str:
         """Reject a blank name and store the trimmed text."""
 
-        stripped_name: str = stripped_theme_element_name(name)
+        stripped_name: str = stripped_skeleton_element_name(name)
 
         return stripped_name
 
 
-ThemeCreateRequest.model_rebuild()
+SkeletonCreateRequest.model_rebuild()
 
 
-class ThemeElementPatchRequest(BaseModel):
-    """Body for `PATCH /api/v1/themes/{theme_id}/elements/{element_id}`.
+class SkeletonElementPatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/skeletons/{skeleton_id}/elements/{element_id}`.
 
     Partial. Only fields present in the body are written. Omitted
     ``name`` leaves the stored label. A present name must be non-blank
@@ -280,13 +280,13 @@ class ThemeElementPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = None
-    band: ThemeElementBand | None = None
-    content_kind: ThemeElementContentKind | None = None
+    band: SkeletonElementBand | None = None
+    content_kind: SkeletonElementContentKind | None = None
     sort_order: int | None = None
     rectangle_color: str | None = None
     rectangle_opacity: int | None = None
     rectangle_radius: int | None = None
-    text_source: ThemeElementTextSource | None = None
+    text_source: SkeletonElementTextSource | None = None
     font_family: str | None = None
     font_size: int | None = None
     font_color: str | None = None
@@ -295,7 +295,7 @@ class ThemeElementPatchRequest(BaseModel):
     underline: bool | None = None
     strikethrough: bool | None = None
     font_weight: int | None = None
-    alignment: ThemeElementAlignment | None = None
+    alignment: SkeletonElementAlignment | None = None
     image_asset_ref: str | None = None
 
     @field_validator("name")
@@ -303,26 +303,26 @@ class ThemeElementPatchRequest(BaseModel):
     def name_is_non_blank(cls, name: str | None) -> str:
         """Reject a blank or null name when the client sent one."""
 
-        stripped_name: str = stripped_theme_element_name(name)
+        stripped_name: str = stripped_skeleton_element_name(name)
 
         return stripped_name
 
 
-class ThemeElementReadResponse(BaseModel):
-    """Serialized theme element. No coordinates."""
+class SkeletonElementReadResponse(BaseModel):
+    """Serialized skeleton element. No coordinates."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    theme_id: uuid.UUID
-    band: ThemeElementBand
+    skeleton_id: uuid.UUID
+    band: SkeletonElementBand
     sort_order: int
-    content_kind: ThemeElementContentKind
+    content_kind: SkeletonElementContentKind
     name: str
     rectangle_color: str | None
     rectangle_opacity: int
     rectangle_radius: int
-    text_source: ThemeElementTextSource | None
+    text_source: SkeletonElementTextSource | None
     font_family: str | None
     font_size: int | None
     font_color: str | None
@@ -331,14 +331,14 @@ class ThemeElementReadResponse(BaseModel):
     underline: bool
     strikethrough: bool
     font_weight: int | None
-    alignment: ThemeElementAlignment | None
+    alignment: SkeletonElementAlignment | None
     image_asset_ref: str | None
     created_at: datetime
     updated_at: datetime
 
 
-class ThemeReadResponse(BaseModel):
-    """Serialized Theme row.
+class SkeletonReadResponse(BaseModel):
+    """Serialized Skeleton row.
 
     ``elements`` are ordered by band (``top``, ``middle``, ``bottom``)
     and then by ``sort_order`` within the band.
@@ -351,22 +351,22 @@ class ThemeReadResponse(BaseModel):
     slug: str
     advertisement_type: AdvertisementType
     template_key: str | None
-    status: ThemeStatus
+    status: SkeletonStatus
     page_margin: int
     element_gap: int
     element_margin: int
     background_kind: BackgroundKind
     background_color: str | None
-    background_gradient: ThemeGradient | None
+    background_gradient: SkeletonGradient | None
     background_asset_ref: str | None
-    elements: list[ThemeElementReadResponse]
+    elements: list[SkeletonElementReadResponse]
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None
 
 
-class ThemeSampleRequest(BaseModel):
-    """Body for `POST /api/v1/themes/{id}/samples`.
+class SkeletonSampleRequest(BaseModel):
+    """Body for `POST /api/v1/skeletons/{id}/samples`.
 
     One source item, one frame. The handler does not create an artifact
     or a post job.
@@ -375,15 +375,15 @@ class ThemeSampleRequest(BaseModel):
     source_item_id: uuid.UUID
 
 
-class ThemeSampleOverlapResponse(BaseModel):
+class SkeletonSampleOverlapResponse(BaseModel):
     """One pair of elements from different bands whose areas intersect."""
 
-    band_a: ThemeElementBand
-    band_b: ThemeElementBand
+    band_a: SkeletonElementBand
+    band_b: SkeletonElementBand
     element_ids: list[uuid.UUID]
 
 
-class ThemeSampleResponse(BaseModel):
+class SkeletonSampleResponse(BaseModel):
     """One rendered preview. ``blocked`` is true when it must not ship.
 
     ``block_reason`` is null, ``overlap``, ``missing_asset``, or
@@ -395,10 +395,10 @@ class ThemeSampleResponse(BaseModel):
     blocked: bool
     block_reason: Literal["overlap", "missing_asset", "measure_error"] | None
     detail: str | None
-    overlaps: list[ThemeSampleOverlapResponse]
+    overlaps: list[SkeletonSampleOverlapResponse]
 
 
-class ThemeImageAlbumResponse(BaseModel):
+class SkeletonImageAlbumResponse(BaseModel):
     """One album of concrete image paths. More albums can be added later."""
 
     album_id: str
@@ -406,13 +406,13 @@ class ThemeImageAlbumResponse(BaseModel):
     asset_refs: list[str]
 
 
-class ThemeDefaultImagesResponse(BaseModel):
-    """Albums the theme editor can offer for picture and image fields."""
+class SkeletonDefaultImagesResponse(BaseModel):
+    """Albums the skeleton editor can offer for picture and image fields."""
 
-    albums: list[ThemeImageAlbumResponse]
+    albums: list[SkeletonImageAlbumResponse]
 
 
-class ThemeFontFamilyResponse(BaseModel):
+class SkeletonFontFamilyResponse(BaseModel):
     """One family the font dropdown can offer."""
 
     family_id: str
@@ -420,14 +420,14 @@ class ThemeFontFamilyResponse(BaseModel):
     category: str
 
 
-class ThemeFontFamiliesResponse(BaseModel):
+class SkeletonFontFamiliesResponse(BaseModel):
     """Bundled families plus the name used when a stored family is unknown."""
 
-    families: list[ThemeFontFamilyResponse]
+    families: list[SkeletonFontFamilyResponse]
     fallback_name: str
 
 
-class ThemePreviewElementRequest(ThemeElementCreateRequest):
+class SkeletonPreviewElementRequest(SkeletonElementCreateRequest):
     """One element on a stateless preview.
 
     ``preview_text`` is drawn for a text element and is not stored.
@@ -438,32 +438,32 @@ class ThemePreviewElementRequest(ThemeElementCreateRequest):
     preview_text: str | None = None
 
 
-class ThemePreviewRequest(BaseModel):
-    """Body for `POST /api/v1/themes/preview`.
+class SkeletonPreviewRequest(BaseModel):
+    """Body for `POST /api/v1/skeletons/preview`.
 
     Frame fields and elements are the form as it stands, including a
-    theme that has not been saved. Omitted frame fields use the create
+    skeleton that has not been saved. Omitted frame fields use the create
     defaults. Text uses ``preview_text`` on each element. The handler
-    does not insert a theme, an artifact, or a post job, and it does
+    does not insert a skeleton, an artifact, or a post job, and it does
     not read a source item.
     """
 
-    status: ThemeStatus = ThemeStatus.DRAFT
+    status: SkeletonStatus = SkeletonStatus.DRAFT
     page_margin: int = DEFAULT_PAGE_MARGIN
     element_gap: int = DEFAULT_ELEMENT_GAP
     element_margin: int = DEFAULT_ELEMENT_MARGIN
     background_kind: BackgroundKind = BackgroundKind.COLOR
     background_color: str | None = DEFAULT_BACKGROUND_COLOR
-    background_gradient: ThemeGradient | None = None
+    background_gradient: SkeletonGradient | None = None
     background_asset_ref: str | None = None
-    elements: list[ThemePreviewElementRequest] = Field(default_factory=list)
+    elements: list[SkeletonPreviewElementRequest] = Field(default_factory=list)
 
     @field_validator("elements", mode="before")
     @classmethod
     def coerce_preview_elements(cls, elements: object) -> object:
         """Accept a stored element body as well as a preview element.
 
-        Callers that already built ``ThemeElementCreateRequest`` do not
+        Callers that already built ``SkeletonElementCreateRequest`` do not
         carry ``preview_text``. Dump those models so validation can add
         the default. A preview element and a raw dict pass through.
         """
@@ -476,7 +476,7 @@ class ThemePreviewRequest(BaseModel):
 
         for element in elements:
 
-            if isinstance(element, ThemePreviewElementRequest):
+            if isinstance(element, SkeletonPreviewElementRequest):
                 normalized_elements.append(element)
 
                 continue
@@ -491,10 +491,10 @@ class ThemePreviewRequest(BaseModel):
         return normalized_elements
 
 
-class ThemePreviewResponse(BaseModel):
+class SkeletonPreviewResponse(BaseModel):
     """One stateless frame. The PNG is inline. Nothing is stored.
 
-    ``block_reason`` matches the saved-theme sample response. A missing
+    ``block_reason`` matches the saved-skeleton sample response. A missing
     font file uses the same Pillow fallback as that renderer and is not
     an error by itself.
     """
@@ -502,7 +502,7 @@ class ThemePreviewResponse(BaseModel):
     blocked: bool
     block_reason: Literal["overlap", "missing_asset", "measure_error"] | None
     detail: str | None
-    overlaps: list[ThemeSampleOverlapResponse]
+    overlaps: list[SkeletonSampleOverlapResponse]
     image_png_base64: str
 
 
@@ -947,77 +947,77 @@ class OpsUserResetPasswordRequest(BaseModel):
     new_password: str = Field(min_length=8)
 
 
-class UnitElementTextReadResponse(BaseModel):
-    """Text stored on a unit for one theme text element."""
+class SlideElementTextReadResponse(BaseModel):
+    """Text stored on a slide for one skeleton text element."""
 
-    theme_element_id: uuid.UUID
+    skeleton_element_id: uuid.UUID
     value: str
 
 
-class UnitImageReadResponse(BaseModel):
-    """One image on a unit, including license and the stored path."""
+class SlideImageReadResponse(BaseModel):
+    """One image on a slide, including license and the stored path."""
 
     id: uuid.UUID
     position: int
     relative_path: str
-    media_type: UnitImageMediaType
+    media_type: SlideImageMediaType
     byte_size: int
     width: int | None
     height: int | None
     alt_text: str | None
-    license: UnitImageLicense
+    license: SlideImageLicense
     source: str
     license_note: str
-    intake: UnitImageIntake
+    intake: SlideImageIntake
     thumbnail_path: str | None
 
 
-class UnitReadResponse(BaseModel):
-    """One unit: name, theme text, exclusions, and at most one image.
+class SlideReadResponse(BaseModel):
+    """One slide: name, skeleton text, exclusions, and at most one image.
 
     ``texts`` is the approved copy. ``draft_texts`` is empty unless
-    ``text_status`` is ``draft``. A draft unit is not live.
+    ``text_status`` is ``draft``. A draft slide is not live.
     """
 
     id: uuid.UUID
     position: int
     name: str
-    text_status: UnitTextStatus
-    texts: list[UnitElementTextReadResponse]
-    draft_texts: list[UnitElementTextReadResponse]
-    excluded_unit_ids: list[uuid.UUID]
-    images: list[UnitImageReadResponse]
+    text_status: SlideTextStatus
+    texts: list[SlideElementTextReadResponse]
+    draft_texts: list[SlideElementTextReadResponse]
+    excluded_slide_ids: list[uuid.UUID]
+    images: list[SlideImageReadResponse]
 
 
-class SourceListItemResponse(BaseModel):
-    """One source on `GET /api/v1/sources`. Units are on the detail route."""
+class CarouselListItemResponse(BaseModel):
+    """One carousel on `GET /api/v1/carousels`. Slides are on the detail route."""
 
     id: uuid.UUID
-    theme_id: uuid.UUID
+    skeleton_id: uuid.UUID
     name: str
     slug: str
-    unit_count: int
+    slide_count: int
     created_at: datetime
     updated_at: datetime
 
 
-class SourceReadResponse(BaseModel):
-    """One source and its units."""
+class CarouselReadResponse(BaseModel):
+    """One carousel and its slides."""
 
     id: uuid.UUID
-    theme_id: uuid.UUID
+    skeleton_id: uuid.UUID
     name: str
     slug: str
     inspiration: str
     rules: str
-    live_unit_count: int
+    live_slide_count: int
     created_at: datetime
     updated_at: datetime
-    units: list[UnitReadResponse]
+    slides: list[SlideReadResponse]
 
 
-class SourceGuidancePatchRequest(BaseModel):
-    """Inspiration and rules for drafted unit text."""
+class CarouselGuidancePatchRequest(BaseModel):
+    """Inspiration and rules for drafted slide text."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1032,88 +1032,88 @@ class TextGenerationStatusResponse(BaseModel):
     detail: str
 
 
-class SourceCreateRequest(BaseModel):
-    """JSON body for `POST /api/v1/sources`. Name and theme are required."""
+class CarouselCreateRequest(BaseModel):
+    """JSON body for `POST /api/v1/carousels`. Name and skeleton are required."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    theme_id: uuid.UUID
+    skeleton_id: uuid.UUID
 
 
-class SourcePatchRequest(BaseModel):
-    """Rename a source."""
+class CarouselPatchRequest(BaseModel):
+    """Rename a carousel."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
 
 
-class UnitElementTextWrite(BaseModel):
-    """One theme text element and the value to store on the unit."""
+class SlideElementTextWrite(BaseModel):
+    """One skeleton text element and the value to store on the slide."""
 
     model_config = ConfigDict(extra="forbid")
 
-    theme_element_id: uuid.UUID
+    skeleton_element_id: uuid.UUID
     value: str = ""
 
 
-class UnitWriteRequest(BaseModel):
-    """Name, theme text, and the other units this one cannot be shown with."""
+class SlideWriteRequest(BaseModel):
+    """Name, skeleton text, and the other slides this one cannot be shown with."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    texts: list[UnitElementTextWrite] = Field(default_factory=list)
-    excluded_unit_ids: list[uuid.UUID] = Field(default_factory=list)
+    texts: list[SlideElementTextWrite] = Field(default_factory=list)
+    excluded_slide_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
-class UnitAcceptTextRequest(BaseModel):
+class SlideAcceptTextRequest(BaseModel):
     """The text to store as live. This is the operator's accept action."""
 
     model_config = ConfigDict(extra="forbid")
 
-    texts: list[UnitElementTextWrite] = Field(default_factory=list)
+    texts: list[SlideElementTextWrite] = Field(default_factory=list)
 
 
-class UnitPreviewRequest(BaseModel):
-    """Unsaved text, and an optional saved unit, for one frame.
+class SlidePreviewRequest(BaseModel):
+    """Unsaved text, and an optional saved slide, for one frame.
 
-    The handler renders the source's theme. It does not write a unit,
+    The handler renders the carousel's skeleton. It does not write a slide,
     an artifact, or a preview file.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    texts: list[UnitElementTextWrite] = Field(default_factory=list)
-    unit_id: uuid.UUID | None = None
+    texts: list[SlideElementTextWrite] = Field(default_factory=list)
+    slide_id: uuid.UUID | None = None
 
 
-class UnitImageMetadataPatch(BaseModel):
+class SlideImageMetadataPatch(BaseModel):
     """License and source on an image that already exists. Not the bytes."""
 
     model_config = ConfigDict(extra="forbid")
 
     alt_text: str | None = None
-    license: UnitImageLicense
+    license: SlideImageLicense
     source: str
     license_note: str = ""
 
 
-class UnitImageImportRequest(BaseModel):
+class SlideImageImportRequest(BaseModel):
     """One URL to download, plus the same license fields as an upload."""
 
     model_config = ConfigDict(extra="forbid")
 
     url: str
     alt_text: str | None = None
-    license: UnitImageLicense
+    license: SlideImageLicense
     source: str
     license_note: str = ""
 
 
-class UnitImageCreateItem(BaseModel):
-    """One image on a new unit. A file uses ``file_index`` into the upload."""
+class SlideImageCreateItem(BaseModel):
+    """One image on a new slide. A file uses ``file_index`` into the upload."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -1121,17 +1121,17 @@ class UnitImageCreateItem(BaseModel):
     file_index: int | None = None
     url: str | None = None
     alt_text: str | None = None
-    license: UnitImageLicense
+    license: SlideImageLicense
     source: str
     license_note: str = ""
 
 
-class UnitWithImagesCreateRequest(BaseModel):
-    """Name, theme text, exclusions, and the one image when the theme needs one."""
+class SlideWithImagesCreateRequest(BaseModel):
+    """Name, skeleton text, exclusions, and the one image when the skeleton needs one."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    texts: list[UnitElementTextWrite] = Field(default_factory=list)
-    excluded_unit_ids: list[uuid.UUID] = Field(default_factory=list)
-    images: list[UnitImageCreateItem] = Field(default_factory=list)
+    texts: list[SlideElementTextWrite] = Field(default_factory=list)
+    excluded_slide_ids: list[uuid.UUID] = Field(default_factory=list)
+    images: list[SlideImageCreateItem] = Field(default_factory=list)

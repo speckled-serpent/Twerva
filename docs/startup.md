@@ -93,12 +93,12 @@ Local API `.env` should set `SESSION_COOKIE_SECURE=false` (HTTP) and
 
 ## Walk the Phase 1 path in ops
 
-Left rail: **Campaigns · Themes · Sources · Queue · Schedule · Results · Accounts** (+ **Users** for admins). **Account** and **Log out** sit at the bottom. **Create campaign**, **Create theme**, and **Create source** are buttons on those list pages.
+Left rail: **Campaigns · Skeletons · Carousels · Queue · Schedule · Results · Accounts** (+ **Users** for admins). **Account** and **Log out** sit at the bottom. **Create campaign**, **Create Skeleton**, and **Create Carousel** are buttons on those list pages.
 
 1. **Sign in** — bootstrap admin (or any `ops_users` row). Role is on the account control in the rail.
 2. **Create campaign** — button on **Campaigns**. Saves a `ready` definition (name, auto slug/hashtag, Spotmu type, carousel, platforms, IG/TikTok accounts, live Spotmu interest search). It does **not** start, ingest, or generate. Type **Other** is coming soon. Apply Alembic head `campaign_status_lifecycle` on the box before the new API works.
 3. **Campaigns** — list every campaign (status badges Ready / Running / Paused / Finished). Open a row for details. Admins **Start** (`ready` → `running`), **Pause**, **Resume**, and **Finish**. Start still does not kick generate/publish workers.
-4. **Themes** / **Create theme** — list carousel themes and save a new one from the page button (name + Carousel advertisement type, stored as draft with spacing 96 / 0 / 0 and paper background `#F6F1E8`). Apply Alembic head `theme_elements` first. Upgrade registers Spotmu Paper v1 and Spotmu Bold v1 as draft. This does not restyle existing artifacts or bind a campaign.
+4. **Skeletons** / **Create Skeleton** — list carousel skeletons and save a new one from the page button (name + Carousel advertisement type, stored as draft with spacing 96 / 0 / 0 and paper background `#F6F1E8`). Apply Alembic head `skeletons_carousels_slides` first. Spotmu Paper v1 and Spotmu Bold v1 were registered by `themes_create` and `theme_elements` and are renamed in place. This does not restyle existing artifacts or bind a campaign.
 5. **Queue** — preview slide PNGs (lightbox), approve / reject / edit caption, or **regenerate** a new draft with another template (history kept). Human gate. Existing generate/approve loop is unchanged; it is no longer on this first nav page.
 6. **Accounts** — clusters/accounts, cadence caps, steer (pause/kill/resume).
 7. **Schedule** — attach an **approved** artifact to an account + time → `post_job`; then **mock publish**.

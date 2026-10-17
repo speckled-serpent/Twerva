@@ -1,6 +1,6 @@
-"""Campaign — marketing definition plus the theme and source it runs.
+"""Campaign — marketing definition plus the skeleton and carousel it runs.
 
-Start does not ingest or generate. Run assembles live units into
+Start does not ingest or generate. Run assembles live slides into
 carousels and does not generate text.
 """
 
@@ -26,9 +26,9 @@ from app.models.enums import (
 
 if TYPE_CHECKING:
     from app.models.account import Account
-    from app.models.content_source import ContentSource, Unit
+    from app.models.carousel import Carousel, Slide
     from app.models.ops_user import OpsUser
-    from app.models.theme import Theme
+    from app.models.skeleton import Skeleton
 
 
 class Campaign(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -37,7 +37,7 @@ class Campaign(Base, UuidPrimaryKeyMixin, TimestampMixin):
     Create stores a definition: name, unique slug/hashtag, type,
     carousel format, platforms JSON, and `ready` status. Accounts
     and Spotmu interests live on the join tables. A new campaign also
-    stores the theme and the one source bound to that theme. Rows
+    stores the skeleton and the one carousel bound to that skeleton. Rows
     saved before that choice keep both empty. Creating a campaign
     does not ingest interests or generate text. Start / pause /
     resume / finish change status only. Run replaces ``carousels``.
@@ -78,15 +78,15 @@ class Campaign(Base, UuidPrimaryKeyMixin, TimestampMixin):
         ForeignKey("ops_users.id"),
         nullable=True,
     )
-    theme_id: Mapped[uuid.UUID | None] = mapped_column(
+    skeleton_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("themes.id", ondelete="RESTRICT"),
+        ForeignKey("skeletons.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
-    source_id: Mapped[uuid.UUID | None] = mapped_column(
+    carousel_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("sources.id", ondelete="RESTRICT"),
+        ForeignKey("carousels.id", ondelete="RESTRICT"),
         nullable=True,
         index=True,
     )
@@ -94,8 +94,8 @@ class Campaign(Base, UuidPrimaryKeyMixin, TimestampMixin):
     created_by_user: Mapped["OpsUser | None"] = relationship(
         "OpsUser",
     )
-    theme: Mapped["Theme | None"] = relationship("Theme")
-    source: Mapped["ContentSource | None"] = relationship("ContentSource")
+    skeleton: Mapped["Skeleton | None"] = relationship("Skeleton")
+    carousel: Mapped["Carousel | None"] = relationship("Carousel")
     carousels: Mapped[list["CampaignCarousel"]] = relationship(
         "CampaignCarousel",
         back_populates="campaign",
@@ -177,7 +177,7 @@ class CampaignInterest(Base, UuidPrimaryKeyMixin):
 
 
 class CampaignCarousel(Base, UuidPrimaryKeyMixin):
-    """One carousel from the latest run. Slides use the campaign theme."""
+    """One carousel from the latest run. Slides use the campaign skeleton."""
 
     __tablename__ = "campaign_carousels"
     __table_args__ = (
@@ -209,7 +209,7 @@ class CampaignCarousel(Base, UuidPrimaryKeyMixin):
 
 
 class CampaignCarouselSlide(Base, UuidPrimaryKeyMixin):
-    """One live unit on a carousel, in frame order."""
+    """One live slide on a carousel, in frame order."""
 
     __tablename__ = "campaign_carousel_slides"
     __table_args__ = (
@@ -220,11 +220,11 @@ class CampaignCarouselSlide(Base, UuidPrimaryKeyMixin):
         ),
         UniqueConstraint(
             "carousel_id",
-            "unit_id",
-            name="uq_campaign_carousel_slides_carousel_id_unit_id",
+            "slide_id",
+            name="uq_campaign_carousel_slides_carousel_id_slide_id",
         ),
         Index("ix_campaign_carousel_slides_carousel_id", "carousel_id"),
-        Index("ix_campaign_carousel_slides_unit_id", "unit_id"),
+        Index("ix_campaign_carousel_slides_slide_id", "slide_id"),
     )
 
     carousel_id: Mapped[uuid.UUID] = mapped_column(
@@ -232,9 +232,9 @@ class CampaignCarouselSlide(Base, UuidPrimaryKeyMixin):
         ForeignKey("campaign_carousels.id", ondelete="CASCADE"),
         nullable=False,
     )
-    unit_id: Mapped[uuid.UUID] = mapped_column(
+    slide_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("units.id", ondelete="CASCADE"),
+        ForeignKey("slides.id", ondelete="CASCADE"),
         nullable=False,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -243,4 +243,4 @@ class CampaignCarouselSlide(Base, UuidPrimaryKeyMixin):
         "CampaignCarousel",
         back_populates="slides",
     )
-    unit: Mapped["Unit"] = relationship("Unit")
+    slide: Mapped["Slide"] = relationship("Slide")

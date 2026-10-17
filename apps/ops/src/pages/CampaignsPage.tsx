@@ -12,7 +12,7 @@ import {
 import type {
   CampaignAccountReadResponse,
   CampaignCarouselRead,
-  CampaignCarouselUnitRead,
+  CampaignCarouselSlideRead,
   CampaignInterestReadResponse,
   CampaignReadResponse,
 } from "../api/types";
@@ -159,7 +159,7 @@ export function CampaignsPage({
       const assembledCampaign: CampaignReadResponse = await runCampaign(selectedCampaign.id);
       const carouselCount: number = assembledCampaign.carousels.length;
       const statusText: string = carouselCount === 0
-        ? `Ran ${assembledCampaign.name}. No live units, so no carousel.`
+        ? `Ran ${assembledCampaign.name}. No live slides, so no carousel.`
         : `Ran ${assembledCampaign.name}. ${carouselCount} carousel${carouselCount === 1 ? "" : "s"}.`;
 
       await reloadCampaignsAfterAction(assembledCampaign, statusText);
@@ -362,8 +362,8 @@ function CampaignDetailView({
         <div>
           <h1>{selectedCampaign === null ? "Campaign" : selectedCampaign.name}</h1>
           <p className="lede">
-            Run assembles accepted units from the source into carousels on the
-            theme. Drafts stay out. Run does not generate text.
+            Run assembles accepted slides from the carousel into carousels on the
+            skeleton. Drafts stay out. Run does not generate text.
           </p>
         </div>
         <button type="button" onClick={onBack}>
@@ -392,10 +392,10 @@ function CampaignDetailView({
             </dd>
             <dt>Type</dt>
             <dd>{campaignTypeLabel(selectedCampaign.campaign_type)}</dd>
-            <dt>Theme</dt>
-            <dd>{selectedCampaign.theme_name === null ? "—" : selectedCampaign.theme_name}</dd>
-            <dt>Source</dt>
-            <dd>{selectedCampaign.source_name === null ? "—" : selectedCampaign.source_name}</dd>
+            <dt>Skeleton</dt>
+            <dd>{selectedCampaign.skeleton_name === null ? "—" : selectedCampaign.skeleton_name}</dd>
+            <dt>Carousel</dt>
+            <dd>{selectedCampaign.carousel_name === null ? "—" : selectedCampaign.carousel_name}</dd>
             <dt>Advertisement</dt>
             <dd>{selectedCampaign.advertisement_type}</dd>
             <dt>Platforms</dt>
@@ -422,9 +422,9 @@ function CampaignDetailView({
             </dd>
           </dl>
 
-          {canWrite && (selectedCampaign.theme_id === null || selectedCampaign.source_id === null) ? (
+          {canWrite && (selectedCampaign.skeleton_id === null || selectedCampaign.carousel_id === null) ? (
             <p className="field-hint">
-              This campaign was saved before a theme and source. Run stays off until both are set.
+              This campaign was saved before a skeleton and carousel. Run stays off until both are set.
             </p>
           ) : null}
           {canWrite ? (
@@ -434,8 +434,8 @@ function CampaignDetailView({
                 type="button"
                 disabled={
                   isBusy
-                  || selectedCampaign.theme_id === null
-                  || selectedCampaign.source_id === null
+                  || selectedCampaign.skeleton_id === null
+                  || selectedCampaign.carousel_id === null
                 }
                 onClick={(): void => {
                   void onRun();
@@ -492,8 +492,8 @@ function CampaignCarouselList({ carousels }: CampaignCarouselListProps): ReactEl
         <li key={carousel.id}>
           Carousel {carousel.position + 1}
           <ul>
-            {carousel.units.map((unit: CampaignCarouselUnitRead): ReactElement => (
-              <li key={unit.unit_id}>{unit.name}</li>
+            {carousel.slides.map((slide: CampaignCarouselSlideRead): ReactElement => (
+              <li key={slide.slide_id}>{slide.name}</li>
             ))}
           </ul>
         </li>
