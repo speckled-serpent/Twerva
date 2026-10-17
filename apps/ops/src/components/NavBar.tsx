@@ -11,6 +11,8 @@ export type OpsPageId =
   | "new-carousel"
   | "albums"
   | "new-album"
+  | "research"
+  | "new-research"
   | "queue"
   | "schedule"
   | "accounts"
@@ -52,6 +54,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Library",
     items: [
       { pageId: "albums", label: "Albums" },
+      { pageId: "research", label: "Research" },
     ],
   },
   {
@@ -93,6 +96,10 @@ function railSectionForPage(activePageId: OpsPageId): OpsPageId {
 
   if (activePageId === "new-album") {
     return "albums";
+  }
+
+  if (activePageId === "new-research") {
+    return "research";
   }
 
   return activePageId;

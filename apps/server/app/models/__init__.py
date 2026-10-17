@@ -20,8 +20,10 @@ cannot be shown with. ``slides.text_status`` is ``live`` or ``draft``.
 A draft is generated text that is not live until a person accepts it.
 ``carousels.inspiration`` and ``carousels.rules`` steer that draft.
 ``album_images`` holds the files. A slide points at most one of them.
-A carousel may point at the album those images came from. A campaign
-stores the skeleton and the carousel it runs. ``campaign_carousels`` is
+A carousel may point at the album those images came from.
+``research_items`` is one text document: a title, a slug, and a body.
+A carousel does not point at it yet. A campaign stores the skeleton
+and the carousel it runs. ``campaign_carousels`` is
 the latest assembly of live slides on that skeleton.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
@@ -34,6 +36,7 @@ table. Alembic ``env.py`` depends on that.
 
 from app.models.account import Account
 from app.models.album import Album, AlbumImage
+from app.models.research_item import ResearchItem
 from app.models.artifact import Artifact, ArtifactSlide
 from app.models.base import Base
 from app.models.brand import Brand
@@ -117,6 +120,7 @@ __all__ = [
     "AccountStatus",
     "Album",
     "AlbumImage",
+    "ResearchItem",
     "AdvertisementType",
     "Artifact",
     "ArtifactSlide",

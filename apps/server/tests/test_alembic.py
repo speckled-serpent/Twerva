@@ -31,6 +31,7 @@ THEME_ELEMENT_NAMES_REVISION_ID: str = "theme_element_names"
 THEME_ELEMENT_TEXT_OPTIONAL_REVISION_ID: str = "theme_element_text_optional"
 SKELETONS_CAROUSELS_SLIDES_REVISION_ID: str = "skeletons_carousels_slides"
 ALBUMS_FROM_SLIDES_REVISION_ID: str = "albums_from_slides"
+RESEARCH_ITEMS_REVISION_ID: str = "research_items"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -67,6 +68,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
+                f"{RESEARCH_ITEMS_REVISION_ID}.py",
                 f"{SKELETONS_CAROUSELS_SLIDES_REVISION_ID}.py",
                 f"{SOURCES_DEFAULT_ALBUM_REVISION_ID}.py",
                 f"{SOURCES_RESOURCE_FILES_REVISION_ID}.py",
@@ -775,6 +777,32 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertNotIn("ck_album_images_ck_", revision_source)
         self.assertIn("INSERT INTO album_images", revision_source)
         self.assertIn('op.drop_table("slide_images")', revision_source)
+
+    def test_research_follows_albums(self) -> None:
+        """Research items are the head after albums, with short check names."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{RESEARCH_ITEMS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), RESEARCH_ITEMS_REVISION_ID)
+        self.assertLessEqual(len(str(assigned_values.get("revision"))), 32)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            ALBUMS_FROM_SLIDES_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "research_items"', revision_source)
+        self.assertIn('op.create_check_constraint("title", "research_items"', revision_source)
+        self.assertIn('op.create_check_constraint("body", "research_items"', revision_source)
+        self.assertIn("char_length(body) <= 1000000", revision_source)
+        self.assertNotIn("ck_research_items_ck_", revision_source)
+        self.assertIn('op.drop_table("research_items")', revision_source)
+        self.assertNotIn('op.create_table(\n        "resource_files"', revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

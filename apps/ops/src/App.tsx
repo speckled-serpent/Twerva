@@ -8,6 +8,7 @@ import {
 } from "./api/client";
 import type {
   AlbumReadResponse,
+  ResearchReadResponse,
   CampaignReadResponse,
   HealthReadResponse,
   OpsUserReadResponse,
@@ -16,12 +17,14 @@ import type {
 } from "./api/types";
 import { NavBar, type OpsPageId } from "./components/NavBar";
 import { AlbumsPage, type AlbumsOpenRequest } from "./pages/AlbumsPage";
+import { ResearchPage, type ResearchOpenRequest } from "./pages/ResearchPage";
 import { AccountPage } from "./pages/AccountPage";
 import { AccountsPage } from "./pages/AccountsPage";
 import { CampaignsPage } from "./pages/CampaignsPage";
 import { campaignStatusLabel } from "./pages/campaignDisplay";
 import { LoginPage } from "./pages/LoginPage";
 import { NewAlbumPage } from "./pages/NewAlbumPage";
+import { NewResearchPage } from "./pages/NewResearchPage";
 import { NewCampaignPage } from "./pages/NewCampaignPage";
 import { NewCarouselPage } from "./pages/NewCarouselPage";
 import { NewSkeletonPage } from "./pages/NewSkeletonPage";
@@ -52,6 +55,7 @@ export function App(): ReactElement {
   const [skeletonStatusMessage, setSkeletonStatusMessage] = useState<string>("");
   const [sourceOpenRequest, setCarouselOpenRequest] = useState<CarouselsOpenRequest | null>(null);
   const [albumOpenRequest, setAlbumOpenRequest] = useState<AlbumsOpenRequest | null>(null);
+  const [researchOpenRequest, setResearchOpenRequest] = useState<ResearchOpenRequest | null>(null);
   const [healthLabel, setHealthLabel] = useState<string>("API: checking…");
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
@@ -188,6 +192,10 @@ export function App(): ReactElement {
             if (pageId !== "albums") {
               setAlbumOpenRequest(null);
             }
+
+            if (pageId !== "research") {
+              setResearchOpenRequest(null);
+            }
           }}
           healthLabel={healthLabel}
           signedInUsername={signedInOperator.username}
@@ -205,11 +213,13 @@ export function App(): ReactElement {
             skeletonStatusMessage,
             sourceOpenRequest,
             albumOpenRequest,
+            researchOpenRequest,
             setOpenedCampaignId,
             setCampaignStatusMessage,
             setSkeletonStatusMessage,
             setCarouselOpenRequest,
             setAlbumOpenRequest,
+            setResearchOpenRequest,
             setActivePageId,
           )}
         </main>
@@ -225,11 +235,13 @@ function renderActivePage(
   skeletonStatusMessage: string,
   sourceOpenRequest: CarouselsOpenRequest | null,
   albumOpenRequest: AlbumsOpenRequest | null,
+  researchOpenRequest: ResearchOpenRequest | null,
   onOpenedCampaignIdChange: (campaignId: string | null) => void,
   onCampaignStatusMessageChange: (statusMessage: string) => void,
   onSkeletonStatusMessageChange: (statusMessage: string) => void,
   onCarouselOpenRequestChange: (openRequest: CarouselsOpenRequest | null) => void,
   onAlbumOpenRequestChange: (openRequest: AlbumsOpenRequest | null) => void,
+  onResearchOpenRequestChange: (openRequest: ResearchOpenRequest | null) => void,
   onNavigate: (pageId: OpsPageId) => void,
 ): ReactElement {
 
@@ -313,6 +325,35 @@ function renderActivePage(
         }}
         onCancel={(): void => {
           onNavigate("albums");
+        }}
+      />
+    );
+  }
+
+  if (activePageId === "research") {
+    return (
+      <ResearchPage
+        openRequest={researchOpenRequest}
+        onCreateResearch={(): void => {
+          onResearchOpenRequestChange(null);
+          onNavigate("new-research");
+        }}
+      />
+    );
+  }
+
+  if (activePageId === "new-research") {
+    return (
+      <NewResearchPage
+        onCreated={(createdResearch: ResearchReadResponse): void => {
+          onResearchOpenRequestChange({
+            researchId: createdResearch.id,
+            statusMessage: `Created research ${createdResearch.title}.`,
+          });
+          onNavigate("research");
+        }}
+        onCancel={(): void => {
+          onNavigate("research");
         }}
       />
     );

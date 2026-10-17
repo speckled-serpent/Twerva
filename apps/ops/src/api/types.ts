@@ -659,6 +659,36 @@ export interface AlbumPatchRequest {
   images: AlbumImageWrite[];
 }
 
+export interface ResearchListItemResponse {
+  id: string;
+  title: string;
+  slug: string;
+  word_count: number;
+  character_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchReadResponse {
+  id: string;
+  title: string;
+  slug: string;
+  body: string;
+  word_count: number;
+  character_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchCreateRequest {
+  title: string;
+}
+
+export interface ResearchPatchRequest {
+  title: string;
+  body: string;
+}
+
 export interface CarouselGuidancePatchRequest {
   inspiration: string;
   rules: string;
