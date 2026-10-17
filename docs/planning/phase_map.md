@@ -97,7 +97,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Data model
 
-- [ ] **4.1 Add generation number, editor step, and the research link**
+- [x] **4.1 Add generation number, editor step, and the research link**
 
   Alembic revision `carousel_steps`, down-revision `research_items`. On `carousels`: `generation_number` integer, not null, server default 1, check `generation_number >= 1`; `editor_step` integer, not null, server default 3, check `editor_step IN (0, 2, 3)`. New table `carousel_research_items`: id, `carousel_id` (cascade on carousel delete), `research_item_id` (cascade on research delete), `position` (check `position >= 0`). Unique `(carousel_id, research_item_id)` and unique `(carousel_id, position)`. Upgrade sets `generation_number` 1 and `editor_step` 3 on every carousel, including Default. It leaves `album_id`, inspiration, rules, slides, and `album_image_id` as they are, and it inserts no research links. Downgrade drops the join table and the two columns. Albums, slides, and `research_items` stay.
 

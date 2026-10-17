@@ -22,7 +22,10 @@ A draft is generated text that is not live until a person accepts it.
 ``album_images`` holds the files. A slide points at most one of them.
 A carousel may point at the album those images came from.
 ``research_items`` is one text document: a title, a slug, and a body.
-A carousel does not point at it yet. A campaign stores the skeleton
+A carousel attaches an ordered list of those documents through
+``carousel_research_items``. There is no ``research_id`` column.
+``carousels.generation_number`` starts at 1. ``carousels.editor_step``
+remembers Basic, Content, or Slides. A campaign stores the skeleton
 and the carousel it runs. ``campaign_carousels`` is
 the latest assembly of live slides on that skeleton.
 
@@ -50,6 +53,7 @@ from app.models.campaign import (
 from app.models.cluster import Cluster, cluster_source_items
 from app.models.carousel import (
     Carousel,
+    CarouselResearchItem,
     Slide,
     SlideElementText,
     SlideExclusion,
@@ -140,6 +144,7 @@ __all__ = [
     "CampaignType",
     "Cluster",
     "Carousel",
+    "CarouselResearchItem",
     "RESOURCE_FILE_MEDIA_TYPE_ENUM",
     "ResourceFileMediaType",
     "MetricSnapshot",
