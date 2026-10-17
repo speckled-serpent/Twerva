@@ -1107,6 +1107,28 @@ class CarouselStepPatchRequest(BaseModel):
     editor_step: int
 
 
+class CarouselAlbumAttachRequest(BaseModel):
+    """JSON body for `PUT /api/v1/carousels/{carousel_id}/album`.
+
+    ``album_id`` must already exist. This does not create an album.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    album_id: uuid.UUID
+
+
+class CarouselAlbumCreateRequest(BaseModel):
+    """JSON body for `POST /api/v1/carousels/{carousel_id}/album`.
+
+    The name follows the same rules as `POST /api/v1/albums`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+
+
 class SlideElementTextWrite(BaseModel):
     """One skeleton text element and the value to store on the slide."""
 

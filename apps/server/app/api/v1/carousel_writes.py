@@ -1,6 +1,8 @@
-"""Create, rename, change the open step, and delete albums and slides.
+"""Create, rename, change the open step, attach one album, and delete.
 
-No new image bytes. The skeleton stays the one chosen at create.
+No new image bytes on the slide routes. The skeleton stays the one
+chosen at create. Slide upload still creates an album when the
+carousel does not have one.
 """
 
 from __future__ import annotations
@@ -19,6 +21,8 @@ from app.api.v1.lookups import (
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
+    CarouselAlbumAttachRequest,
+    CarouselAlbumCreateRequest,
     CarouselCreateRequest,
     CarouselPatchRequest,
     CarouselReadResponse,
@@ -31,7 +35,7 @@ from app.api.v1.schemas import (
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
-from app.models.album import AlbumImage
+from app.models.album import Album, AlbumImage
 from app.models.carousel import (
     CAROUSEL_EDITOR_STEP_DEFAULT,
     CAROUSEL_GENERATION_NUMBER_DEFAULT,
@@ -44,6 +48,10 @@ from app.models.enums import SlideImageMediaType, SlideTextStatus
 from app.models.skeleton import Skeleton
 from app.models.ops_user import OpsUser
 from app.settings import get_settings
+from app.albums.linking import (
+    SLIDES_STILL_POINT_AT_ALBUM_DETAIL,
+    slides_point_at_album,
+)
 from app.carousels.editing import (
     ALBUM_IN_USE_DETAIL,
     BLANK_NAME_DETAIL,
@@ -97,6 +105,25 @@ def register_source_write_routes(carousels_router: APIRouter) -> None:
         "/{carousel_id}/step",
         patch_carousel_step,
         methods=["PATCH"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/album",
+        put_carousel_album,
+        methods=["PUT"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/album",
+        post_carousel_album,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/album",
+        delete_carousel_album,
+        methods=["DELETE"],
         response_model=CarouselReadResponse,
     )
     carousels_router.add_api_route(
@@ -253,6 +280,119 @@ def patch_carousel_step(
     from app.api.v1.carousels import serialize_carousel
 
     return serialize_carousel(found_source, found_skeleton)
+
+
+def put_carousel_album(
+    carousel_id: uuid.UUID,
+    album_attach_request: CarouselAlbumAttachRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Point the carousel at an existing album.
+
+    Readers cannot call this. An unknown album is 404. Replacing the
+    attached album is 409 while a slide on this carousel still points
+    at an image in the album being left, including the Default album.
+    The stored album stays on 409. Pointing at the album already
+    attached is allowed. The response steps follow the album rule.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_album: Album = _fetch_album_or_raise(
+        album_attach_request.album_id,
+        our_database_session,
+    )
+    _reject_when_leaving_album_in_use(
+        found_source,
+        found_album.id,
+        our_database_session,
+    )
+    _point_carousel_at_album(found_source, found_album)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Album could not be attached.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def post_carousel_album(
+    carousel_id: uuid.UUID,
+    album_create_request: CarouselAlbumCreateRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Create an album and point the carousel at it.
+
+    The name and slug follow `POST /api/v1/albums`. A blank name is 400
+    and creates nothing. Replacing the attached album is 409 while a
+    slide still points at an image in the album being left, and that
+    refusal does not create the new album. The response steps follow
+    the album rule.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    album_name: str = _require_name(album_create_request.name)
+    _reject_when_leaving_album_in_use(
+        found_source,
+        None,
+        our_database_session,
+    )
+    created_album: Album = _create_named_album(album_name, our_database_session)
+    _point_carousel_at_album(found_source, created_album)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Album could not be saved.",
+    )
+    our_database_session.refresh(found_source)
+    our_database_session.refresh(created_album)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def delete_carousel_album(
+    carousel_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Clear ``album_id`` and leave the album row and its files.
+
+    Readers cannot call this. Clearing is 409 while a slide on this
+    carousel still points at an image in the attached album, including
+    the Default album. The stored album stays on 409. A carousel with
+    no album is unchanged. The response steps follow the album rule.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    _reject_when_leaving_album_in_use(
+        found_source,
+        None,
+        our_database_session,
+    )
+
+    if found_source.album_id is not None:
+        found_source.album = None
+        found_source.album_id = None
+        commit_database_session_or_raise_conflict(
+            our_database_session,
+            conflict_detail="Album could not be detached.",
+        )
+        our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
 
 
 def delete_carousel(
@@ -568,6 +708,107 @@ def _accepted_editor_step(
         ) from step_error
 
     return stored_step
+
+
+def _reject_when_leaving_album_in_use(
+    carousel: Carousel,
+    next_album_id: uuid.UUID | None,
+    our_database_session: Session,
+) -> None:
+    """409 when this change would leave an album a slide still points at.
+
+    Clearing, or pointing at a different album, leaves the current album.
+    Pointing at that same album does not. Slides on other carousels do
+    not count. The caller has not written yet.
+
+    Args:
+        carousel: The carousel being changed, with slides loaded.
+        next_album_id: The album that will be attached. Null clears the
+            pointer, or stands in for an album that will be created.
+        our_database_session: Open session.
+
+    Raises:
+        HTTPException: 409 while a slide on this carousel points at an
+            image in the album being left.
+    """
+
+    leaving_album_id: uuid.UUID | None = carousel.album_id
+
+    if leaving_album_id is None or leaving_album_id == next_album_id:
+
+        return
+
+    slides_still_point: bool = slides_point_at_album(
+        carousel,
+        leaving_album_id,
+        our_database_session,
+    )
+
+    if not slides_still_point:
+
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=SLIDES_STILL_POINT_AT_ALBUM_DETAIL,
+    )
+
+
+def _fetch_album_or_raise(album_id: uuid.UUID, our_database_session: Session) -> Album:
+    """Return an album, or 404. Same detail as the album routes."""
+
+    from app.api.v1.albums import _fetch_album_or_raise as fetch_album_or_raise
+
+    found_album: Album = fetch_album_or_raise(album_id, our_database_session)
+
+    return found_album
+
+
+def _create_named_album(album_name: str, our_database_session: Session) -> Album:
+    """Build an empty album with the same slug rules as ``POST /albums``.
+
+    The name is already stripped. The caller adds the carousel pointer
+    and commits both rows together.
+
+    Args:
+        album_name: Stripped album name.
+        our_database_session: Open session.
+
+    Returns:
+        The new album, added to the session and not yet committed.
+    """
+
+    from app.api.v1.albums import _new_album
+
+    created_album: Album = _new_album(album_name, our_database_session)
+    our_database_session.add(created_album)
+
+    return created_album
+
+
+def _point_carousel_at_album(carousel: Carousel, album: Album) -> None:
+    """Store the one album pointer. The caller commits."""
+
+    carousel.album = album
+    carousel.album_id = album.id
+
+
+def _read_carousel(
+    carousel: Carousel,
+    our_database_session: Session,
+) -> CarouselReadResponse:
+    """Return the detail. ``steps`` follows the album now stored."""
+
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        carousel.skeleton_id,
+        our_database_session,
+    )
+
+    from app.api.v1.carousels import serialize_carousel
+
+    carousel_response: CarouselReadResponse = serialize_carousel(carousel, found_skeleton)
+
+    return carousel_response
 
 
 def _require_name(raw_name: str) -> str:
