@@ -111,7 +111,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: a picture skeleton with a null album reads `content: available` and `slides: locked`. A color skeleton with a null album and no slides reads `content: done` and `slides: available`. The same color skeleton reads `slides: done` once it has two slides. Default, with six slides, reads `slides: done`, generation 1, editor step 3, its current `album_id`, and an empty research list.
 
-- [ ] **4.3 Accept a step change**
+- [x] **4.3 Accept a step change**
 
   `PATCH /api/v1/carousels/{carousel_id}/step` with `{editor_step}` stores 0, 2, or 3. Admin only, same as the other carousel writes. A value of 1 or 4 is 400. Step 3 is 400 while `steps.slides` is `locked`. The stored step is left unchanged on 400. Create still uses the column default, so a carousel created in this PR opens at step 3. Task 4.7 is what points create at step 0. `PATCH /api/v1/carousels/{carousel_id}` stays the rename.
 

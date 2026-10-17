@@ -1087,11 +1087,24 @@ class CarouselCreateRequest(BaseModel):
 
 
 class CarouselPatchRequest(BaseModel):
-    """Rename a carousel."""
+    """Rename a carousel. The skeleton stays the one chosen at create."""
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
+
+
+class CarouselStepPatchRequest(BaseModel):
+    """JSON body for `PATCH /api/v1/carousels/{carousel_id}/step`.
+
+    Stored values are 0 Basic, 2 Content, and 3 Slides. The handler
+    refuses a locked step. The rename route stays
+    `PATCH /carousels/{carousel_id}`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    editor_step: int
 
 
 class SlideElementTextWrite(BaseModel):
