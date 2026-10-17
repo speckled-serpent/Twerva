@@ -776,7 +776,7 @@ def _write_prepared_images(
         created_rows.append(created_image)
 
     if len(created_rows) == 1:
-        slide.album_image = created_rows[0]
+        slide.images = created_rows
 
     return created_rows
 

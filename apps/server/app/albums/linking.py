@@ -49,6 +49,7 @@ def ensure_carousel_album(carousel: Carousel, our_database_session: Session) -> 
     created_album.images = []
     our_database_session.add(created_album)
     carousel.album = created_album
+    carousel.album_id = created_album.id
 
     return created_album
 

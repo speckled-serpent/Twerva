@@ -413,7 +413,7 @@ def delete_slide_image(
     stored_files: list[tuple[str, str | None]] = [
         (found_image.relative_path, found_image.thumbnail_path),
     ]
-    found_slide.album_image = None
+    found_slide.images = []
     our_database_session.delete(found_image)
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -776,8 +776,12 @@ def _fetch_image_or_raise(
 
     found_slide: Slide = _fetch_slide_or_raise(carousel_id, slide_id, our_database_session)
     found_image: AlbumImage | None = our_database_session.get(AlbumImage, image_id)
+    pointed_image_id: uuid.UUID | None = found_slide.album_image_id
 
-    if found_image is None or found_slide.album_image_id != found_image.id:
+    if pointed_image_id is None and found_slide.album_image is not None:
+        pointed_image_id = found_slide.album_image.id
+
+    if found_image is None or pointed_image_id != found_image.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Image not found: {image_id}",

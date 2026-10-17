@@ -151,10 +151,12 @@ class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
 
         if len(rows) == 0:
             self.album_image = None
+            self.album_image_id = None
 
             return
 
         self.album_image = rows[0]
+        self.album_image_id = rows[0].id
 
 
 class SlideExclusion(Base, UuidPrimaryKeyMixin):
