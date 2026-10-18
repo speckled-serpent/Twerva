@@ -71,6 +71,13 @@ import type {
   SpotmuInterestSearchHit,
   SteerActionReadResponse,
 } from "./types";
+import {
+  albumImageFilePath,
+  albumImageImportPath,
+  albumImageItemPath,
+  albumImagesPath,
+  albumImageThumbnailPath,
+} from "./albumImagePaths";
 
 export const UNAUTHORIZED_EVENT_NAME: string = "twerva:unauthorized";
 
@@ -696,7 +703,7 @@ export async function uploadAlbumImage(
 
   return requestForm<AlbumImageReadResponse>(
     "POST",
-    `/api/v1/albums/${albumId}/images`,
+    albumImagesPath(albumId),
     formData,
   );
 }
@@ -708,7 +715,7 @@ export async function importAlbumImage(
 
   return requestJson<AlbumImageReadResponse>(
     "POST",
-    `/api/v1/albums/${albumId}/images/import`,
+    albumImageImportPath(albumId),
     imageImportRequest,
   );
 }
@@ -717,7 +724,7 @@ export async function deleteAlbumImage(albumId: string, imageId: string): Promis
 
   await requestJson<undefined>(
     "DELETE",
-    `/api/v1/albums/${albumId}/images/${imageId}`,
+    albumImageItemPath(albumId, imageId),
   );
 }
 
@@ -730,7 +737,7 @@ export async function deleteAlbumImage(albumId: string, imageId: string): Promis
  */
 export function albumImageFileUrl(albumId: string, imageId: string): string {
 
-  const requestPath: string = `/api/v1/albums/${albumId}/images/${imageId}/file`;
+  const requestPath: string = albumImageFilePath(albumId, imageId);
 
   return `${resolveApiBaseUrl()}${requestPath}`;
 }
@@ -744,7 +751,7 @@ export function albumImageFileUrl(albumId: string, imageId: string): string {
  */
 export function albumImageThumbnailUrl(albumId: string, imageId: string): string {
 
-  const requestPath: string = `/api/v1/albums/${albumId}/images/${imageId}/thumbnail`;
+  const requestPath: string = albumImageThumbnailPath(albumId, imageId);
 
   return `${resolveApiBaseUrl()}${requestPath}`;
 }

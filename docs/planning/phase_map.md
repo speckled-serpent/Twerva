@@ -161,7 +161,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: creating an album here lists it on Albums. Attaching an album sets `album_id` and survives reload. A picture skeleton with no album stays on Content. Clearing Default, and replacing it, each show that reason and leave the Default album attached.
 
-- [ ] **4.9a Edit that album's images on Content**
+- [x] **4.9a Edit that album's images on Content**
 
   Once an album is attached, Content reuses the album detail's add, URL import, reorder, and license, source, alt, and license-note fields, including the 700ms autosave those fields already use. New bytes go through `/api/v1/albums/{album_id}/...`. The slide editor still has its own upload until task 4.12a.
 

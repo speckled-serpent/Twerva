@@ -1117,6 +1117,13 @@ th {
   gap: 0.7rem;
 }
 
+.carousel-album-images,
+.album-images-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .slide-grid {
   list-style: none;
   padding: 0;

@@ -9,17 +9,23 @@ import {
 } from "../api/client";
 import type {
   AlbumListItemResponse,
+  AlbumReadResponse,
   CarouselReadResponse,
   SkeletonReadResponse,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { AlbumImagesEditor, type AlbumEditorActions } from "./AlbumImagesEditor";
 import {
   ALBUM_HAS_NO_IMAGES_COPY,
+  ALBUM_IMAGES_AUTOSAVE_COPY,
+  ALBUM_IMAGES_READONLY_COPY,
   ALBUM_NAME_REQUIRED_COPY,
   albumActionErrorText,
   albumImageCountLabel,
   albumsToChoose,
   detachedAlbumCopy,
+  visibleAlbumImageCount,
+  visibleAlbumName,
 } from "./carouselContent";
 import { skeletonRequiresImage } from "./slideSkeletonShape";
 
@@ -27,14 +33,17 @@ export interface CarouselContentStepProps {
   carousel: CarouselReadResponse;
   canWrite: boolean;
   onCarouselSaved: (savedCarousel: CarouselReadResponse) => void;
+  onAlbumEditorActions?: (actions: AlbumEditorActions | null) => void;
 }
 
 /**
- * Step 2: attach an existing album, or create one by name.
+ * Step 2: attach an existing album, or create one by name, then edit its images.
  *
  * The attached album shows its name and image count. Replace and clear
  * stay on this step. A 409 shows the API reason in the form and leaves
- * the album attached. A reader can look and cannot attach.
+ * the album attached. Images are the album's own rows: add, URL import,
+ * reorder, and the license fields. A reader can look and cannot attach
+ * or change those images.
  *
  * @param props - The open carousel and the write callback
  * @returns The Content step
@@ -43,6 +52,7 @@ export function CarouselContentStep({
   carousel,
   canWrite,
   onCarouselSaved,
+  onAlbumEditorActions,
 }: CarouselContentStepProps): ReactElement {
 
   const [trackedCarouselId, setTrackedCarouselId] = useState<string>(carousel.id);
@@ -54,7 +64,9 @@ export function CarouselContentStep({
   const [newAlbumName, setNewAlbumName] = useState<string>("");
   const [isReplacing, setIsReplacing] = useState<boolean>(false);
   const [isWorking, setIsWorking] = useState<boolean>(false);
+  const [imagesBusy, setImagesBusy] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [loadedAlbum, setLoadedAlbum] = useState<AlbumReadResponse | null>(null);
 
   if (carousel.id !== trackedCarouselId) {
     setTrackedCarouselId(carousel.id);
@@ -64,6 +76,8 @@ export function CarouselContentStep({
     setNewAlbumName("");
     setIsReplacing(false);
     setFormError(null);
+    setLoadedAlbum(null);
+    setImagesBusy(false);
   }
 
   useEffect((): (() => void) => {
@@ -133,6 +147,19 @@ export function CarouselContentStep({
     albums,
     carousel.album_id,
   );
+  const albumDetail: AlbumReadResponse | null = loadedAlbum !== null
+    && loadedAlbum.id === carousel.album_id
+    ? loadedAlbum
+    : null;
+  const albumName: string | null = visibleAlbumName(
+    albumDetail?.name ?? null,
+    attachedAlbum?.name ?? null,
+  );
+  const imageCount: number | null = visibleAlbumImageCount(
+    albumDetail === null ? null : albumDetail.images.length,
+    attachedAlbum === null ? null : attachedAlbum.image_count,
+  );
+  const albumChangeLocked: boolean = isWorking || imagesBusy;
   const showChooser: boolean = canWrite && (carousel.album_id === null || isReplacing);
   const choiceAlbums: AlbumListItemResponse[] = albumsToChoose(
     albums ?? [],
@@ -142,7 +169,7 @@ export function CarouselContentStep({
 
   const handleAttach = async (): Promise<void> => {
 
-    if (!canWrite || isWorking || selectedAlbumId === "") {
+    if (!canWrite || albumChangeLocked || selectedAlbumId === "") {
       return;
     }
 
@@ -167,7 +194,7 @@ export function CarouselContentStep({
 
   const handleCreate = async (): Promise<void> => {
 
-    if (!canWrite || isWorking) {
+    if (!canWrite || albumChangeLocked) {
       return;
     }
 
@@ -200,7 +227,7 @@ export function CarouselContentStep({
 
   const handleClear = async (): Promise<void> => {
 
-    if (!canWrite || isWorking || carousel.album_id === null) {
+    if (!canWrite || albumChangeLocked || carousel.album_id === null) {
       return;
     }
 
@@ -224,11 +251,28 @@ export function CarouselContentStep({
       <ErrorBanner error={albumError} />
       <AlbumStatus
         carousel={carousel}
-        attachedAlbum={attachedAlbum}
+        albumName={albumName}
+        imageCount={imageCount}
         albumsLoaded={albums !== null}
         albumError={albumError}
         skeleton={skeleton}
       />
+      {carousel.album_id === null ? null : (
+        <div className="carousel-album-images" id="carousel-album-images">
+          <p className="field-hint" id="carousel-album-images-hint">
+            {canWrite ? ALBUM_IMAGES_AUTOSAVE_COPY : ALBUM_IMAGES_READONLY_COPY}
+          </p>
+          <AlbumImagesEditor
+            key={carousel.album_id}
+            albumId={carousel.album_id}
+            canWrite={canWrite}
+            showName={false}
+            onAlbumChange={setLoadedAlbum}
+            onActions={onAlbumEditorActions}
+            onBusyChange={setImagesBusy}
+          />
+        </div>
+      )}
       {canWrite ? (
         <form
           id="carousel-album-form"
@@ -251,7 +295,7 @@ export function CarouselContentStep({
                 <button
                   id="carousel-album-replace"
                   type="button"
-                  disabled={isWorking}
+                  disabled={albumChangeLocked}
                   onClick={(): void => {
                     setIsReplacing(true);
                     setFormError(null);
@@ -263,7 +307,7 @@ export function CarouselContentStep({
               <button
                 id="carousel-album-clear"
                 type="button"
-                disabled={isWorking}
+                disabled={albumChangeLocked}
                 onClick={(): void => {
                   void handleClear();
                 }}
@@ -280,6 +324,7 @@ export function CarouselContentStep({
               newAlbumName={newAlbumName}
               isReplacing={isReplacing}
               isWorking={isWorking}
+              isLocked={albumChangeLocked}
               onSelectedAlbumId={setSelectedAlbumId}
               onNewAlbumName={setNewAlbumName}
               onAttach={(): void => {
@@ -312,7 +357,8 @@ export function CarouselContentStep({
 
 interface AlbumStatusProps {
   carousel: CarouselReadResponse;
-  attachedAlbum: AlbumListItemResponse | null;
+  albumName: string | null;
+  imageCount: number | null;
   albumsLoaded: boolean;
   albumError: unknown;
   skeleton: SkeletonReadResponse | null;
@@ -320,7 +366,8 @@ interface AlbumStatusProps {
 
 function AlbumStatus({
   carousel,
-  attachedAlbum,
+  albumName,
+  imageCount,
   albumsLoaded,
   albumError,
   skeleton,
@@ -329,29 +376,30 @@ function AlbumStatus({
   return (
     <div className="carousel-attached-album" id="carousel-album-status">
       <p className="carousel-basic-kicker">Album</p>
-      {albumStatusBody(carousel, attachedAlbum, albumsLoaded, albumError, skeleton)}
+      {albumStatusBody(carousel, albumName, imageCount, albumsLoaded, albumError, skeleton)}
     </div>
   );
 }
 
 function albumStatusBody(
   carousel: CarouselReadResponse,
-  attachedAlbum: AlbumListItemResponse | null,
+  albumName: string | null,
+  imageCount: number | null,
   albumsLoaded: boolean,
   albumError: unknown,
   skeleton: SkeletonReadResponse | null,
 ): ReactElement {
 
-  if (attachedAlbum !== null) {
+  if (albumName !== null && imageCount !== null) {
     return (
       <>
         <p id="carousel-album-name" className="carousel-album-name">
-          {attachedAlbum.name}
+          {albumName}
         </p>
         <p id="carousel-album-image-count" className="carousel-album-count">
-          {albumImageCountLabel(attachedAlbum.image_count)}
+          {albumImageCountLabel(imageCount)}
         </p>
-        {attachedAlbum.image_count === 0 ? (
+        {imageCount === 0 ? (
           <p id="carousel-album-no-images" className="carousel-album-note">
             {ALBUM_HAS_NO_IMAGES_COPY}
           </p>
@@ -411,6 +459,7 @@ interface AlbumChooserProps {
   newAlbumName: string;
   isReplacing: boolean;
   isWorking: boolean;
+  isLocked: boolean;
   onSelectedAlbumId: (albumId: string) => void;
   onNewAlbumName: (albumName: string) => void;
   onAttach: () => void;
@@ -425,6 +474,7 @@ function AlbumChooser({
   newAlbumName,
   isReplacing,
   isWorking,
+  isLocked,
   onSelectedAlbumId,
   onNewAlbumName,
   onAttach,
@@ -446,7 +496,7 @@ function AlbumChooser({
         <select
           id="carousel-album-select"
           value={selectedAlbumId}
-          disabled={!albumsLoaded || isWorking || albums.length === 0}
+          disabled={!albumsLoaded || isLocked || albums.length === 0}
           onChange={(changeEvent): void => {
             onSelectedAlbumId(changeEvent.target.value);
           }}
@@ -469,7 +519,7 @@ function AlbumChooser({
           id="carousel-album-attach"
           type="button"
           className="primary"
-          disabled={isWorking || selectedAlbumId === ""}
+          disabled={isLocked || selectedAlbumId === ""}
           onClick={onAttach}
         >
           {isWorking ? "Saving…" : attachLabel}
@@ -480,7 +530,7 @@ function AlbumChooser({
         <input
           id="carousel-album-create-name"
           value={newAlbumName}
-          disabled={isWorking}
+          disabled={isLocked}
           autoComplete="off"
           onChange={(changeEvent): void => {
             onNewAlbumName(changeEvent.target.value);
@@ -492,7 +542,7 @@ function AlbumChooser({
           id="carousel-album-create"
           type="button"
           className="primary"
-          disabled={isWorking}
+          disabled={isLocked}
           onClick={onCreate}
         >
           {isWorking ? "Saving…" : "Create album"}
@@ -501,7 +551,7 @@ function AlbumChooser({
           <button
             id="carousel-album-cancel"
             type="button"
-            disabled={isWorking}
+            disabled={isLocked}
             onClick={onCancel}
           >
             Cancel

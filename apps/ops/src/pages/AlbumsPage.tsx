@@ -1,52 +1,13 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 
-import {
-  albumImageDisplayUrl,
-  deleteAlbum,
-  deleteAlbumImage,
-  fetchAlbumById,
-  importAlbumImage,
-  listAlbums,
-  patchAlbum,
-  uploadAlbumImage,
-} from "../api/client";
-import type {
-  AlbumImageReadResponse,
-  AlbumListItemResponse,
-  AlbumPatchRequest,
-  AlbumReadResponse,
-  SlideImageLicense,
-} from "../api/types";
+import { deleteAlbum, listAlbums } from "../api/client";
+import type { AlbumListItemResponse, AlbumReadResponse } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { AlbumImagesEditor, type AlbumEditorActions } from "./AlbumImagesEditor";
 import { formatSkeletonTimestamp } from "./skeletonDisplay";
-import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
-import {
-  SKELETON_AUTOSAVE_DELAY_MS,
-  formatSkeletonAutosaveError,
-  leaveAfterAutosave,
-  type AutosaveReadiness,
-} from "./skeletonAutosave";
-import {
-  SLIDE_IMAGE_NOTE_ERROR,
-  SLIDE_IMAGE_SOURCE_ERROR,
-  SLIDE_IMAGE_TYPE_ERROR,
-  SLIDE_IMAGE_URL_ERROR,
-  SLIDE_IMAGE_URL_SCHEME_ERROR,
-  isAllowedImageFileName,
-  isHttpImageUrl,
-} from "./slideImageDraft";
-import { useSkeletonAutosave } from "./useSkeletonAutosave";
-
-const LICENSE_OPTIONS: SlideImageLicense[] = [
-  "cc0",
-  "public_domain",
-  "owned",
-  "licensed",
-];
-
-const ALBUM_NAME_ERROR: string = "Name is required.";
+import { leaveAfterAutosave } from "./skeletonAutosave";
 
 export interface AlbumsOpenRequest {
   albumId: string;
@@ -56,21 +17,6 @@ export interface AlbumsOpenRequest {
 export interface AlbumsPageProps {
   openRequest: AlbumsOpenRequest | null;
   onCreateAlbum: () => void;
-}
-
-interface AlbumImageDraft {
-  id: string;
-  altText: string;
-  license: SlideImageLicense;
-  source: string;
-  licenseNote: string;
-  relativePath: string;
-  thumbnailPath: string | null;
-}
-
-interface AlbumDraft {
-  name: string;
-  images: AlbumImageDraft[];
 }
 
 /**
@@ -319,275 +265,73 @@ function AlbumDetailView({ albumId, onBack, onDeleted }: AlbumDetailViewProps): 
 
   const canWrite: boolean = useCanWriteOps();
   const [album, setAlbum] = useState<AlbumReadResponse | null>(null);
-  const [draft, setDraft] = useState<AlbumDraft | null>(null);
-  const [loadError, setLoadError] = useState<unknown>(null);
-  const [actionError, setActionError] = useState<unknown>(null);
-  const [isWorking, setIsWorking] = useState<boolean>(false);
+  const [draftName, setDraftName] = useState<string>("");
+  const [deleteError, setDeleteError] = useState<unknown>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [imageUrl, setImageUrl] = useState<string>("");
-  const [intakeLicense, setIntakeLicense] = useState<SlideImageLicense>("cc0");
-  const [intakeSource, setIntakeSource] = useState<string>("");
-  const [intakeAlt, setIntakeAlt] = useState<string>("");
-  const [intakeNote, setIntakeNote] = useState<string>("");
-
-  const autosave = useSkeletonAutosave<AlbumDraft>({
-    delayMs: SKELETON_AUTOSAVE_DELAY_MS,
-    readiness: albumDraftReadiness,
-    fingerprint: albumDraftFingerprint,
-    save: async (value: AlbumDraft): Promise<void> => {
-      await patchAlbum(albumId, patchFromDraft(value));
-    },
-    formatError: formatSkeletonAutosaveError,
-  });
-
-  useEffect((): (() => void) => {
-    let isCancelled: boolean = false;
-
-    const loadAlbum = async (): Promise<void> => {
-
-      try {
-        const loadedAlbum: AlbumReadResponse = await fetchAlbumById(albumId);
-
-        if (isCancelled) {
-          return;
-        }
-
-        const loadedDraft: AlbumDraft = draftFromAlbum(loadedAlbum);
-        setAlbum(loadedAlbum);
-        setDraft(loadedDraft);
-        setLoadError(null);
-        autosave.noteSaved(loadedDraft);
-      } catch (caughtError: unknown) {
-        if (isCancelled) {
-          return;
-        }
-
-        setLoadError(caughtError);
-      }
-    };
-
-    void loadAlbum();
-
-    return (): void => {
-      isCancelled = true;
-    };
-  }, [albumId, autosave.noteSaved]);
-
-  useEffect((): void => {
-    if (!canWrite || draft === null) {
-      return;
-    }
-
-    autosave.schedule(draft);
-  }, [autosave.schedule, canWrite, draft]);
-
-  const replaceFromServer = (loadedAlbum: AlbumReadResponse): void => {
-    const loadedDraft: AlbumDraft = draftFromAlbum(loadedAlbum);
-    setAlbum(loadedAlbum);
-    setDraft(loadedDraft);
-    autosave.noteSaved(loadedDraft);
-  };
+  const [imagesBusy, setImagesBusy] = useState<boolean>(false);
+  const albumEditorActionsRef: { current: AlbumEditorActions | null } = useRef(null);
 
   const handleBack = (): void => {
-    void leaveAfterAutosave(autosave.flush, autosave.isDirty, onBack);
-  };
+    const albumActions: AlbumEditorActions | null = albumEditorActionsRef.current;
 
-  const handleAddFile = async (): Promise<void> => {
+    const flush = async (): Promise<void> => {
 
-    if (!canWrite || file === null || isWorking) {
-      return;
-    }
-
-    const intakeError: string | null = fileIntakeError(file.name, intakeSource, intakeLicense, intakeNote);
-
-    if (intakeError !== null) {
-      setActionError(new Error(intakeError));
-
-      return;
-    }
-
-    setIsWorking(true);
-    setActionError(null);
-
-    try {
-      await autosave.flush();
-
-      if (autosave.isDirty()) {
+      if (albumActions === null) {
         return;
       }
 
-      await uploadAlbumImage(
-        albumId,
-        file,
-        intakeLicense,
-        intakeSource.trim(),
-        intakeAlt.trim(),
-        intakeLicense === "licensed" ? intakeNote.trim() : "",
-      );
-      const loadedAlbum: AlbumReadResponse = await fetchAlbumById(albumId);
-      replaceFromServer(loadedAlbum);
-      setFile(null);
-    } catch (caughtError: unknown) {
-      setActionError(caughtError);
-    } finally {
-      setIsWorking(false);
-    }
-  };
+      await albumActions.flush();
+    };
 
-  const handleImportUrl = async (): Promise<void> => {
+    const isDirty = (): boolean => {
 
-    if (!canWrite || isWorking) {
-      return;
-    }
-
-    const trimmedUrl: string = imageUrl.trim();
-    const intakeError: string | null = urlIntakeError(trimmedUrl, intakeSource, intakeLicense, intakeNote);
-
-    if (intakeError !== null) {
-      setActionError(new Error(intakeError));
-
-      return;
-    }
-
-    setIsWorking(true);
-    setActionError(null);
-
-    try {
-      await autosave.flush();
-
-      if (autosave.isDirty()) {
-        return;
+      if (albumActions === null) {
+        return false;
       }
 
-      await importAlbumImage(albumId, {
-        url: trimmedUrl,
-        license: intakeLicense,
-        source: intakeSource.trim(),
-        alt_text: intakeAlt.trim() === "" ? null : intakeAlt.trim(),
-        license_note: intakeLicense === "licensed" ? intakeNote.trim() : "",
-      });
-      const loadedAlbum: AlbumReadResponse = await fetchAlbumById(albumId);
-      replaceFromServer(loadedAlbum);
-      setImageUrl("");
-    } catch (caughtError: unknown) {
-      setActionError(caughtError);
-    } finally {
-      setIsWorking(false);
-    }
-  };
+      return albumActions.isDirty();
+    };
 
-  const handleRemoveImage = async (imageId: string): Promise<void> => {
-
-    if (!canWrite || isWorking) {
-      return;
-    }
-
-    setIsWorking(true);
-    setActionError(null);
-
-    try {
-      await autosave.flush();
-
-      if (autosave.isDirty()) {
-        return;
-      }
-
-      await deleteAlbumImage(albumId, imageId);
-      const loadedAlbum: AlbumReadResponse = await fetchAlbumById(albumId);
-      replaceFromServer(loadedAlbum);
-    } catch (caughtError: unknown) {
-      setActionError(caughtError);
-    } finally {
-      setIsWorking(false);
-    }
+    void leaveAfterAutosave(flush, isDirty, onBack);
   };
 
   const handleConfirmDelete = async (): Promise<void> => {
 
-    if (!canWrite || album === null || isWorking) {
+    if (!canWrite || album === null || isDeleting) {
       return;
     }
 
     const albumName: string = album.name;
-    setIsWorking(true);
-    setActionError(null);
+    setIsDeleting(true);
+    setDeleteError(null);
 
     try {
-      await autosave.abandon();
+      const albumActions: AlbumEditorActions | null = albumEditorActionsRef.current;
+
+      if (albumActions !== null) {
+        await albumActions.abandon();
+      }
+
       await deleteAlbum(albumId);
       onDeleted(albumName);
     } catch (caughtError: unknown) {
-      setActionError(caughtError);
-      setIsWorking(false);
+      setDeleteError(caughtError);
+      setIsDeleting(false);
     }
   };
 
-  const moveImage = (imageIndex: number, direction: -1 | 1): void => {
-
-    if (draft === null) {
-      return;
-    }
-
-    const nextIndex: number = imageIndex + direction;
-
-    if (nextIndex < 0 || nextIndex >= draft.images.length) {
-      return;
-    }
-
-    const nextImages: AlbumImageDraft[] = [...draft.images];
-    const movingImage: AlbumImageDraft | undefined = nextImages[imageIndex];
-    const swappedImage: AlbumImageDraft | undefined = nextImages[nextIndex];
-
-    if (movingImage === undefined || swappedImage === undefined) {
-      return;
-    }
-
-    nextImages[imageIndex] = swappedImage;
-    nextImages[nextIndex] = movingImage;
-    setDraft({
-      name: draft.name,
-      images: nextImages,
-    });
-    setActionError(null);
-  };
-
-  const updateImage = (imageId: string, patch: Partial<AlbumImageDraft>): void => {
-
-    if (draft === null) {
-      return;
-    }
-
-    const nextImages: AlbumImageDraft[] = draft.images.map(
-      (image: AlbumImageDraft): AlbumImageDraft => {
-        if (image.id !== imageId) {
-          return image;
-        }
-
-        return { ...image, ...patch };
-      },
-    );
-    setDraft({
-      name: draft.name,
-      images: nextImages,
-    });
-    setActionError(null);
-  };
+  const headingName: string = draftName.trim() || album?.name || "Album";
+  const deleteLocked: boolean = !canWrite || album === null || isDeleting || imagesBusy;
 
   return (
     <section>
       <div className="page-header-row">
         <div>
-          <h1>{draft?.name.trim() || album?.name || "Album"}</h1>
+          <h1>{headingName}</h1>
           <p className="lede">
             Images in this album. Name, order, and license fields save on their own.
           </p>
-          <SkeletonAutosaveStatus
-            state={autosave.state}
-            onRetry={(): void => {
-              void autosave.retry();
-            }}
-          />
         </div>
         <div className="page-header-actions">
           <button type="button" onClick={handleBack}>
@@ -596,7 +340,7 @@ function AlbumDetailView({ albumId, onBack, onDeleted }: AlbumDetailViewProps): 
           <button
             type="button"
             className="danger"
-            disabled={!canWrite || album === null || isWorking}
+            disabled={deleteLocked}
             onClick={(): void => {
               setPendingDelete(true);
             }}
@@ -606,257 +350,35 @@ function AlbumDetailView({ albumId, onBack, onDeleted }: AlbumDetailViewProps): 
         </div>
       </div>
       <ReadOnlyNotice />
-      <ErrorBanner error={loadError} />
-      <ErrorBanner error={actionError} />
-      {draft === null ? null : (
-        <>
-          <label>
-            Name
-            <input
-              id="album-name"
-              value={draft.name}
-              disabled={!canWrite}
-              onChange={(changeEvent): void => {
-                setDraft({
-                  name: changeEvent.target.value,
-                  images: draft.images,
-                });
-              }}
-            />
-          </label>
-          <section className="slide-images">
-            <h2>Images</h2>
-            {draft.images.length === 0 ? <p className="empty-hint">No images yet.</p> : null}
-            <div className="slide-image-drafts">
-              {draft.images.map((image: AlbumImageDraft, imageIndex: number): ReactElement => {
-                const displayImage: AlbumImageReadResponse = displayImageFromDraft(image, imageIndex);
-
-                return (
-                  <div className="image-editor" key={image.id}>
-                    <img
-                      src={albumImageDisplayUrl(albumId, displayImage)}
-                      alt={image.altText === "" ? image.relativePath : image.altText}
-                    />
-                    <div className="stack-form">
-                      <p className="mono">{image.relativePath}</p>
-                      <label>
-                        Alt
-                        <input
-                          id={`album-image-alt-${imageIndex}`}
-                          value={image.altText}
-                          disabled={!canWrite}
-                          onChange={(changeEvent): void => {
-                            updateImage(image.id, { altText: changeEvent.target.value });
-                          }}
-                        />
-                      </label>
-                      <label>
-                        License
-                        <select
-                          id={`album-image-license-${imageIndex}`}
-                          value={image.license}
-                          disabled={!canWrite}
-                          onChange={(changeEvent): void => {
-                            const nextLicense: SlideImageLicense = changeEvent.target.value as SlideImageLicense;
-                            updateImage(image.id, {
-                              license: nextLicense,
-                              licenseNote: nextLicense === "licensed" ? image.licenseNote : "",
-                            });
-                          }}
-                        >
-                          {LICENSE_OPTIONS.map((licenseOption: SlideImageLicense): ReactElement => (
-                            <option key={licenseOption} value={licenseOption}>
-                              {licenseOption}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Source
-                        <input
-                          id={`album-image-source-${imageIndex}`}
-                          value={image.source}
-                          disabled={!canWrite}
-                          onChange={(changeEvent): void => {
-                            updateImage(image.id, { source: changeEvent.target.value });
-                          }}
-                        />
-                      </label>
-                      <label>
-                        License note
-                        <input
-                          id={`album-image-note-${imageIndex}`}
-                          value={image.licenseNote}
-                          disabled={!canWrite || image.license !== "licensed"}
-                          onChange={(changeEvent): void => {
-                            updateImage(image.id, { licenseNote: changeEvent.target.value });
-                          }}
-                        />
-                      </label>
-                      <div className="button-row">
-                        <button
-                          type="button"
-                          disabled={!canWrite || imageIndex === 0 || isWorking}
-                          onClick={(): void => {
-                            moveImage(imageIndex, -1);
-                          }}
-                        >
-                          Move up
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!canWrite || imageIndex === draft.images.length - 1 || isWorking}
-                          onClick={(): void => {
-                            moveImage(imageIndex, 1);
-                          }}
-                        >
-                          Move down
-                        </button>
-                        <button
-                          type="button"
-                          className="danger"
-                          disabled={!canWrite || isWorking}
-                          onClick={(): void => {
-                            void handleRemoveImage(image.id);
-                          }}
-                        >
-                          Remove image
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-          {canWrite ? (
-            <section className="slide-images">
-              <h2>Add an image</h2>
-              <p className="field-hint">
-                Upload a file or add a URL. The license, source, and note are saved with it.
-              </p>
-              <label>
-                File
-                <input
-                  id="album-image-file"
-                  type="file"
-                  accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-                  onChange={(changeEvent): void => {
-                    const nextFile: File | undefined = changeEvent.target.files?.[0];
-                    setFile(nextFile ?? null);
-                    setActionError(null);
-                  }}
-                />
-              </label>
-              <p className="field-hint">SVG, PNG, or JPEG. 8 MB each.</p>
-              <div className="slide-image-url-row">
-                <label>
-                  Image URL
-                  <input
-                    id="album-image-url"
-                    value={imageUrl}
-                    onChange={(changeEvent): void => {
-                      setImageUrl(changeEvent.target.value);
-                      setActionError(null);
-                    }}
-                  />
-                </label>
-                <button
-                  id="album-import-url"
-                  type="button"
-                  disabled={isWorking}
-                  onClick={(): void => {
-                    void handleImportUrl();
-                  }}
-                >
-                  Add URL
-                </button>
-              </div>
-              <label>
-                License
-                <select
-                  id="album-intake-license"
-                  value={intakeLicense}
-                  onChange={(changeEvent): void => {
-                    const nextLicense: SlideImageLicense = changeEvent.target.value as SlideImageLicense;
-                    setIntakeLicense(nextLicense);
-
-                    if (nextLicense !== "licensed") {
-                      setIntakeNote("");
-                    }
-                  }}
-                >
-                  {LICENSE_OPTIONS.map((licenseOption: SlideImageLicense): ReactElement => (
-                    <option key={licenseOption} value={licenseOption}>
-                      {licenseOption}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Source
-                <input
-                  id="album-intake-source"
-                  value={intakeSource}
-                  onChange={(changeEvent): void => {
-                    setIntakeSource(changeEvent.target.value);
-                  }}
-                />
-              </label>
-              <label>
-                Alt
-                <input
-                  id="album-intake-alt"
-                  value={intakeAlt}
-                  onChange={(changeEvent): void => {
-                    setIntakeAlt(changeEvent.target.value);
-                  }}
-                />
-              </label>
-              <label>
-                License note
-                <input
-                  id="album-intake-note"
-                  value={intakeNote}
-                  disabled={intakeLicense !== "licensed"}
-                  onChange={(changeEvent): void => {
-                    setIntakeNote(changeEvent.target.value);
-                  }}
-                />
-              </label>
-              <div className="button-row">
-                <button
-                  id="album-upload-image"
-                  type="button"
-                  className="primary"
-                  disabled={file === null || isWorking}
-                  onClick={(): void => {
-                    void handleAddFile();
-                  }}
-                >
-                  {isWorking ? "Adding…" : "Add image"}
-                </button>
-              </div>
-            </section>
-          ) : null}
-        </>
-      )}
+      <AlbumImagesEditor
+        albumId={albumId}
+        canWrite={canWrite}
+        showName
+        onAlbumChange={(loadedAlbum: AlbumReadResponse): void => {
+          setAlbum(loadedAlbum);
+        }}
+        onNameDraft={setDraftName}
+        onActions={(actions: AlbumEditorActions | null): void => {
+          albumEditorActionsRef.current = actions;
+        }}
+        onBusyChange={setImagesBusy}
+      />
       {pendingDelete && album !== null ? (
         <DeleteAlbumDialog
           albumName={album.name}
-          deleteError={actionError}
-          isDeleting={isWorking}
+          deleteError={deleteError}
+          isDeleting={isDeleting}
           canWrite={canWrite}
           onConfirm={(): void => {
             void handleConfirmDelete();
           }}
           onCancel={(): void => {
-            if (isWorking) {
+            if (isDeleting) {
               return;
             }
 
             setPendingDelete(false);
-            setActionError(null);
+            setDeleteError(null);
           }}
         />
       ) : null}
@@ -921,172 +443,4 @@ function DeleteAlbumDialog({
       </div>
     </div>
   );
-}
-
-function draftFromAlbum(album: AlbumReadResponse): AlbumDraft {
-
-  const orderedImages: AlbumImageReadResponse[] = [...album.images].sort(
-    (left: AlbumImageReadResponse, right: AlbumImageReadResponse): number => (
-      left.position - right.position
-    ),
-  );
-  const imageDrafts: AlbumImageDraft[] = orderedImages.map(
-    (image: AlbumImageReadResponse): AlbumImageDraft => {
-      const imageDraft: AlbumImageDraft = {
-        id: image.id,
-        altText: image.alt_text ?? "",
-        license: image.license,
-        source: image.source,
-        licenseNote: image.license === "licensed" ? image.license_note : "",
-        relativePath: image.relative_path,
-        thumbnailPath: image.thumbnail_path,
-      };
-
-      return imageDraft;
-    },
-  );
-  const draft: AlbumDraft = {
-    name: album.name,
-    images: imageDrafts,
-  };
-
-  return draft;
-}
-
-function patchFromDraft(draft: AlbumDraft): AlbumPatchRequest {
-
-  const patchRequest: AlbumPatchRequest = {
-    name: draft.name.trim(),
-    images: draft.images.map((image: AlbumImageDraft) => ({
-      id: image.id,
-      alt_text: image.altText.trim() === "" ? null : image.altText.trim(),
-      license: image.license,
-      source: image.source.trim(),
-      license_note: image.license === "licensed" ? image.licenseNote.trim() : "",
-    })),
-  };
-
-  return patchRequest;
-}
-
-function albumDraftReadiness(draft: AlbumDraft): AutosaveReadiness {
-
-  if (draft.name.trim() === "") {
-    const invalidName: AutosaveReadiness = {
-      kind: "invalid",
-      message: ALBUM_NAME_ERROR,
-    };
-
-    return invalidName;
-  }
-
-  for (const image of draft.images) {
-    if (image.source.trim() === "") {
-      const invalidSource: AutosaveReadiness = {
-        kind: "invalid",
-        message: SLIDE_IMAGE_SOURCE_ERROR,
-      };
-
-      return invalidSource;
-    }
-
-    if (image.license === "licensed" && image.licenseNote.trim() === "") {
-      const invalidNote: AutosaveReadiness = {
-        kind: "invalid",
-        message: SLIDE_IMAGE_NOTE_ERROR,
-      };
-
-      return invalidNote;
-    }
-  }
-
-  const ready: AutosaveReadiness = { kind: "ready" };
-
-  return ready;
-}
-
-function albumDraftFingerprint(draft: AlbumDraft): string {
-
-  const fingerprint: string = JSON.stringify({
-    name: draft.name.trim(),
-    images: draft.images.map((image: AlbumImageDraft) => ({
-      id: image.id,
-      altText: image.altText.trim(),
-      license: image.license,
-      source: image.source.trim(),
-      licenseNote: image.license === "licensed" ? image.licenseNote.trim() : "",
-    })),
-  });
-
-  return fingerprint;
-}
-
-function displayImageFromDraft(image: AlbumImageDraft, position: number): AlbumImageReadResponse {
-
-  const displayImage: AlbumImageReadResponse = {
-    id: image.id,
-    position,
-    relative_path: image.relativePath,
-    media_type: "jpeg",
-    byte_size: 0,
-    width: null,
-    height: null,
-    alt_text: image.altText === "" ? null : image.altText,
-    license: image.license,
-    source: image.source,
-    license_note: image.licenseNote,
-    intake: "upload",
-    thumbnail_path: image.thumbnailPath,
-  };
-
-  return displayImage;
-}
-
-function fileIntakeError(
-  fileName: string,
-  source: string,
-  imageLicense: SlideImageLicense,
-  licenseNote: string,
-): string | null {
-
-  if (!isAllowedImageFileName(fileName)) {
-    return SLIDE_IMAGE_TYPE_ERROR;
-  }
-
-  return sharedIntakeError(source, imageLicense, licenseNote);
-}
-
-function urlIntakeError(
-  imageUrl: string,
-  source: string,
-  imageLicense: SlideImageLicense,
-  licenseNote: string,
-): string | null {
-
-  if (imageUrl === "") {
-    return SLIDE_IMAGE_URL_ERROR;
-  }
-
-  if (!isHttpImageUrl(imageUrl)) {
-    return SLIDE_IMAGE_URL_SCHEME_ERROR;
-  }
-
-  return sharedIntakeError(source, imageLicense, licenseNote);
-}
-
-function sharedIntakeError(
-  source: string,
-  imageLicense: SlideImageLicense,
-  licenseNote: string,
-): string | null {
-
-  if (source.trim() === "") {
-    return SLIDE_IMAGE_SOURCE_ERROR;
-  }
-
-  if (imageLicense === "licensed" && licenseNote.trim() === "") {
-    return SLIDE_IMAGE_NOTE_ERROR;
-  }
-
-  return null;
 }
