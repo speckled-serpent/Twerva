@@ -30,11 +30,12 @@ export const CAROUSEL_STEPS: readonly CarouselStepDefinition[] = [
 /**
  * Steps the operator can open in this phase.
  *
- * Basic is the label and the locked skeleton. Slides is the editor.
- * Instructions, Content, and Final stay closed.
+ * Basic is the label and the locked skeleton. Content chooses an album.
+ * Slides is the editor. Instructions and Final stay closed.
  */
 export const OPENABLE_EDITOR_STEPS: readonly number[] = [
   CAROUSEL_STEP_BASIC,
+  CAROUSEL_STEP_CONTENT,
   CAROUSEL_STEP_SLIDES,
 ];
 
@@ -157,8 +158,8 @@ export function stepStateFor(
 /**
  * Whether this phase lets the operator open the step.
  *
- * Basic and Slides open when they are available or done. A locked step
- * stays closed. Instructions, Content, and Final stay closed.
+ * Basic, Content, and Slides open when they are available or done. A
+ * locked step stays closed. Instructions and Final stay closed.
  *
  * @param step - The step control
  * @param stepState - Derived state for that step
@@ -213,4 +214,28 @@ export function stepClickStoresEditorStep(
   }
 
   return editorStep !== step.index;
+}
+
+/**
+ * Step the shell shows.
+ *
+ * An admin follows the stored step. A reader can look at another open
+ * step without writing `editor_step`.
+ *
+ * @param storedStep - `carousels.editor_step`
+ * @param viewedStep - Step a reader opened locally, or null
+ * @param canWrite - True for an admin
+ * @returns The step whose panel is visible
+ */
+export function displayedEditorStep(
+  storedStep: number,
+  viewedStep: number | null,
+  canWrite: boolean,
+): number {
+
+  if (canWrite || viewedStep === null) {
+    return storedStep;
+  }
+
+  return viewedStep;
 }

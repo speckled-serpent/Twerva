@@ -56,6 +56,8 @@ import type {
   ResearchListItemResponse,
   ResearchPatchRequest,
   ResearchReadResponse,
+  CarouselAlbumAttachRequest,
+  CarouselAlbumCreateRequest,
   CarouselCreateRequest,
   CarouselGuidancePatchRequest,
   TextGenerationStatusResponse,
@@ -266,6 +268,70 @@ export async function patchCarouselStep(
     "PATCH",
     `/api/v1/carousels/${sourceId}/step`,
     stepPatchRequest,
+  );
+}
+
+/**
+ * Point the carousel at an album that already exists. Admin only.
+ *
+ * Replacing the attached album is 409 while a slide still points at
+ * one of that album's images. The stored album stays.
+ *
+ * @param sourceId - Carousel UUID
+ * @param attachRequest - Existing album id
+ * @returns The carousel, including the attached album and step states
+ */
+export async function attachCarouselAlbum(
+  sourceId: string,
+  attachRequest: CarouselAlbumAttachRequest,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "PUT",
+    `/api/v1/carousels/${sourceId}/album`,
+    attachRequest,
+  );
+}
+
+/**
+ * Create an album by name and point the carousel at it. Admin only.
+ *
+ * The name follows `POST /api/v1/albums`. A blank name is 400. Replacing
+ * the attached album is 409 while a slide still points at one of that
+ * album's images, and that refusal does not create the album.
+ *
+ * @param sourceId - Carousel UUID
+ * @param createRequest - Album name
+ * @returns The carousel, including the new album and step states
+ */
+export async function createCarouselAlbum(
+  sourceId: string,
+  createRequest: CarouselAlbumCreateRequest,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${sourceId}/album`,
+    createRequest,
+  );
+}
+
+/**
+ * Clear the carousel's album. The album row and its files stay. Admin only.
+ *
+ * Clearing is 409 while a slide still points at one of that album's
+ * images, including the Default album. The stored album stays.
+ *
+ * @param sourceId - Carousel UUID
+ * @returns The carousel, with a null album when the clear was stored
+ */
+export async function clearCarouselAlbum(
+  sourceId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "DELETE",
+    `/api/v1/carousels/${sourceId}/album`,
   );
 }
 

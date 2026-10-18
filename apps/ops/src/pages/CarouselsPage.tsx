@@ -43,6 +43,7 @@ import {
 import { firstSlideImageDraftError } from "./slideImageDraft";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { CarouselBasicStep } from "./CarouselBasicStep";
+import { CarouselContentStep } from "./CarouselContentStep";
 import { CarouselGeneration, CarouselStepBar } from "./CarouselStepBar";
 import {
   carouselLabelFingerprint,
@@ -51,8 +52,10 @@ import {
 } from "./carouselLabel";
 import {
   CAROUSEL_STEP_BASIC,
+  CAROUSEL_STEP_CONTENT,
   CAROUSEL_STEP_SLIDES,
   carouselStepByIndex,
+  displayedEditorStep,
   generationLabel,
   openStepSentence,
   type CarouselStepDefinition,
@@ -112,6 +115,8 @@ export function CarouselsPage({
   const [reloadToken, setReloadToken] = useState<number>(0);
   const [isSavingStep, setIsSavingStep] = useState<boolean>(false);
   const [stepError, setStepError] = useState<unknown>(null);
+  const [viewedStep, setViewedStep] = useState<number | null>(null);
+  const canWriteOps: boolean = useCanWriteOps();
   const [heldSlide, setHeldSlide] = useState<SlideReadResponse | null>(null);
   const [textGeneration, setTextGeneration] = useState<TextGenerationStatusResponse>({
     available: false,
@@ -230,8 +235,13 @@ export function CarouselsPage({
     setOpenedSlideId(null);
     setIsCreatingSlide(false);
     setHeldSlide(null);
+    setViewedStep(null);
     setStatusMessage(openRequest.statusMessage);
   }, [openRequest]);
+
+  useEffect((): void => {
+    setViewedStep(null);
+  }, [openedCarouselId]);
 
   const requestReload = (): void => {
     setReloadToken((currentToken: number): number => currentToken + 1);
@@ -243,7 +253,21 @@ export function CarouselsPage({
       return;
     }
 
+    if (!canWriteOps) {
+      setViewedStep(editorStep);
+      setStepError(null);
+
+      if (editorStep !== CAROUSEL_STEP_SLIDES) {
+        setOpenedSlideId(null);
+        setIsCreatingSlide(false);
+        setHeldSlide(null);
+      }
+
+      return;
+    }
+
     const previousStep: number | null = selectedCarousel?.editor_step ?? null;
+    setViewedStep(null);
 
     setIsSavingStep(true);
     setStepError(null);
@@ -273,6 +297,13 @@ export function CarouselsPage({
     }
   };
 
+  const storedEditorStep: number = selectedCarousel?.editor_step ?? CAROUSEL_STEP_SLIDES;
+  const displayStep: number = displayedEditorStep(
+    storedEditorStep,
+    viewedStep,
+    canWriteOps,
+  );
+
   if (openedCarouselId !== null && (openedSlideId !== null || isCreatingSlide)) {
     const loadedSlide: SlideReadResponse | null = findSlide(selectedCarousel, openedSlideId);
     const openedSlide: SlideReadResponse | null = isCreatingSlide
@@ -290,6 +321,7 @@ export function CarouselsPage({
         textGeneration={textGeneration}
         isSavingStep={isSavingStep}
         stepError={stepError}
+        displayStep={displayStep}
         onOpenStep={(editorStep: number): void => {
           void handleOpenStep(editorStep);
         }}
@@ -331,6 +363,7 @@ export function CarouselsPage({
         textGeneration={textGeneration}
         isSavingStep={isSavingStep}
         stepError={stepError}
+        displayStep={displayStep}
         onOpenStep={(editorStep: number): void => {
           void handleOpenStep(editorStep);
         }}
@@ -379,6 +412,8 @@ export function CarouselsPage({
               const renamedCarousel: CarouselListItemResponse = {
                 ...listedCarousel,
                 name: savedCarousel.name,
+                album_id: savedCarousel.album_id,
+                editor_step: savedCarousel.editor_step,
                 updated_at: savedCarousel.updated_at,
               };
 
@@ -528,6 +563,7 @@ interface AlbumViewProps {
   textGeneration: TextGenerationStatusResponse;
   isSavingStep: boolean;
   stepError: unknown;
+  displayStep: number;
   onOpenStep: (editorStep: number) => void;
   onBack: () => void;
   onOpenSlide: (slideId: string) => void;
@@ -568,6 +604,7 @@ function AlbumView({
   textGeneration,
   isSavingStep,
   stepError,
+  displayStep,
   onOpenStep,
   onBack,
   onOpenSlide,
@@ -588,8 +625,9 @@ function AlbumView({
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [pendingSlideDelete, setPendingSlideDelete] = useState<SlideReadResponse | null>(null);
-  const showsBasic: boolean = carousel !== null && carousel.editor_step === CAROUSEL_STEP_BASIC;
-  const showsSlides: boolean = carousel !== null && carousel.editor_step === CAROUSEL_STEP_SLIDES;
+  const showsBasic: boolean = carousel !== null && displayStep === CAROUSEL_STEP_BASIC;
+  const showsContent: boolean = carousel !== null && displayStep === CAROUSEL_STEP_CONTENT;
+  const showsSlides: boolean = carousel !== null && displayStep === CAROUSEL_STEP_SLIDES;
 
   if (carouselId !== trackedCarouselId) {
     const nextDraft: CarouselLabelDraft | null = carousel === null
@@ -640,7 +678,7 @@ function AlbumView({
   let pageLede: string = "Slides in this carousel.";
 
   if (carousel !== null) {
-    pageLede = openStepSentence(carousel.editor_step);
+    pageLede = openStepSentence(displayStep);
 
     if (showsSlides) {
       pageLede = `${pageLede} A card shows the first image, or the text when there is none. ${carousel.live_slide_count} live.`;
@@ -653,6 +691,7 @@ function AlbumView({
     void leaveAfterAutosave(autosave.flush, autosave.isDirty, onBack);
   };
 
+  // Leaving Basic flushes the label, then the shell stores editor_step.
   const handleStep = (editorStep: number): void => {
     void leaveAfterAutosave(
       autosave.flush,
@@ -710,7 +749,7 @@ function AlbumView({
       ) : (
         <>
           <CarouselStepBar
-            editorStep={carousel.editor_step}
+            editorStep={displayStep}
             steps={carousel.steps}
             canWrite={canWrite}
             isSavingStep={isSavingStep}
@@ -728,6 +767,13 @@ function AlbumView({
               onRetry={(): void => {
                 void autosave.retry();
               }}
+            />
+          ) : null}
+          {showsContent ? (
+            <CarouselContentStep
+              carousel={carousel}
+              canWrite={canWrite}
+              onCarouselSaved={onCarouselSaved}
             />
           ) : null}
           {showsSlides ? (
@@ -891,6 +937,7 @@ interface SlideEditorViewProps {
   textGeneration: TextGenerationStatusResponse;
   isSavingStep: boolean;
   stepError: unknown;
+  displayStep: number;
   onOpenStep: (editorStep: number) => void;
   onBack: () => void;
   onSaved: (savedSlide: SlideReadResponse, message: string) => void;
@@ -906,6 +953,7 @@ function SlideEditorView({
   textGeneration,
   isSavingStep,
   stepError,
+  displayStep,
   onOpenStep,
   onBack,
   onSaved,
@@ -1147,7 +1195,7 @@ function SlideEditorView({
   );
 
   if (carousel !== null) {
-    pageLede = `${openStepSentence(carousel.editor_step)} ${pageLede}`;
+    pageLede = `${openStepSentence(displayStep)} ${pageLede}`;
   }
 
   return (
@@ -1180,7 +1228,7 @@ function SlideEditorView({
       ) : (
         <>
           <CarouselStepBar
-            editorStep={carousel.editor_step}
+            editorStep={displayStep}
             steps={carousel.steps}
             canWrite={canWrite}
             isSavingStep={isSavingStep}

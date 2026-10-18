@@ -46,7 +46,9 @@ export interface CarouselStepBarProps {
  *
  * The open step uses the teal primary. A done step uses the success color.
  * A locked or not-yet-enabled step uses the existing disabled control.
- * Instructions stays disabled. Its name says versioned Markdown is a later phase.
+ * Content opens when it is available or done. Instructions stays disabled,
+ * and its name says versioned Markdown is a later phase. A reader can open
+ * a step to look. That click does not write.
  *
  * @param props - Stored step, derived states, and the step PATCH callback
  * @returns The stepper
@@ -85,7 +87,18 @@ export function CarouselStepBar({
                 disabled={!canOpen || isSavingStep}
                 onClick={(): void => {
 
-                  if (!stepClickStoresEditorStep(step, stepState, editorStep, canWrite)) {
+                  if (!canOpen) {
+                    return;
+                  }
+
+                  const storesStep: boolean = stepClickStoresEditorStep(
+                    step,
+                    stepState,
+                    editorStep,
+                    canWrite,
+                  );
+
+                  if (!storesStep && canWrite) {
                     return;
                   }
 

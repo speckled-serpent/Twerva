@@ -155,7 +155,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Content
 
-- [ ] **4.9 Add the Content step for choosing an album**
+- [x] **4.9 Add the Content step for choosing an album**
 
   Enable step 2. The operator attaches an existing album or creates one by name, using the task 4.4 routes. The attached album shows its name and image count, and actions to replace it or clear it. A 409 shows the API's reason in the form: slides still point at that album's images, so clear those slide images first. Copy for the empty and required states: a picture skeleton with no album says the skeleton needs an album and to choose or create one; a skeleton that needs no picture, with no album, says no album is attached and slides for this skeleton do not use a picture; an attached album with zero images says this album has no images yet. Changing step flushes any pending Basic save and PATCHes `editor_step`. A reader can look and cannot attach.
 

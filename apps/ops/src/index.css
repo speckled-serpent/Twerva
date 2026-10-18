@@ -1084,6 +1084,39 @@ th {
   color: var(--ops-text);
 }
 
+.carousel-content {
+  margin-top: 0.25rem;
+}
+
+.carousel-attached-album {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-control);
+  background: var(--ops-stone-soft);
+}
+
+.carousel-album-name {
+  margin: 0.2rem 0 0;
+  font-weight: 600;
+  color: var(--ops-text);
+}
+
+.carousel-album-count,
+.carousel-album-note {
+  margin: 0.35rem 0 0;
+  color: var(--ops-text);
+}
+
+.carousel-album-count {
+  color: var(--ops-text-muted);
+}
+
+.carousel-album-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
 .slide-grid {
   list-style: none;
   padding: 0;
