@@ -106,7 +106,7 @@ export function slideImageRequiredError(
  * Name, text, and exclusion save. The image field is left out.
  *
  * Omitting `album_image_id` keeps the slide's current image. This is
- * the Save slide body for an existing slide, and for a new slide whose
+ * the autosave body for an existing slide, and for a new slide whose
  * skeleton does not use a picture.
  *
  * @param name - Trimmed slide name
