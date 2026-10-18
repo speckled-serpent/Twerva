@@ -31,6 +31,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { CarouselBasicStep } from "./CarouselBasicStep";
 import { CarouselContentStep } from "./CarouselContentStep";
+import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import type { AlbumEditorActions } from "./AlbumImagesEditor";
 import { CarouselGeneration, CarouselStepBar } from "./CarouselStepBar";
 import {
@@ -59,11 +60,18 @@ import { useCanWriteOps } from "../session/OpsSessionContext";
 import { SlideAlbumImagePicker } from "./SlideAlbumImagePicker";
 import {
   imageChoiceWriteRequest,
-  newPictureSlideWriteRequest,
   savedSlideAlbumImageId,
-  slideImageRequiredError,
-  slideTextSaveRequest,
 } from "./slideAlbumImage";
+import {
+  NEW_PICTURE_SLIDE_AUTOSAVE_HINT,
+  NEW_SLIDE_AUTOSAVE_HINT,
+  SLIDE_AUTOSAVE_HINT,
+  slideAutosaveWriteRequest,
+  slideEditorFingerprint,
+  slideEditorReadiness,
+  slideImageChoiceWriteRequest,
+  type SlideFieldDraft,
+} from "./slideEditorAutosave";
 import { SlideLivePreview } from "./SlideLivePreview";
 import {
   labelForTextElement,
@@ -337,7 +345,11 @@ export function CarouselsPage({
           setStatusMessage("");
         }}
         onSaved={(savedSlide: SlideReadResponse, message: string): void => {
-          setStatusMessage(message);
+
+          if (message !== "") {
+            setStatusMessage(message);
+          }
+
           setHeldSlide(savedSlide);
           setIsCreatingSlide(false);
           setOpenedSlideId(savedSlide.id);
@@ -991,16 +1003,22 @@ function SlideEditorView({
   const [skeleton, setSkeleton] = useState<SkeletonReadResponse | null>(null);
   const [skeletonError, setSkeletonError] = useState<unknown>(null);
   const [skeletonReady, setSkeletonReady] = useState<boolean>(false);
+  const [textSeedKey, setTextSeedKey] = useState<string | null>(null);
   const [slideName, setSlideName] = useState<string>(slide?.name ?? "");
   const [excludedIds, setExcludedIds] = useState<string[]>(slide?.excluded_slide_ids ?? []);
   const [textValues, setTextValues] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<unknown>(null);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isAccepting, setIsAccepting] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [chosenAlbumImageId, setChosenAlbumImageId] = useState<string | null>(null);
   const [isChoosingImage, setIsChoosingImage] = useState<boolean>(false);
-  const imageChoiceRef = useRef<boolean>(false);
+  const imageChoiceRef: { current: boolean } = useRef<boolean>(false);
+  const fieldDraftRef: { current: SlideFieldDraft | null } = useRef<SlideFieldDraft | null>(null);
+  const createdSlideIdRef: { current: string | null } = useRef<string | null>(null);
+  const lastSavedSlideRef: { current: SlideReadResponse | null } = useRef<SlideReadResponse | null>(
+    slide,
+  );
   const needsImage: boolean = skeleton !== null && skeletonRequiresImage(skeleton);
   const savedAlbumImageId: string | null = savedSlideAlbumImageId(slide);
   const selectedAlbumImageId: string | null = slide === null
@@ -1012,12 +1030,50 @@ function SlideEditorView({
   const textElements: SkeletonElementReadResponse[] = skeleton === null
     ? []
     : orderedTextElements(skeleton.elements);
+  const slideIdentity: string = slide?.id ?? "new";
+  const seedKey: string = skeleton === null ? "" : `${slideIdentity}:${skeleton.id}`;
+
+  // Seed name and text when the skeleton or the open slide arrives.
+  // The row created from this form keeps what the operator already typed.
+  if (skeleton !== null && textSeedKey !== seedKey) {
+    const createdThisSlide: boolean = slide !== null && slide.id === createdSlideIdRef.current;
+
+    if (createdThisSlide) {
+      setTextSeedKey(seedKey);
+    } else {
+      setTextSeedKey(seedKey);
+      setSlideName(slide?.name ?? "");
+      setExcludedIds(slide?.excluded_slide_ids ?? []);
+      setTextValues(textDraftsForSkeleton(skeleton, slide));
+      setChosenAlbumImageId(null);
+      lastSavedSlideRef.current = slide;
+    }
+  }
+
+  const fieldsSeeded: boolean = skeleton !== null && textSeedKey === seedKey;
   const textWrites: SlideElementTextWrite[] = textElements.map(
-    (element): SlideElementTextWrite => ({
+    (element: SkeletonElementReadResponse): SlideElementTextWrite => ({
       skeleton_element_id: element.id,
       value: textValues[element.id] ?? "",
     }),
   );
+  const otherIds: Set<string> = new Set(
+    otherSlides.map((candidate: SlideReadResponse): string => candidate.id),
+  );
+  const storedExcludedIds: string[] = excludedIds.filter(
+    (excludedId: string): boolean => otherIds.has(excludedId),
+  );
+  const fieldDraft: SlideFieldDraft = {
+    slideId: slide?.id ?? null,
+    needsImage,
+    skeletonReady: fieldsSeeded,
+    name: slideName,
+    texts: textWrites,
+    excludedSlideIds: storedExcludedIds,
+    albumImageId: selectedAlbumImageId,
+  };
+  fieldDraftRef.current = fieldDraft;
+  const draftFingerprint: string = slideEditorFingerprint(fieldDraft);
 
   useEffect((): (() => void) => {
     if (carousel === null) {
@@ -1062,24 +1118,105 @@ function SlideEditorView({
     };
   }, [carousel?.id, carousel?.skeleton_id]);
 
-  const shownTextKey: string = slide === null
+  const serverTexts: Record<string, string> = skeleton === null
+    ? {}
+    : textDraftsForSkeleton(skeleton, slide);
+  const serverDraft: SlideFieldDraft | null = slide === null || skeleton === null
+    ? null
+    : {
+      slideId: slide.id,
+      needsImage,
+      skeletonReady: true,
+      name: slide.name,
+      texts: textElements.map(
+        (element: SkeletonElementReadResponse): SlideElementTextWrite => ({
+          skeleton_element_id: element.id,
+          value: serverTexts[element.id] ?? "",
+        }),
+      ),
+      excludedSlideIds: slide.excluded_slide_ids.filter(
+        (excludedId: string): boolean => otherIds.has(excludedId),
+      ),
+      albumImageId: savedAlbumImageId,
+    };
+  const serverFingerprint: string = serverDraft === null
     ? ""
-    : (slide.text_status === "draft" ? slide.draft_texts : slide.texts)
-      .map((elementText): string => `${elementText.skeleton_element_id}:${elementText.value}`)
-      .join("|");
+    : slideEditorFingerprint(serverDraft);
+  const autosave = useSkeletonAutosave<SlideFieldDraft>({
+    delayMs: SKELETON_AUTOSAVE_DELAY_MS,
+    readiness: slideEditorReadiness,
+    fingerprint: slideEditorFingerprint,
+    save: async (draft: SlideFieldDraft): Promise<void> => {
+
+      if (carousel === null) {
+        return;
+      }
+
+      const persistedSlideId: string | null = draft.slideId ?? createdSlideIdRef.current;
+      let savedSlide: SlideReadResponse;
+
+      if (persistedSlideId === null) {
+        savedSlide = await createCarouselSlide(
+          carousel.id,
+          slideAutosaveWriteRequest(draft),
+        );
+        createdSlideIdRef.current = savedSlide.id;
+        lastSavedSlideRef.current = savedSlide;
+        onSaved(savedSlide, "Created the slide.");
+
+        return;
+      }
+
+      const persistedDraft: SlideFieldDraft = {
+        ...draft,
+        slideId: persistedSlideId,
+      };
+      savedSlide = await patchCarouselSlide(
+        carousel.id,
+        persistedSlideId,
+        slideAutosaveWriteRequest(persistedDraft),
+      );
+      lastSavedSlideRef.current = savedSlide;
+      onSaved(savedSlide, "");
+    },
+    formatError: formatSkeletonAutosaveError,
+  });
 
   useEffect((): void => {
-    setSlideName(slide?.name ?? "");
-    setExcludedIds(slide?.excluded_slide_ids ?? []);
+    const currentDraft: SlideFieldDraft | null = fieldDraftRef.current;
 
-    if (skeleton === null) {
-      setTextValues({});
-
+    if (currentDraft === null || !currentDraft.skeletonReady || serverFingerprint === "") {
       return;
     }
 
-    setTextValues(textDraftsForSkeleton(skeleton, slide));
-  }, [slide?.id, slide?.text_status, shownTextKey, skeleton]);
+    if (slideEditorFingerprint(currentDraft) !== serverFingerprint) {
+      return;
+    }
+
+    autosave.noteSaved(currentDraft);
+  }, [
+    autosave.noteSaved,
+    draftFingerprint,
+    fieldDraft.skeletonReady,
+    serverFingerprint,
+  ]);
+
+  useEffect((): void => {
+    const currentDraft: SlideFieldDraft | null = fieldDraftRef.current;
+
+    if (!canWrite || currentDraft === null || !currentDraft.skeletonReady) {
+      return;
+    }
+
+    autosave.schedule(currentDraft);
+  }, [
+    autosave.schedule,
+    canWrite,
+    draftFingerprint,
+    fieldDraft.albumImageId,
+    fieldDraft.skeletonReady,
+    fieldDraft.slideId,
+  ]);
 
   useEffect((): void => {
     const imagesSection: HTMLElement | null = document.getElementById("slide-images");
@@ -1096,7 +1233,6 @@ function SlideEditorView({
       || carousel === null
       || skeleton === null
       || imageChoiceRef.current
-      || isSaving
     ) {
       return;
     }
@@ -1112,17 +1248,18 @@ function SlideEditorView({
       return;
     }
 
-    const slideWriteRequest: SlideWriteRequest = imageChoiceWriteRequest(
-      slide,
-      skeleton,
-      albumImageId,
-    );
-
     imageChoiceRef.current = true;
     setIsChoosingImage(true);
     setSaveError(null);
 
     try {
+      await autosave.flush();
+      const flushedDraft: SlideFieldDraft | null = fieldDraftRef.current;
+      const storedSlide: SlideReadResponse = lastSavedSlideRef.current ?? slide;
+      const slideWriteRequest: SlideWriteRequest = flushedDraft !== null
+        && slideEditorReadiness(flushedDraft).kind === "ready"
+        ? slideImageChoiceWriteRequest(flushedDraft, albumImageId)
+        : imageChoiceWriteRequest(storedSlide, skeleton, albumImageId);
       const savedSlide: SlideReadResponse = await patchCarouselSlide(
         carousel.id,
         slide.id,
@@ -1137,69 +1274,8 @@ function SlideEditorView({
     }
   };
 
-  const handleSave = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
-    submitEvent.preventDefault();
-
-    if (!canWrite || carousel === null || skeleton === null || imageChoiceRef.current) {
-      return;
-    }
-
-    const imageError: string | null = slideImageRequiredError(needsImage, selectedAlbumImageId);
-
-    if (imageError !== null) {
-      setSaveError(new Error(imageError));
-
-      return;
-    }
-
-    if (slideName.trim() === "") {
-      setSaveError(new Error("Name is required."));
-
-      return;
-    }
-
-    const otherIds: Set<string> = new Set(
-      otherSlides.map((candidate: SlideReadResponse): string => candidate.id),
-    );
-    const storedExcludedIds: string[] = excludedIds.filter(
-      (excludedId: string): boolean => otherIds.has(excludedId),
-    );
-    const trimmedName: string = slideName.trim();
-    const slideWriteRequest: SlideWriteRequest = slide === null && needsImage
-      && selectedAlbumImageId !== null
-      ? newPictureSlideWriteRequest(
-        trimmedName,
-        textWrites,
-        storedExcludedIds,
-        selectedAlbumImageId,
-      )
-      : slideTextSaveRequest(trimmedName, textWrites, storedExcludedIds);
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    try {
-      let savedSlide: SlideReadResponse;
-
-      if (slide === null) {
-        savedSlide = await createCarouselSlide(carousel.id, slideWriteRequest);
-      } else {
-        savedSlide = await patchCarouselSlide(carousel.id, slide.id, slideWriteRequest);
-      }
-
-      const message: string = slide === null ? "Created the slide." : "Saved the slide.";
-
-      setChosenAlbumImageId(null);
-      onSaved(savedSlide, message);
-    } catch (caughtError: unknown) {
-      setSaveError(caughtError);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleGenerateText = async (): Promise<void> => {
-    if (!canWrite || carousel === null || slide === null || !textGeneration.available) {
+    if (!canWrite || carousel === null || slide === null || skeleton === null || !textGeneration.available) {
       return;
     }
 
@@ -1207,7 +1283,12 @@ function SlideEditorView({
     setSaveError(null);
 
     try {
+      await autosave.flush();
       const draftedSlide: SlideReadResponse = await generateSlideText(carousel.id, slide.id);
+      lastSavedSlideRef.current = draftedSlide;
+      setSlideName(draftedSlide.name);
+      setExcludedIds(draftedSlide.excluded_slide_ids);
+      setTextValues(textDraftsForSkeleton(skeleton, draftedSlide));
       onSaved(draftedSlide, "Drafted text. Accept it to make this slide live.");
     } catch (caughtError: unknown) {
       setSaveError(caughtError);
@@ -1217,24 +1298,57 @@ function SlideEditorView({
   };
 
   const handleAcceptText = async (): Promise<void> => {
-    if (!canWrite || carousel === null || slide === null || slide.text_status !== "draft") {
+
+    if (
+      !canWrite
+      || carousel === null
+      || slide === null
+      || skeleton === null
+      || slide.text_status !== "draft"
+    ) {
       return;
     }
 
-    setIsSaving(true);
+    setIsAccepting(true);
     setSaveError(null);
 
     try {
+      await autosave.flush();
       const acceptedSlide: SlideReadResponse = await acceptSlideText(carousel.id, slide.id, {
-        texts: textWrites,
+        texts: fieldDraftRef.current?.texts ?? textWrites,
       });
+      lastSavedSlideRef.current = acceptedSlide;
+      setSlideName(acceptedSlide.name);
+      setExcludedIds(acceptedSlide.excluded_slide_ids);
+      setTextValues(textDraftsForSkeleton(skeleton, acceptedSlide));
       onSaved(acceptedSlide, "Accepted the text. This slide is live.");
     } catch (caughtError: unknown) {
       setSaveError(caughtError);
     } finally {
-      setIsSaving(false);
+      setIsAccepting(false);
     }
   };
+
+  const handleBack = (): void => {
+    void leaveAfterAutosave(autosave.flush, autosave.isDirty, onBack);
+  };
+
+  const handleStep = (editorStep: number): void => {
+    void leaveAfterAutosave(
+      autosave.flush,
+      autosave.isDirty,
+      (): void => {
+        onOpenStep(editorStep);
+      },
+    );
+  };
+
+  const autosaveHint: string = slide !== null
+    ? SLIDE_AUTOSAVE_HINT
+    : needsImage
+      ? NEW_PICTURE_SLIDE_AUTOSAVE_HINT
+      : NEW_SLIDE_AUTOSAVE_HINT;
+  const editorBusy: boolean = isGenerating || isAccepting || isChoosingImage;
 
   const pageTitle: string = slide === null ? "New slide" : "Slide";
   let pageLede: string = (
@@ -1260,7 +1374,7 @@ function SlideEditorView({
             . {pageLede}
           </p>
         </div>
-        <button type="button" onClick={onBack}>
+        <button type="button" onClick={handleBack}>
           Back to slides
         </button>
       </div>
@@ -1279,7 +1393,7 @@ function SlideEditorView({
             steps={carousel.steps}
             canWrite={canWrite}
             isSavingStep={isSavingStep}
-            onOpenStep={onOpenStep}
+            onOpenStep={handleStep}
           />
           {slide === null && !canWrite ? (
             <p>This slide is not available.</p>
@@ -1296,19 +1410,20 @@ function SlideEditorView({
                 selectedImageId={selectedAlbumImageId}
                 canWrite={canWrite}
                 isChoosing={isChoosingImage}
-                isLocked={isSaving}
+                isLocked={autosave.state.phase === "saving" || isGenerating || isAccepting}
                 onChoose={(albumImageId: string): void => {
                   void handleChooseAlbumImage(albumImageId);
                 }}
                 onOpenContent={(): void => {
-                  onOpenStep(CAROUSEL_STEP_CONTENT);
+                  handleStep(CAROUSEL_STEP_CONTENT);
                 }}
               />
             ) : null}
             <form
               className="stack-form"
               onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-                void handleSave(submitEvent);
+                submitEvent.preventDefault();
+                void autosave.flush();
               }}
             >
               {slide?.text_status === "draft" ? (
@@ -1328,6 +1443,17 @@ function SlideEditorView({
                 />
               </label>
               <p className="field-hint">The id stays the same. The name is what you call this slide.</p>
+              {canWrite ? (
+                <p className="field-hint" id="slide-autosave-hint">{autosaveHint}</p>
+              ) : null}
+              {canWrite ? (
+                <SkeletonAutosaveStatus
+                  state={autosave.state}
+                  onRetry={(): void => {
+                    void autosave.retry();
+                  }}
+                />
+              ) : null}
               {slide === null ? null : (
                 <p className="field-hint">Id {slide.id}</p>
               )}
@@ -1351,7 +1477,7 @@ function SlideEditorView({
               <fieldset className="form-fieldset" disabled={!canWrite}>
                 <legend>Cannot be shown with</legend>
                 <p className="field-hint">
-                  The rule applies both ways. Saving it here also marks this slide on the other slide.
+                  The rule applies both ways. Marking it here also marks this slide on the other slide.
                 </p>
                 {otherSlides.length === 0 ? (
                   <p>No other slides in this carousel yet.</p>
@@ -1396,50 +1522,40 @@ function SlideEditorView({
                   {textGeneration.detail}
                 </p>
               ) : null}
-              {canWrite ? (
+              {canWrite && slide !== null ? (
                 <div className="button-row">
                   <button
-                    id="save-slide"
-                    type="submit"
-                    disabled={isSaving || isGenerating || isChoosingImage}
+                    id="generate-slide-text"
+                    type="button"
+                    disabled={!textGeneration.available || editorBusy}
+                    onClick={(): void => {
+                      void handleGenerateText();
+                    }}
                   >
-                    {isSaving ? "Saving…" : "Save slide"}
+                    {isGenerating ? "Generating…" : "Generate text"}
                   </button>
-                  {slide === null ? null : (
-                    <button
-                      id="generate-slide-text"
-                      type="button"
-                      disabled={!textGeneration.available || isGenerating || isSaving || isChoosingImage}
-                      onClick={(): void => {
-                        void handleGenerateText();
-                      }}
-                    >
-                      {isGenerating ? "Generating…" : "Generate text"}
-                    </button>
-                  )}
-                  {slide?.text_status === "draft" ? (
+                  {slide.text_status === "draft" ? (
                     <button
                       id="accept-slide-text"
                       type="button"
-                      disabled={isSaving || isGenerating || isChoosingImage}
+                      disabled={editorBusy}
                       onClick={(): void => {
                         void handleAcceptText();
                       }}
                     >
-                      Accept text
+                      {isAccepting ? "Accepting…" : "Accept text"}
                     </button>
                   ) : null}
-                  {slide === null ? null : (
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={(): void => {
-                        setPendingDelete(true);
-                      }}
-                    >
-                      Delete slide
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={editorBusy}
+                    onClick={(): void => {
+                      setPendingDelete(true);
+                    }}
+                  >
+                    Delete slide
+                  </button>
                 </div>
               ) : null}
             </form>
@@ -1464,6 +1580,7 @@ function SlideEditorView({
             setPendingDelete(false);
           }}
           onConfirm={async (): Promise<void> => {
+            await autosave.abandon();
             await deleteCarouselSlide(carousel.id, slide.id);
             setPendingDelete(false);
             onSlideDeleted();

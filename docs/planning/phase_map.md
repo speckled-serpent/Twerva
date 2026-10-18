@@ -193,7 +193,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: a new slide on a picture carousel uses an existing album image and writes no new file. Generate text and Accept still run. The upload form is gone from the slide.
 
-- [ ] **4.13 Autosave the slide's name, text, and exclusions**
+- [x] **4.13 Autosave the slide's name, text, and exclusions**
 
   Those three autosave at 700ms through the shared helper. A blank name does not save and shows the required-name error. The image pick saves on selection. Generate, Accept, and Delete stay explicit buttons. Leaving the slide or the step flushes.
 
