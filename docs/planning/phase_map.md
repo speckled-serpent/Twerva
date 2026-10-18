@@ -181,7 +181,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: PATCH step 3 on a picture carousel with no album is 400 and the shell keeps Slides disabled. After attach, Slides enables, and it shows done once the carousel has two slides. Default still opens on Slides and shows done. A color or gradient skeleton with no image element opens Slides with no album while it has fewer than two slides.
 
-- [ ] **4.12 Let a slide store an image from the attached album**
+- [x] **4.12 Let a slide store an image from the attached album**
 
   `SlideWriteRequest` and the slide PATCH gain optional `album_image_id`. Null clears the pointer. A set id must be an image on `carousels.album_id`; otherwise 400. A skeleton that needs no picture rejects a set id with the existing image-not-used detail. A skeleton that needs a picture still rejects a save with no image. The existing upload and import routes stay for this PR.
 
