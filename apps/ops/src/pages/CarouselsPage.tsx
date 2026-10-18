@@ -44,6 +44,7 @@ import { firstSlideImageDraftError } from "./slideImageDraft";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { CarouselBasicStep } from "./CarouselBasicStep";
 import { CarouselContentStep } from "./CarouselContentStep";
+import type { AlbumEditorActions } from "./AlbumImagesEditor";
 import { CarouselGeneration, CarouselStepBar } from "./CarouselStepBar";
 import {
   carouselLabelFingerprint,
@@ -625,6 +626,7 @@ function AlbumView({
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [pendingSlideDelete, setPendingSlideDelete] = useState<SlideReadResponse | null>(null);
+  const albumEditorActionsRef: { current: AlbumEditorActions | null } = useRef(null);
   const showsBasic: boolean = carousel !== null && displayStep === CAROUSEL_STEP_BASIC;
   const showsContent: boolean = carousel !== null && displayStep === CAROUSEL_STEP_CONTENT;
   const showsSlides: boolean = carousel !== null && displayStep === CAROUSEL_STEP_SLIDES;
@@ -687,15 +689,39 @@ function AlbumView({
 
   const headingName: string = carouselHeadingName(carousel, labelDraft);
 
-  const handleBack = (): void => {
-    void leaveAfterAutosave(autosave.flush, autosave.isDirty, onBack);
+  const flushOpenEdits = async (): Promise<void> => {
+    await autosave.flush();
+    const albumActions: AlbumEditorActions | null = albumEditorActionsRef.current;
+
+    if (albumActions !== null) {
+      await albumActions.flush();
+    }
   };
 
-  // Leaving Basic flushes the label, then the shell stores editor_step.
+  const openEditsAreDirty = (): boolean => {
+
+    if (autosave.isDirty()) {
+      return true;
+    }
+
+    const albumActions: AlbumEditorActions | null = albumEditorActionsRef.current;
+
+    if (albumActions !== null && albumActions.isDirty()) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleBack = (): void => {
+    void leaveAfterAutosave(flushOpenEdits, openEditsAreDirty, onBack);
+  };
+
+  // Leaving Basic flushes the label. Leaving Content flushes album image edits.
   const handleStep = (editorStep: number): void => {
     void leaveAfterAutosave(
-      autosave.flush,
-      autosave.isDirty,
+      flushOpenEdits,
+      openEditsAreDirty,
       (): void => {
         onOpenStep(editorStep);
       },
@@ -774,6 +800,9 @@ function AlbumView({
               carousel={carousel}
               canWrite={canWrite}
               onCarouselSaved={onCarouselSaved}
+              onAlbumEditorActions={(actions: AlbumEditorActions | null): void => {
+                albumEditorActionsRef.current = actions;
+              }}
             />
           ) : null}
           {showsSlides ? (

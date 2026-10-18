@@ -14,6 +14,14 @@ export const ALBUM_HAS_NO_IMAGES_COPY: string = "This album has no images yet.";
 /** Blank name on create. Matches `POST /api/v1/carousels/{id}/album`. */
 export const ALBUM_NAME_REQUIRED_COPY: string = "Name is required.";
 
+/** License, order, alt, and source on an attached album save themselves. */
+export const ALBUM_IMAGES_AUTOSAVE_COPY: string =
+  "Order, alt, source, and license fields save on their own.";
+
+/** A reader can see the attached album's images and cannot change them. */
+export const ALBUM_IMAGES_READONLY_COPY: string =
+  "Editing album images is an admin action.";
+
 /**
  * Copy for a carousel with no album.
  *
@@ -30,6 +38,53 @@ export function detachedAlbumCopy(skeletonNeedsImage: boolean): string {
   }
 
   return ALBUM_OPTIONAL_COPY;
+}
+
+/**
+ * Name shown for the attached album.
+ *
+ * The album detail wins once it has loaded. Until then the list name is used.
+ *
+ * @param detailName - Name from `GET /api/v1/albums/{id}`, or null
+ * @param listedName - Name from the album list, or null
+ * @returns The name to show, or null when neither has arrived
+ */
+export function visibleAlbumName(
+  detailName: string | null,
+  listedName: string | null,
+): string | null {
+
+  if (detailName !== null && detailName !== "") {
+    return detailName;
+  }
+
+  if (listedName !== null && listedName !== "") {
+    return listedName;
+  }
+
+  return null;
+}
+
+/**
+ * Image count shown beside the attached album.
+ *
+ * The detail count wins, so an upload on Content updates the count before
+ * the album list is fetched again. The list count covers the first paint.
+ *
+ * @param detailCount - Images on the loaded album, or null while it loads
+ * @param listedCount - `image_count` from the list, or null
+ * @returns The count to show, or null when neither is known
+ */
+export function visibleAlbumImageCount(
+  detailCount: number | null,
+  listedCount: number | null,
+): number | null {
+
+  if (detailCount !== null) {
+    return detailCount;
+  }
+
+  return listedCount;
 }
 
 /**

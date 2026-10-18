@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import type { AlbumListItemResponse } from "./src/api/types.ts";
 import {
   ALBUM_HAS_NO_IMAGES_COPY,
+  ALBUM_IMAGES_AUTOSAVE_COPY,
+  ALBUM_IMAGES_READONLY_COPY,
   ALBUM_NAME_REQUIRED_COPY,
   ALBUM_OPTIONAL_COPY,
   ALBUM_REQUIRED_COPY,
@@ -10,6 +12,8 @@ import {
   albumImageCountLabel,
   albumsToChoose,
   detachedAlbumCopy,
+  visibleAlbumImageCount,
+  visibleAlbumName,
 } from "./src/pages/carouselContent.ts";
 
 const SLIDES_STILL_POINT: string =
@@ -26,6 +30,14 @@ assert.equal(ALBUM_NAME_REQUIRED_COPY, "Name is required.");
 assert.equal(albumImageCountLabel(0), "0 images");
 assert.equal(albumImageCountLabel(1), "1 image");
 assert.equal(albumImageCountLabel(6), "6 images");
+assert.match(ALBUM_IMAGES_AUTOSAVE_COPY, /save on their own/);
+assert.match(ALBUM_IMAGES_READONLY_COPY, /admin action/);
+assert.equal(visibleAlbumName(null, null), null);
+assert.equal(visibleAlbumName(null, "Harbor"), "Harbor");
+assert.equal(visibleAlbumName("Harbor", "Old"), "Harbor");
+assert.equal(visibleAlbumImageCount(null, null), null);
+assert.equal(visibleAlbumImageCount(null, 0), 0);
+assert.equal(visibleAlbumImageCount(1, 0), 1);
 
 const conflict: { detailText: string } = { detailText: SLIDES_STILL_POINT };
 assert.equal(albumActionErrorText(conflict), SLIDES_STILL_POINT);
