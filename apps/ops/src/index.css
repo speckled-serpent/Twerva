@@ -1117,6 +1117,69 @@ th {
   gap: 0.7rem;
 }
 
+.carousel-research {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--ops-border);
+}
+
+.carousel-research-panel {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-control);
+  background: var(--ops-stone-soft);
+}
+
+.carousel-research-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.55rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.carousel-research-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-control);
+  background: var(--ops-surface);
+}
+
+.carousel-research-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+}
+
+.carousel-research-index {
+  min-width: 1.25rem;
+  font-weight: 600;
+  color: var(--ops-primary);
+}
+
+.carousel-research-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ops-text);
+}
+
+.carousel-research-note {
+  margin: 0.35rem 0 0;
+  color: var(--ops-text);
+}
+
+.carousel-research-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
 .carousel-album-images,
 .album-images-editor {
   display: flex;

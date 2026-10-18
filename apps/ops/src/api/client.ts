@@ -58,6 +58,8 @@ import type {
   ResearchReadResponse,
   CarouselAlbumAttachRequest,
   CarouselAlbumCreateRequest,
+  CarouselResearchAttachRequest,
+  CarouselResearchOrderRequest,
   CarouselCreateRequest,
   CarouselGuidancePatchRequest,
   TextGenerationStatusResponse,
@@ -339,6 +341,74 @@ export async function clearCarouselAlbum(
   return requestJson<CarouselReadResponse>(
     "DELETE",
     `/api/v1/carousels/${sourceId}/album`,
+  );
+}
+
+/**
+ * Append one research document at the next position. Admin only.
+ *
+ * The document must already exist. `createResearch` stores a title and
+ * an empty body, and this call attaches that row. Research does not
+ * change the derived step states.
+ *
+ * @param sourceId - Carousel UUID
+ * @param attachRequest - Existing research item id
+ * @returns The carousel, with research in position order
+ */
+export async function appendCarouselResearch(
+  sourceId: string,
+  attachRequest: CarouselResearchAttachRequest,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${sourceId}/research`,
+    attachRequest,
+  );
+}
+
+/**
+ * Replace the attached research and its order. Admin only.
+ *
+ * The id list is the full order. The same id twice is rejected.
+ * An empty list clears every link and leaves the research rows.
+ * Research does not change the derived step states.
+ *
+ * @param sourceId - Carousel UUID
+ * @param orderRequest - Research item ids in the chosen order
+ * @returns The carousel, with research in position order
+ */
+export async function replaceCarouselResearch(
+  sourceId: string,
+  orderRequest: CarouselResearchOrderRequest,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "PUT",
+    `/api/v1/carousels/${sourceId}/research`,
+    orderRequest,
+  );
+}
+
+/**
+ * Drop one research link. The document stays in the library. Admin only.
+ *
+ * This does not call `DELETE /api/v1/research/{id}`. The Research page
+ * still lists the document. Research does not change the derived step
+ * states.
+ *
+ * @param sourceId - Carousel UUID
+ * @param researchItemId - Research item to detach
+ * @returns The carousel, with the remaining research in position order
+ */
+export async function removeCarouselResearch(
+  sourceId: string,
+  researchItemId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "DELETE",
+    `/api/v1/carousels/${sourceId}/research/${researchItemId}`,
   );
 }
 
