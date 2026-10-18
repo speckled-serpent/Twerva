@@ -209,7 +209,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Stage guidance
 
-- [ ] **4.15 Show the slide-count fallback on Slides**
+- [x] **4.15 Show the slide-count fallback on Slides**
 
   Slides shows one hint: the global slide-count default is a random value from 5 to 8, used when a later phase needs a count and this carousel has no guidance. That default lives in global settings. Per-skeleton overrides are later, so the skeleton gains no column for it. The hint does not add or remove slides, and it does not change the done mark, which is two slides. This phase does not add a settings screen.
 
