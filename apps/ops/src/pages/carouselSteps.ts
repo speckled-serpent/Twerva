@@ -80,7 +80,21 @@ export function carouselStepLabel(step: CarouselStepDefinition): string {
 }
 
 /**
+ * Why Instructions stays closed.
+ *
+ * Phase 5 stores versioned Markdown and runs it through the provider.
+ * This phase keeps the control locked and leaves inspiration and rules
+ * in their columns.
+ */
+export const INSTRUCTIONS_CLOSED_DETAIL: string =
+  "Versioned Markdown instructions are a later phase. Phase 5 replaces the hidden inspiration and rules form.";
+
+/**
  * Accessible name, including locked or done when that is the derived state.
+ *
+ * Instructions stays closed for an admin and a reader. Its name says
+ * versioned Markdown instructions are a later phase, and that phase 5
+ * replaces the hidden inspiration and rules form.
  *
  * @param step - A stepper step
  * @param stepState - Derived state from `steps`
@@ -92,6 +106,10 @@ export function carouselStepAccessibleName(
 ): string {
 
   const label: string = carouselStepLabel(step);
+
+  if (step.index === CAROUSEL_STEP_INSTRUCTIONS) {
+    return `${label}, locked. ${INSTRUCTIONS_CLOSED_DETAIL}`;
+  }
 
   if (stepState === "locked") {
     return `${label}, locked`;

@@ -147,7 +147,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Instructions
 
-- [ ] **4.8 Add the Instructions step as a closed control**
+- [x] **4.8 Add the Instructions step as a closed control**
 
   Step 1 stays disabled for an admin and a reader. Its accessible name says versioned Markdown instructions are a later phase, and that phase 5 replaces the hidden inspiration and rules form. There is no panel, no document table, and no provider call. The inspiration and rules columns stay as stored.
 

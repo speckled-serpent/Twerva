@@ -296,6 +296,36 @@ class CarouselEditorStepWriteTests(unittest.TestCase):
         self.assertEqual(raised.exception.detail, SLIDES_LOCKED_DETAIL)
         self.assertEqual(loaded.editor_step, 0)
 
+    def test_refusing_instructions_leaves_inspiration_and_rules(self) -> None:
+        """Step 1 does not write. Inspiration and rules read back as stored."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        created: CarouselReadResponse = _create(session, "Harbor notes")
+        stored: Carousel | None = session.get(Carousel, created.id)
+
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        stored.inspiration = "Harbor fog"
+        stored.rules = "Keep the caption short"
+        before: CarouselReadResponse = get_carousel(created.id, session)
+        commits_before: int = session.commit_count
+
+        with self.assertRaises(HTTPException) as raised:
+            _store_step(session, created.id, 1)
+
+        loaded: CarouselReadResponse = get_carousel(created.id, session)
+
+        self.assertEqual(raised.exception.status_code, 400)
+        self.assertEqual(raised.exception.detail, INSTRUCTIONS_LOCKED_DETAIL)
+        self.assertEqual(before.inspiration, "Harbor fog")
+        self.assertEqual(before.rules, "Keep the caption short")
+        self.assertEqual(loaded.inspiration, before.inspiration)
+        self.assertEqual(loaded.rules, before.rules)
+        self.assertEqual(loaded.editor_step, created.editor_step)
+        self.assertEqual(stored.inspiration, "Harbor fog")
+        self.assertEqual(stored.rules, "Keep the caption short")
+        self.assertEqual(session.commit_count, commits_before)
+
     def test_instructions_and_final_are_refused(self) -> None:
         """Steps 1 and 4 are 400. The stored step stays."""
 

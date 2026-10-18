@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import type { CarouselStepState, CarouselStepsResponse } from "../api/types";
 import {
   carouselStepAccessibleName,
+  CAROUSEL_STEP_INSTRUCTIONS,
   CAROUSEL_STEPS,
   canOpenCarouselStep,
   generationLabel,
@@ -45,6 +46,7 @@ export interface CarouselStepBarProps {
  *
  * The open step uses the teal primary. A done step uses the success color.
  * A locked or not-yet-enabled step uses the existing disabled control.
+ * Instructions stays disabled. Its name says versioned Markdown is a later phase.
  *
  * @param props - Stored step, derived states, and the step PATCH callback
  * @returns The stepper
@@ -65,7 +67,11 @@ export function CarouselStepBar({
           const stepState: CarouselStepState = stepStateFor(steps, step);
           const isCurrent: boolean = step.index === editorStep;
           const canOpen: boolean = canOpenCarouselStep(step, stepState);
+          const accessibleName: string = carouselStepAccessibleName(step, stepState);
           const className: string = carouselStepClassName(stepState, isCurrent);
+          const closedTitle: string | undefined = step.index === CAROUSEL_STEP_INSTRUCTIONS
+            ? accessibleName
+            : undefined;
 
           return (
             <li key={step.key}>
@@ -74,7 +80,8 @@ export function CarouselStepBar({
                 id={`carousel-step-${step.index}`}
                 className={className}
                 aria-current={isCurrent ? "step" : undefined}
-                aria-label={carouselStepAccessibleName(step, stepState)}
+                aria-label={accessibleName}
+                title={closedTitle}
                 disabled={!canOpen || isSavingStep}
                 onClick={(): void => {
 
