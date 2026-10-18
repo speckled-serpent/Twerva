@@ -239,19 +239,20 @@ class CarouselReadApiTests(unittest.TestCase):
         image_path: str = (
             "/carousels/{carousel_id}/slides/{slide_id}/images/{image_id}"
         )
-        self.assertTrue(
-            {"PATCH", "DELETE"}.issubset(methods_by_path[image_path]),
-        )
+        self.assertEqual(methods_by_path[image_path], {"DELETE"})
         self.assertIn("GET", methods_by_path[f"{image_path}/file"])
         self.assertIn("GET", methods_by_path[f"{image_path}/thumbnail"])
-        self.assertNotIn("POST", methods_by_path[image_path])
-        self.assertIn(
-            "POST",
-            methods_by_path["/carousels/{carousel_id}/slides/{slide_id}/images"],
+        self.assertNotIn(
+            "/carousels/{carousel_id}/slides/{slide_id}/images",
+            methods_by_path,
         )
-        self.assertIn(
-            "POST",
-            methods_by_path["/carousels/{carousel_id}/slides/{slide_id}/images/import"],
+        self.assertNotIn(
+            "/carousels/{carousel_id}/slides/{slide_id}/images/import",
+            methods_by_path,
+        )
+        self.assertNotIn(
+            "/carousels/{carousel_id}/slides/with-images",
+            methods_by_path,
         )
         self.assertNotIn("/carousels/resource", methods_by_path)
         self.assertNotIn("/carousels/{carousel_id}/resource", methods_by_path)

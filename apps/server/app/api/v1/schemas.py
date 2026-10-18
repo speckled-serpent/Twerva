@@ -1204,17 +1204,6 @@ class SlidePreviewRequest(BaseModel):
     slide_id: uuid.UUID | None = None
 
 
-class SlideImageMetadataPatch(BaseModel):
-    """License and source on an image that already exists. Not the bytes."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    alt_text: str | None = None
-    license: SlideImageLicense
-    source: str
-    license_note: str = ""
-
-
 class SlideImageImportRequest(BaseModel):
     """One URL to download, plus the same license fields as an upload."""
 
@@ -1225,31 +1214,6 @@ class SlideImageImportRequest(BaseModel):
     license: SlideImageLicense
     source: str
     license_note: str = ""
-
-
-class SlideImageCreateItem(BaseModel):
-    """One image on a new slide. A file uses ``file_index`` into the upload."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["file", "url"]
-    file_index: int | None = None
-    url: str | None = None
-    alt_text: str | None = None
-    license: SlideImageLicense
-    source: str
-    license_note: str = ""
-
-
-class SlideWithImagesCreateRequest(BaseModel):
-    """Name, skeleton text, exclusions, and the one image when the skeleton needs one."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    texts: list[SlideElementTextWrite] = Field(default_factory=list)
-    excluded_slide_ids: list[uuid.UUID] = Field(default_factory=list)
-    images: list[SlideImageCreateItem] = Field(default_factory=list)
 
 
 class AlbumImageReadResponse(BaseModel):

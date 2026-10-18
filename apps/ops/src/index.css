@@ -1295,21 +1295,6 @@ th {
   margin-top: 0.75rem;
 }
 
-.pending-thumbs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.pending-thumbs img {
-  width: 4.5rem;
-  aspect-ratio: 1080 / 1920;
-  object-fit: cover;
-  background: #eee;
-  border: 1px solid var(--ops-border);
-  border-radius: 0.35rem;
-}
-
 .carousel-tabs {
   margin-bottom: 1rem;
 }

@@ -772,25 +772,9 @@ export interface SlidePreviewRequest {
   slide_id: string | null;
 }
 
-export interface SlideImageMetadataPatch {
-  alt_text: string | null;
-  license: SlideImageLicense;
-  source: string;
-  license_note: string;
-}
-
 export interface SlideImageImportRequest {
   url: string;
   alt_text: string | null;
-  license: SlideImageLicense;
-  source: string;
-  license_note: string;
-}
-
-export interface SlideImageCreatePayload {
-  kind: "file" | "url";
-  file: File | null;
-  url: string | null;
   license: SlideImageLicense;
   source: string;
   license_note: string;

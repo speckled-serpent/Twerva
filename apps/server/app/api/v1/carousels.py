@@ -365,12 +365,10 @@ def serialize_image(image: AlbumImage) -> SlideImageReadResponse:
     return image_response
 
 
-from app.api.v1.carousel_intake import register_source_intake_routes
 from app.api.v1.carousel_text import register_source_text_routes
 from app.api.v1.carousel_writes import register_source_write_routes
 
 
 register_source_write_routes(carousels_router)
-register_source_intake_routes(carousels_router)
 register_source_preview_routes(carousels_router)
 register_source_text_routes(carousels_router)

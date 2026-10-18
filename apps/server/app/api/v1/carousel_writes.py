@@ -2,8 +2,9 @@
 
 No new image bytes on the slide routes. The skeleton stays the one
 chosen at create. Create stores generation 1 and opens on Basic.
-Slide upload still creates an album when the carousel does not have
-one. Research is an ordered list and does not gate a step.
+A slide image is an album image that already exists. Storing one
+does not create an album. Research is an ordered list and does not
+gate a step.
 """
 
 from __future__ import annotations
@@ -30,8 +31,6 @@ from app.api.v1.schemas import (
     CarouselPatchRequest,
     CarouselReadResponse,
     CarouselStepPatchRequest,
-    SlideImageMetadataPatch,
-    SlideImageReadResponse,
     SlideElementTextWrite,
     SlideReadResponse,
     SlideWriteRequest,
@@ -66,7 +65,6 @@ from app.carousels.editing import (
     allocate_unique_source_slug,
     in_use_detail,
     new_row_id,
-    normalize_image_metadata,
     slugify_carousel_name,
     stored_paths_in_use,
 )
@@ -96,7 +94,7 @@ RESEARCH_NOT_ATTACHED_DETAIL: str = "That research item is not attached."
 
 
 def register_source_write_routes(carousels_router: APIRouter) -> None:
-    """Attach album, research, and slide writes, plus the packaged image stream."""
+    """Attach album, research, and slide writes, plus the image file streams."""
 
     carousels_router.add_api_route(
         "",
@@ -181,12 +179,6 @@ def register_source_write_routes(carousels_router: APIRouter) -> None:
     )
     carousels_router.add_api_route(
         "/{carousel_id}/slides/{slide_id}/images/{image_id}",
-        patch_slide_image_metadata,
-        methods=["PATCH"],
-        response_model=SlideImageReadResponse,
-    )
-    carousels_router.add_api_route(
-        "/{carousel_id}/slides/{slide_id}/images/{image_id}",
         delete_slide_image,
         methods=["DELETE"],
         status_code=status.HTTP_204_NO_CONTENT,
@@ -194,6 +186,11 @@ def register_source_write_routes(carousels_router: APIRouter) -> None:
     carousels_router.add_api_route(
         "/{carousel_id}/slides/{slide_id}/images/{image_id}/file",
         get_slide_image_file,
+        methods=["GET"],
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/slides/{slide_id}/images/{image_id}/thumbnail",
+        get_slide_image_thumbnail,
         methods=["GET"],
     )
 
@@ -770,39 +767,6 @@ def delete_slide(
     )
 
 
-def patch_slide_image_metadata(
-    carousel_id: uuid.UUID,
-    slide_id: uuid.UUID,
-    image_id: uuid.UUID,
-    image_patch_request: SlideImageMetadataPatch,
-    our_database_session: Session = Depends(get_our_database_session),
-    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
-) -> SlideImageReadResponse:
-    """Update license, source, alt, and note. A bad license writes nothing."""
-
-    _ = current_ops_operator
-    found_image: AlbumImage = _fetch_image_or_raise(
-        carousel_id,
-        slide_id,
-        image_id,
-        our_database_session,
-    )
-    image_source, license_note, alt_text = _parsed_image_metadata(image_patch_request)
-    found_image.license = image_patch_request.license
-    found_image.source = image_source
-    found_image.license_note = license_note
-    found_image.alt_text = alt_text
-    commit_database_session_or_raise_conflict(
-        our_database_session,
-        conflict_detail="Image details could not be saved.",
-    )
-    our_database_session.refresh(found_image)
-
-    from app.api.v1.carousels import serialize_image
-
-    return serialize_image(found_image)
-
-
 def delete_slide_image(
     carousel_id: uuid.UUID,
     slide_id: uuid.UUID,
@@ -889,6 +853,56 @@ def get_slide_image_file(
     )
 
     return image_response
+
+
+def get_slide_image_thumbnail(
+    carousel_id: uuid.UUID,
+    slide_id: uuid.UUID,
+    image_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> FileResponse:
+    """Stream the JPEG thumbnail. SVG and packaged defaults have none.
+
+    Readers may call this. Upload and URL import live on the album.
+    """
+
+    from app.carousels.image_store import LocalAlbumImageStore, configured_album_image_store
+
+    found_image: AlbumImage = _fetch_image_or_raise(
+        carousel_id,
+        slide_id,
+        image_id,
+        our_database_session,
+    )
+
+    if found_image.thumbnail_path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This image has no thumbnail.",
+        )
+
+    image_store: LocalAlbumImageStore = configured_album_image_store()
+
+    try:
+        thumbnail_file: Path = image_store.open(found_image.thumbnail_path)
+    except ArtifactAssetPathEscapeError as escape_error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Image path is not allowed.",
+        ) from escape_error
+
+    if not thumbnail_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Thumbnail file is missing.",
+        )
+
+    thumbnail_response: FileResponse = FileResponse(
+        path=thumbnail_file,
+        media_type="image/jpeg",
+    )
+
+    return thumbnail_response
 
 
 def _accepted_editor_step(
@@ -1390,27 +1404,6 @@ def _store_slide_image(slide: Slide, chosen_image: AlbumImage | None) -> None:
         return
 
     slide.images = [chosen_image]
-
-
-def _parsed_image_metadata(
-    image_patch_request: SlideImageMetadataPatch,
-) -> tuple[str, str, str | None]:
-    """Return carousel, license note, and alt. Invalid license writes nothing."""
-
-    try:
-        image_source, license_note, alt_text = normalize_image_metadata(
-            image_patch_request.license,
-            image_patch_request.source,
-            image_patch_request.license_note,
-            image_patch_request.alt_text,
-        )
-    except ValueError as metadata_error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(metadata_error),
-        ) from metadata_error
-
-    return image_source, license_note, alt_text
 
 
 def _reject_when_paths_in_use(
