@@ -3,23 +3,18 @@ import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "
 import {
   acceptSlideText,
   createCarouselSlide,
-  createSlideWithImages,
   deleteCarousel,
   fetchTextGenerationStatus,
   generateCarouselSlide,
   generateSlideText,
   patchCarouselStep,
   deleteCarouselSlide,
-  deleteSlideImage,
   fetchCarouselById,
   fetchSkeletonById,
   listCarousels,
   patchCarouselSlide,
-  patchSlideImageMetadata,
   renameCarousel,
-  importSlideImage,
   slideImageDisplayUrl,
-  uploadSlideImages,
 } from "../api/client";
 import type {
   CarouselListItemResponse,
@@ -28,19 +23,11 @@ import type {
   SkeletonElementReadResponse,
   SkeletonReadResponse,
   SlideElementTextWrite,
-  SlideImageCreatePayload,
-  SlideImageLicense,
   SlideImageReadResponse,
   SlideReadResponse,
   SlideWriteRequest,
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
-import {
-  NewSlideImages,
-  releaseSlideImageDraft,
-  type SlideImageDraft,
-} from "./SlideImageDrafts";
-import { firstSlideImageDraftError } from "./slideImageDraft";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { CarouselBasicStep } from "./CarouselBasicStep";
 import { CarouselContentStep } from "./CarouselContentStep";
@@ -69,6 +56,14 @@ import {
 } from "./skeletonAutosave";
 import { useSkeletonAutosave } from "./useSkeletonAutosave";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { SlideAlbumImagePicker } from "./SlideAlbumImagePicker";
+import {
+  imageChoiceWriteRequest,
+  newPictureSlideWriteRequest,
+  savedSlideAlbumImageId,
+  slideImageRequiredError,
+  slideTextSaveRequest,
+} from "./slideAlbumImage";
 import { SlideLivePreview } from "./SlideLivePreview";
 import {
   labelForTextElement,
@@ -76,13 +71,6 @@ import {
   textDraftsForSkeleton,
   skeletonRequiresImage,
 } from "./slideSkeletonShape";
-
-const LICENSE_OPTIONS: SlideImageLicense[] = [
-  "cc0",
-  "public_domain",
-  "owned",
-  "licensed",
-];
 
 export interface CarouselsOpenRequest {
   sourceId: string;
@@ -353,11 +341,6 @@ export function CarouselsPage({
           setHeldSlide(savedSlide);
           setIsCreatingSlide(false);
           setOpenedSlideId(savedSlide.id);
-          requestReload();
-        }}
-        onImagesChanged={(message: string): void => {
-          setStatusMessage(message);
-          setHeldSlide(null);
           requestReload();
         }}
         onSlideDeleted={(): void => {
@@ -851,7 +834,7 @@ function AlbumView({
               ) : null}
               <p className="field-hint">
                 Generate slide writes a draft.
-                A draft stays off the live slide until you accept it. Images stay a manual upload.
+                A draft stays off the live slide until you accept it.
               </p>
               {textGeneration.available ? null : (
                 <p className="field-hint" id="generate-unavailable">
@@ -986,7 +969,6 @@ interface SlideEditorViewProps {
   onOpenStep: (editorStep: number) => void;
   onBack: () => void;
   onSaved: (savedSlide: SlideReadResponse, message: string) => void;
-  onImagesChanged: (message: string) => void;
   onSlideDeleted: () => void;
 }
 
@@ -1002,7 +984,6 @@ function SlideEditorView({
   onOpenStep,
   onBack,
   onSaved,
-  onImagesChanged,
   onSlideDeleted,
 }: SlideEditorViewProps): ReactElement {
 
@@ -1017,11 +998,14 @@ function SlideEditorView({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
-  const [imageDrafts, setImageDrafts] = useState<SlideImageDraft[]>([]);
-  const [showImageErrors, setShowImageErrors] = useState<boolean>(false);
-  const imageDraftsRef = useRef<SlideImageDraft[]>(imageDrafts);
-  imageDraftsRef.current = imageDrafts;
+  const [chosenAlbumImageId, setChosenAlbumImageId] = useState<string | null>(null);
+  const [isChoosingImage, setIsChoosingImage] = useState<boolean>(false);
+  const imageChoiceRef = useRef<boolean>(false);
   const needsImage: boolean = skeleton !== null && skeletonRequiresImage(skeleton);
+  const savedAlbumImageId: string | null = savedSlideAlbumImageId(slide);
+  const selectedAlbumImageId: string | null = slide === null
+    ? chosenAlbumImageId
+    : savedAlbumImageId;
   const otherSlides: SlideReadResponse[] = (carousel?.slides ?? []).filter(
     (candidate: SlideReadResponse): boolean => candidate.id !== slide?.id,
   );
@@ -1034,14 +1018,6 @@ function SlideEditorView({
       value: textValues[element.id] ?? "",
     }),
   );
-
-  useEffect((): (() => void) => {
-    return (): void => {
-      for (const draft of imageDraftsRef.current) {
-        releaseSlideImageDraft(draft);
-      }
-    };
-  }, []);
 
   useEffect((): (() => void) => {
     if (carousel === null) {
@@ -1113,27 +1089,65 @@ function SlideEditorView({
     }
   }, [slide?.id]);
 
+  const handleChooseAlbumImage = async (albumImageId: string): Promise<void> => {
+
+    if (
+      !canWrite
+      || carousel === null
+      || skeleton === null
+      || imageChoiceRef.current
+      || isSaving
+    ) {
+      return;
+    }
+
+    if (slide === null) {
+      setChosenAlbumImageId(albumImageId);
+      setSaveError(null);
+
+      return;
+    }
+
+    if (albumImageId === savedAlbumImageId) {
+      return;
+    }
+
+    const slideWriteRequest: SlideWriteRequest = imageChoiceWriteRequest(
+      slide,
+      skeleton,
+      albumImageId,
+    );
+
+    imageChoiceRef.current = true;
+    setIsChoosingImage(true);
+    setSaveError(null);
+
+    try {
+      const savedSlide: SlideReadResponse = await patchCarouselSlide(
+        carousel.id,
+        slide.id,
+        slideWriteRequest,
+      );
+      onSaved(savedSlide, "Chose the image.");
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      imageChoiceRef.current = false;
+      setIsChoosingImage(false);
+    }
+  };
+
   const handleSave = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
     submitEvent.preventDefault();
 
-    if (!canWrite || carousel === null || skeleton === null) {
+    if (!canWrite || carousel === null || skeleton === null || imageChoiceRef.current) {
       return;
     }
 
-    const imageError: string | null = slide === null && needsImage
-      ? firstSlideImageDraftError(imageDrafts)
-      : null;
+    const imageError: string | null = slideImageRequiredError(needsImage, selectedAlbumImageId);
 
     if (imageError !== null) {
-      setShowImageErrors(true);
       setSaveError(new Error(imageError));
-
-      return;
-    }
-
-    if (slide === null && needsImage && imageDrafts.length === 0) {
-      setShowImageErrors(true);
-      setSaveError(new Error("This skeleton needs an image on the slide."));
 
       return;
     }
@@ -1150,32 +1164,24 @@ function SlideEditorView({
     const storedExcludedIds: string[] = excludedIds.filter(
       (excludedId: string): boolean => otherIds.has(excludedId),
     );
-    const slideWriteRequest: SlideWriteRequest = {
-      name: slideName.trim(),
-      texts: textWrites,
-      excluded_slide_ids: storedExcludedIds,
-    };
+    const trimmedName: string = slideName.trim();
+    const slideWriteRequest: SlideWriteRequest = slide === null && needsImage
+      && selectedAlbumImageId !== null
+      ? newPictureSlideWriteRequest(
+        trimmedName,
+        textWrites,
+        storedExcludedIds,
+        selectedAlbumImageId,
+      )
+      : slideTextSaveRequest(trimmedName, textWrites, storedExcludedIds);
 
     setIsSaving(true);
     setSaveError(null);
-    setShowImageErrors(false);
 
     try {
-      const imagePayloads: SlideImageCreatePayload[] = imageDrafts.map(
-        (draft: SlideImageDraft): SlideImageCreatePayload => ({
-          kind: draft.kind,
-          file: draft.file,
-          url: draft.url,
-          license: draft.imageLicense,
-          source: draft.imageSource,
-          license_note: draft.licenseNote,
-        }),
-      );
       let savedSlide: SlideReadResponse;
 
-      if (slide === null && needsImage) {
-        savedSlide = await createSlideWithImages(carousel.id, slideWriteRequest, imagePayloads);
-      } else if (slide === null) {
+      if (slide === null) {
         savedSlide = await createCarouselSlide(carousel.id, slideWriteRequest);
       } else {
         savedSlide = await patchCarouselSlide(carousel.id, slide.id, slideWriteRequest);
@@ -1183,11 +1189,7 @@ function SlideEditorView({
 
       const message: string = slide === null ? "Created the slide." : "Saved the slide.";
 
-      for (const draft of imageDrafts) {
-        releaseSlideImageDraft(draft);
-      }
-
-      setImageDrafts([]);
+      setChosenAlbumImageId(null);
       onSaved(savedSlide, message);
     } catch (caughtError: unknown) {
       setSaveError(caughtError);
@@ -1288,49 +1290,27 @@ function SlideEditorView({
           ) : (
         <div className="skeleton-editor-layout">
           <div className="skeleton-editor-main">
-            {slide === null || !needsImage ? null : (
-              <section id="slide-images" className="slide-images">
-                <h2>Image</h2>
-                <p className="field-hint">
-                  This skeleton uses one image on the slide.
-                </p>
-                {slide.images.length === 0 ? <p>No image on this slide yet.</p> : null}
-                {slide.images.map((image: SlideImageReadResponse): ReactElement => (
-                  <ImageMetadataEditor
-                    key={image.id}
-                    sourceId={carousel.id}
-                    slideId={slide.id}
-                    image={image}
-                    canWrite={canWrite}
-                    onChanged={(message: string): void => {
-                      onImagesChanged(message);
-                    }}
-                  />
-                ))}
-                {canWrite && slide.images.length === 0 ? (
-                  <ImageIntakeForm
-                    sourceId={carousel.id}
-                    slideId={slide.id}
-                    onChanged={(message: string): void => {
-                      onImagesChanged(message);
-                    }}
-                  />
-                ) : null}
-              </section>
-            )}
+            {needsImage ? (
+              <SlideAlbumImagePicker
+                albumId={carousel.album_id}
+                selectedImageId={selectedAlbumImageId}
+                canWrite={canWrite}
+                isChoosing={isChoosingImage}
+                isLocked={isSaving}
+                onChoose={(albumImageId: string): void => {
+                  void handleChooseAlbumImage(albumImageId);
+                }}
+                onOpenContent={(): void => {
+                  onOpenStep(CAROUSEL_STEP_CONTENT);
+                }}
+              />
+            ) : null}
             <form
               className="stack-form"
               onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
                 void handleSave(submitEvent);
               }}
             >
-              {slide === null && needsImage ? (
-                <NewSlideImages
-                  drafts={imageDrafts}
-                  showFieldErrors={showImageErrors}
-                  onDraftsChange={setImageDrafts}
-                />
-              ) : null}
               {slide?.text_status === "draft" ? (
                 <p className="status-banner" id="slide-draft-banner">
                   This text is a draft. It stays off the live slide until you accept it.
@@ -1418,14 +1398,18 @@ function SlideEditorView({
               ) : null}
               {canWrite ? (
                 <div className="button-row">
-                  <button id="save-slide" type="submit" disabled={isSaving || isGenerating}>
+                  <button
+                    id="save-slide"
+                    type="submit"
+                    disabled={isSaving || isGenerating || isChoosingImage}
+                  >
                     {isSaving ? "Saving…" : "Save slide"}
                   </button>
                   {slide === null ? null : (
                     <button
                       id="generate-slide-text"
                       type="button"
-                      disabled={!textGeneration.available || isGenerating || isSaving}
+                      disabled={!textGeneration.available || isGenerating || isSaving || isChoosingImage}
                       onClick={(): void => {
                         void handleGenerateText();
                       }}
@@ -1437,7 +1421,7 @@ function SlideEditorView({
                     <button
                       id="accept-slide-text"
                       type="button"
-                      disabled={isSaving || isGenerating}
+                      disabled={isSaving || isGenerating || isChoosingImage}
                       onClick={(): void => {
                         void handleAcceptText();
                       }}
@@ -1464,6 +1448,7 @@ function SlideEditorView({
             sourceId={carousel.id}
             slideId={slide?.id ?? null}
             texts={textWrites}
+            savedImageId={savedAlbumImageId}
           />
         </div>
           )}
@@ -1486,423 +1471,6 @@ function SlideEditorView({
         />
       ) : null}
     </section>
-  );
-}
-
-interface ImageIntakeFormProps {
-  sourceId: string;
-  slideId: string;
-  onChanged: (message: string) => void;
-}
-
-function ImageIntakeForm({
-  sourceId,
-  slideId,
-  onChanged,
-}: ImageIntakeFormProps): ReactElement {
-
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  const [uploadLicense, setUploadLicense] = useState<SlideImageLicense>("cc0");
-  const [uploadCarousel, setUploadCarousel] = useState<string>("");
-  const [uploadNote, setUploadNote] = useState<string>("");
-  const [uploadAlt, setUploadAlt] = useState<string>("");
-  const [uploadError, setUploadError] = useState<unknown>(null);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [importUrl, setImportUrl] = useState<string>("");
-  const [importLicense, setImportLicense] = useState<SlideImageLicense>("cc0");
-  const [importCarousel, setImportCarousel] = useState<string>("");
-  const [importNote, setImportNote] = useState<string>("");
-  const [importError, setImportError] = useState<unknown>(null);
-  const [isImporting, setIsImporting] = useState<boolean>(false);
-
-  useEffect((): (() => void) => {
-    const nextUrls: string[] = selectedFiles.map((file: File): string => URL.createObjectURL(file));
-    setPreviewUrls(nextUrls);
-
-    return (): void => {
-      for (const previewUrl of nextUrls) {
-        URL.revokeObjectURL(previewUrl);
-      }
-    };
-  }, [selectedFiles]);
-
-  const handleUpload = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
-    submitEvent.preventDefault();
-    setIsUploading(true);
-    setUploadError(null);
-
-    try {
-      await uploadSlideImages(
-        sourceId,
-        slideId,
-        selectedFiles,
-        uploadLicense,
-        uploadCarousel,
-        uploadAlt,
-        uploadNote,
-      );
-      setSelectedFiles([]);
-      onChanged(selectedFiles.length === 1 ? "Uploaded the image." : "Uploaded the images.");
-    } catch (caughtError: unknown) {
-      setUploadError(caughtError);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleImport = async (submitEvent: FormEvent<HTMLFormElement>): Promise<void> => {
-    submitEvent.preventDefault();
-    setIsImporting(true);
-    setImportError(null);
-
-    const provenance: string = importCarousel.trim() === "" ? importUrl.trim() : importCarousel.trim();
-
-    try {
-      await importSlideImage(sourceId, slideId, {
-        url: importUrl.trim(),
-        license: importLicense,
-        source: provenance,
-        alt_text: null,
-        license_note: importNote,
-      });
-      setImportUrl("");
-      onChanged("Imported the image.");
-    } catch (caughtError: unknown) {
-      setImportError(caughtError);
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  return (
-    <>
-      <form
-        className="stack-form"
-        onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-          void handleUpload(submitEvent);
-        }}
-      >
-        <fieldset>
-          <legend>Upload images</legend>
-          <label>
-            Files
-            <input
-              id="slide-image-files"
-              type="file"
-              accept=".svg,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg"
-              onChange={(changeEvent): void => {
-                const fileList: FileList | null = changeEvent.target.files;
-                const nextFiles: File[] = fileList === null ? [] : [...fileList];
-                setSelectedFiles(nextFiles);
-              }}
-            />
-          </label>
-          <p>SVG, PNG, or JPEG. 8 MB each. One license and source apply to every file in this upload.</p>
-          {previewUrls.length === 0 ? null : (
-            <div id="slide-image-preview" className="pending-thumbs">
-              {previewUrls.map((previewUrl: string, previewIndex: number): ReactElement => (
-                <img
-                  key={previewUrl}
-                  src={previewUrl}
-                  alt={selectedFiles[previewIndex]?.name ?? "Selected image"}
-                />
-              ))}
-            </div>
-          )}
-          <LicenseFields
-            licenseId="slide-image-license"
-            sourceId="slide-image-source"
-            noteId="slide-image-note"
-            imageLicense={uploadLicense}
-            imageSource={uploadCarousel}
-            licenseNote={uploadNote}
-            onLicenseChange={setUploadLicense}
-            onCarouselChange={setUploadCarousel}
-            onNoteChange={setUploadNote}
-          />
-          <label>
-            Alt text
-            <input
-              value={uploadAlt}
-              onChange={(changeEvent): void => {
-                setUploadAlt(changeEvent.target.value);
-              }}
-            />
-          </label>
-          <ErrorBanner error={uploadError} />
-          <button
-            id="upload-images"
-            type="submit"
-            disabled={isUploading || selectedFiles.length === 0 || uploadCarousel.trim() === ""}
-          >
-            {isUploading ? "Uploading…" : "Upload"}
-          </button>
-        </fieldset>
-      </form>
-      <form
-        className="stack-form"
-        onSubmit={(submitEvent: FormEvent<HTMLFormElement>): void => {
-          void handleImport(submitEvent);
-        }}
-      >
-        <fieldset>
-          <legend>Import from a URL</legend>
-          <label>
-            Image URL
-            <input
-              id="import-image-url"
-              value={importUrl}
-              onChange={(changeEvent): void => {
-                const nextUrl: string = changeEvent.target.value;
-                setImportUrl(nextUrl);
-
-                if (importCarousel.trim() === "" || importCarousel === importUrl) {
-                  setImportCarousel(nextUrl);
-                }
-              }}
-            />
-          </label>
-          <p>The server downloads the file once. Carousel records the provenance, and defaults to that URL.</p>
-          <LicenseFields
-            licenseId="import-image-license"
-            sourceId="import-image-source"
-            noteId="import-image-note"
-            imageLicense={importLicense}
-            imageSource={importCarousel}
-            licenseNote={importNote}
-            onLicenseChange={setImportLicense}
-            onCarouselChange={setImportCarousel}
-            onNoteChange={setImportNote}
-          />
-          <ErrorBanner error={importError} />
-          <button
-            id="import-image-submit"
-            type="submit"
-            disabled={isImporting || importUrl.trim() === ""}
-          >
-            {isImporting ? "Importing…" : "Import"}
-          </button>
-        </fieldset>
-      </form>
-    </>
-  );
-}
-
-interface LicenseFieldsProps {
-  licenseId: string;
-  sourceId: string;
-  noteId: string;
-  imageLicense: SlideImageLicense;
-  imageSource: string;
-  licenseNote: string;
-  onLicenseChange: (imageLicense: SlideImageLicense) => void;
-  onCarouselChange: (imageSource: string) => void;
-  onNoteChange: (licenseNote: string) => void;
-}
-
-function LicenseFields({
-  licenseId,
-  sourceId,
-  noteId,
-  imageLicense,
-  imageSource,
-  licenseNote,
-  onLicenseChange,
-  onCarouselChange,
-  onNoteChange,
-}: LicenseFieldsProps): ReactElement {
-
-  return (
-    <>
-      <label>
-        License
-        <select
-          id={licenseId}
-          value={imageLicense}
-          onChange={(changeEvent): void => {
-            onLicenseChange(changeEvent.target.value as SlideImageLicense);
-          }}
-        >
-          {LICENSE_OPTIONS.map((licenseOption: SlideImageLicense): ReactElement => (
-            <option key={licenseOption} value={licenseOption}>
-              {licenseOption}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Source
-        <input
-          id={sourceId}
-          value={imageSource}
-          onChange={(changeEvent): void => {
-            onCarouselChange(changeEvent.target.value);
-          }}
-        />
-      </label>
-      <label>
-        License note
-        <input
-          id={noteId}
-          value={licenseNote}
-          onChange={(changeEvent): void => {
-            onNoteChange(changeEvent.target.value);
-          }}
-        />
-      </label>
-    </>
-  );
-}
-
-interface ImageMetadataEditorProps {
-  sourceId: string;
-  slideId: string;
-  image: SlideImageReadResponse;
-  canWrite: boolean;
-  onChanged: (message: string) => void;
-}
-
-function ImageMetadataEditor({
-  sourceId,
-  slideId,
-  image,
-  canWrite,
-  onChanged,
-}: ImageMetadataEditorProps): ReactElement {
-
-  const [altText, setAltText] = useState<string>(image.alt_text ?? "");
-  const [imageLicense, setImageLicense] = useState<SlideImageLicense>(image.license);
-  const [imageSource, setImageSource] = useState<string>(image.source);
-  const [licenseNote, setLicenseNote] = useState<string>(image.license_note);
-  const [saveError, setSaveError] = useState<unknown>(null);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [pendingDelete, setPendingDelete] = useState<boolean>(false);
-
-  useEffect((): void => {
-    setAltText(image.alt_text ?? "");
-    setImageLicense(image.license);
-    setImageSource(image.source);
-    setLicenseNote(image.license_note);
-  }, [image]);
-
-  const handleSave = async (): Promise<void> => {
-
-    if (!canWrite) {
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
-
-    try {
-      await patchSlideImageMetadata(sourceId, slideId, image.id, {
-        alt_text: altText,
-        license: imageLicense,
-        source: imageSource,
-        license_note: licenseNote,
-      });
-      onChanged("Saved image details.");
-    } catch (caughtError: unknown) {
-      setSaveError(caughtError);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div className="image-editor">
-      <img
-        src={slideImageDisplayUrl(sourceId, slideId, image)}
-        alt={image.alt_text ?? image.relative_path}
-      />
-      <div className="stack-form">
-        <p className="mono">{image.relative_path}</p>
-        <ErrorBanner error={saveError} />
-        <label>
-          License
-          <select
-            id={`image-license-${image.id}`}
-            value={imageLicense}
-            disabled={!canWrite}
-            onChange={(changeEvent): void => {
-              setImageLicense(changeEvent.target.value as SlideImageLicense);
-            }}
-          >
-            {LICENSE_OPTIONS.map((licenseOption: SlideImageLicense): ReactElement => (
-              <option key={licenseOption} value={licenseOption}>
-                {licenseOption}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Carousel
-          <input
-            value={imageSource}
-            disabled={!canWrite}
-            onChange={(changeEvent): void => {
-              setImageSource(changeEvent.target.value);
-            }}
-          />
-        </label>
-        <label>
-          Alt text
-          <input
-            value={altText}
-            disabled={!canWrite}
-            onChange={(changeEvent): void => {
-              setAltText(changeEvent.target.value);
-            }}
-          />
-        </label>
-        <label>
-          License note
-          <input
-            value={licenseNote}
-            disabled={!canWrite}
-            onChange={(changeEvent): void => {
-              setLicenseNote(changeEvent.target.value);
-            }}
-          />
-        </label>
-        <p>A licensed image needs a note. Other licenses store an empty note.</p>
-        {canWrite ? (
-          <div className="button-row">
-            <button type="button" disabled={isSaving} onClick={(): void => {
-              void handleSave();
-            }}>
-              {isSaving ? "Saving…" : "Save image"}
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={(): void => {
-                setPendingDelete(true);
-              }}
-            >
-              Delete image
-            </button>
-          </div>
-        ) : null}
-      </div>
-      {pendingDelete ? (
-        <DeleteConfirmDialog
-          headingId={`delete-image-${image.id}`}
-          title="Delete this image?"
-          body="Delete is blocked while a skeleton or an artifact stores this image, and the row stays. A slide also has to keep an image, free text, or a field."
-          confirmLabel="Delete image"
-          onCancel={(): void => {
-            setPendingDelete(false);
-          }}
-          onConfirm={async (): Promise<void> => {
-            await deleteSlideImage(sourceId, slideId, image.id);
-            setPendingDelete(false);
-            onChanged("Deleted the image.");
-          }}
-        />
-      ) : null}
-    </div>
   );
 }
 

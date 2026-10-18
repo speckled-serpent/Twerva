@@ -13,6 +13,7 @@ export interface SlideLivePreviewProps {
   sourceId: string;
   slideId: string | null;
   texts: SlideElementTextWrite[];
+  savedImageId: string | null;
 }
 
 interface LivePreviewImage {
@@ -25,16 +26,18 @@ const PREVIEW_REFRESH_DELAY_MS: number = 450;
 /**
  * One frame of the carousel's skeleton filled from this slide.
  *
- * Refresh runs 450ms after the text changes. The image is the one
- * already saved on the slide. Nothing is saved, queued, or published.
+ * Refresh runs 450ms after the text changes, and again when the saved
+ * slide image changes. The image is the one already stored on the slide.
+ * Nothing is saved, queued, or published.
  *
- * @param props - Carousel, optional saved slide, and the text in the form
+ * @param props - Carousel, optional saved slide, the text in the form, and the stored image
  * @returns The preview panel beside the slide form
  */
 export function SlideLivePreview({
   sourceId,
   slideId,
   texts,
+  savedImageId,
 }: SlideLivePreviewProps): ReactElement {
 
   const [actionError, setActionError] = useState<unknown>(null);
@@ -43,7 +46,7 @@ export function SlideLivePreview({
   const requestSerialRef = useRef<number>(0);
   const previewRef = useRef<LivePreviewImage | null>(null);
   previewRef.current = preview;
-  const payloadKey: string = JSON.stringify({ sourceId, slideId, texts });
+  const payloadKey: string = JSON.stringify({ sourceId, slideId, texts, savedImageId });
 
   const refreshPreview = async (): Promise<void> => {
     const requestSerial: number = requestSerialRef.current + 1;

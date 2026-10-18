@@ -839,6 +839,10 @@ th {
   border-color: var(--ops-primary-hover);
 }
 
+#slide-album-picker .asset-thumb:disabled {
+  opacity: 1;
+}
+
 .slider-number-label {
   flex: 0 0 auto;
 }
