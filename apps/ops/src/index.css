@@ -1060,6 +1060,30 @@ th {
   color: #ffffff;
 }
 
+.carousel-basic-generation {
+  margin: 0;
+  font-weight: 600;
+  color: var(--ops-primary-hover);
+}
+
+.carousel-locked-skeleton {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--ops-border);
+  border-radius: var(--ops-radius-control);
+  background: var(--ops-stone-soft);
+}
+
+.carousel-basic-kicker {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.carousel-skeleton-name {
+  margin: 0.2rem 0 0.35rem;
+  font-weight: 600;
+  color: var(--ops-text);
+}
+
 .slide-grid {
   list-style: none;
   padding: 0;

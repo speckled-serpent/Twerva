@@ -1,9 +1,9 @@
 """Create, rename, change the open step, attach one album, attach research, and delete.
 
 No new image bytes on the slide routes. The skeleton stays the one
-chosen at create. Slide upload still creates an album when the
-carousel does not have one. Research is an ordered list and does not
-gate a step.
+chosen at create. Create stores generation 1 and opens on Basic.
+Slide upload still creates an album when the carousel does not have
+one. Research is an ordered list and does not gate a step.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
 from app.models.album import Album, AlbumImage
 from app.models.carousel import (
-    CAROUSEL_EDITOR_STEP_DEFAULT,
+    CAROUSEL_CREATE_EDITOR_STEP,
     CAROUSEL_GENERATION_NUMBER_DEFAULT,
     Carousel,
     CarouselResearchItem,
@@ -203,8 +203,10 @@ def create_carousel(
 ) -> CarouselReadResponse:
     """Create a carousel bound to a skeleton. Readers cannot call this.
 
-    Generation and the open step use the column defaults: generation 1
-    and editor step 3.
+    Generation is 1 and the open step is Basic. The column default for
+    editor step stays on Slides so rows that already exist are left
+    where they were. The skeleton is the one in the request, and a
+    later rename cannot change it.
     """
 
     _ = current_ops_operator
@@ -228,7 +230,7 @@ def create_carousel(
         inspiration="",
         rules="",
         generation_number=CAROUSEL_GENERATION_NUMBER_DEFAULT,
-        editor_step=CAROUSEL_EDITOR_STEP_DEFAULT,
+        editor_step=CAROUSEL_CREATE_EDITOR_STEP,
     )
     created_source.slides = []
     created_source.research_links = []
@@ -250,7 +252,11 @@ def patch_carousel(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> CarouselReadResponse:
-    """Rename a carousel."""
+    """Rename a carousel. The body is a name only.
+
+    A skeleton id in that body is rejected. The skeleton chosen at
+    create stays, including when the carousel has no slides.
+    """
 
     _ = current_ops_operator
     found_source: Carousel = fetch_carousel_by_id_or_raise(
@@ -282,8 +288,8 @@ def patch_carousel_step(
 ) -> CarouselReadResponse:
     """Store the open step. A locked step is 400 and leaves the row.
 
-    Readers cannot call this. Create still uses the column default,
-    so a new carousel opens at step 3. The skeleton is not changed.
+    Readers cannot call this. Create already opens on Basic. The
+    skeleton is not changed.
     """
 
     _ = current_ops_operator

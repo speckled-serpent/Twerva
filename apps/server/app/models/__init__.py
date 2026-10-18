@@ -25,7 +25,8 @@ A carousel may point at the album those images came from.
 A carousel attaches an ordered list of those documents through
 ``carousel_research_items``. There is no ``research_id`` column.
 ``carousels.generation_number`` starts at 1. ``carousels.editor_step``
-remembers Basic, Content, or Slides. A campaign stores the skeleton
+remembers Basic, Content, or Slides. New carousels open on Basic.
+A campaign stores the skeleton
 and the carousel it runs. ``campaign_carousels`` is
 the latest assembly of live slides on that skeleton.
 
