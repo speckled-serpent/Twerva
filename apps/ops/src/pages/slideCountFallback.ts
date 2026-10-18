@@ -1,5 +1,5 @@
 import type { CarouselStepState } from "../api/types";
-import { CAROUSEL_STEP_SLIDES } from "./carouselSteps";
+import { CAROUSEL_STEP_SLIDES } from "./carouselSteps.ts";
 
 /**
  * Inclusive bounds of the global slide-count default.
