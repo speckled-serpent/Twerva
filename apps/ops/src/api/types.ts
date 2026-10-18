@@ -739,6 +739,14 @@ export interface CarouselStepPatchRequest {
   editor_step: number;
 }
 
+export interface CarouselAlbumAttachRequest {
+  album_id: string;
+}
+
+export interface CarouselAlbumCreateRequest {
+  name: string;
+}
+
 export interface SlideElementTextWrite {
   skeleton_element_id: string;
   value: string;
