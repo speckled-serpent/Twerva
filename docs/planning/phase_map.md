@@ -187,7 +187,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: a slide can point at an image already in the attached album without a new file. An id from another album is 400 and the previous pointer stays. Default's slides still return their six photos.
 
-- [ ] **4.12a Pick that image in the slide editor**
+- [x] **4.12a Pick that image in the slide editor**
 
   On Slides, replace `ImageIntakeForm` and the new-slide file drafts with a picker of the attached album's images. Choosing one saves `album_image_id`. The preview and the slide card show that image. Name, text elements, exclusions, the draft banner, Generate text, and Accept stay as they are, including the explicit Save slide button. Add slide requires a chosen image when the skeleton needs a picture. An attached album with no images says this album has no images yet and points the operator at Content. The empty slide list stays "No slides yet."
 
