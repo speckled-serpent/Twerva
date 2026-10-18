@@ -747,6 +747,14 @@ export interface CarouselAlbumCreateRequest {
   name: string;
 }
 
+export interface CarouselResearchAttachRequest {
+  research_item_id: string;
+}
+
+export interface CarouselResearchOrderRequest {
+  research_item_ids: string[];
+}
+
 export interface SlideElementTextWrite {
   skeleton_element_id: string;
   value: string;

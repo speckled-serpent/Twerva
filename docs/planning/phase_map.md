@@ -167,7 +167,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
   Acceptance: an upload on Content appears on the album and on the Albums page. License edits reach Saved without a Save button. A second carousel attached to the same album sees the new image.
 
-- [ ] **4.10 Add optional research on Content**
+- [x] **4.10 Add optional research on Content**
 
   Under the album, Content shows the attached research in order. The operator adds an existing item, creates one with a title (empty body is allowed, through `POST /api/v1/research`, then attach), removes a link, or reorders. The body stays on the Research page. None attached says research is optional and none is attached. An empty library says no research yet and offers create. A reader can look and cannot change the list.
 

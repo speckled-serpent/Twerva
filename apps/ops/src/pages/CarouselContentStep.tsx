@@ -15,6 +15,7 @@ import type {
 } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { AlbumImagesEditor, type AlbumEditorActions } from "./AlbumImagesEditor";
+import { CarouselResearchSection } from "./CarouselResearchSection";
 import {
   ALBUM_HAS_NO_IMAGES_COPY,
   ALBUM_IMAGES_AUTOSAVE_COPY,
@@ -42,8 +43,9 @@ export interface CarouselContentStepProps {
  * The attached album shows its name and image count. Replace and clear
  * stay on this step. A 409 shows the API reason in the form and leaves
  * the album attached. Images are the album's own rows: add, URL import,
- * reorder, and the license fields. A reader can look and cannot attach
- * or change those images.
+ * reorder, and the license fields. Under the album, research is an
+ * optional ordered list. A reader can look and cannot attach, change
+ * those images, or change the research list.
  *
  * @param props - The open carousel and the write callback
  * @returns The Content step
@@ -351,6 +353,11 @@ export function CarouselContentStep({
           Attaching an album is an admin action.
         </p>
       )}
+      <CarouselResearchSection
+        carousel={carousel}
+        canWrite={canWrite}
+        onCarouselSaved={onCarouselSaved}
+      />
     </section>
   );
 }
