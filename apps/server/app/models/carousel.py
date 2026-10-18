@@ -49,9 +49,10 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """Row in ``carousels``. Every carousel requires one skeleton.
 
     ``generation_number`` starts at 1. ``editor_step`` is 0 Basic, 2
-    Content, or 3 Slides. The column default stays on Slides so rows
-    that already exist, including Default, keep opening there. Create
-    stores Basic instead. The skeleton stays the one chosen at create.
+    Content, or 3 Slides. The column default stays on Slides. Create
+    stores Basic. ``carousel_editor_step_content`` moves a carousel to
+    Content when its skeleton needs a picture and no album is attached.
+    Default stays on Slides. The skeleton stays the one chosen at create.
     """
 
     __tablename__ = "carousels"

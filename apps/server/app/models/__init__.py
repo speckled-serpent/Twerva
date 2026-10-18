@@ -26,6 +26,8 @@ A carousel attaches an ordered list of those documents through
 ``carousel_research_items``. There is no ``research_id`` column.
 ``carousels.generation_number`` starts at 1. ``carousels.editor_step``
 remembers Basic, Content, or Slides. New carousels open on Basic.
+A picture carousel with no album opens on Content after
+``carousel_editor_step_content``. Default stays on Slides.
 A campaign stores the skeleton
 and the carousel it runs. ``campaign_carousels`` is
 the latest assembly of live slides on that skeleton.

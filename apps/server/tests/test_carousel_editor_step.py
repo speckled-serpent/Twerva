@@ -78,6 +78,7 @@ class AcceptedEditorStepTests(unittest.TestCase):
 
         self.assertEqual(_refusal(1, states), INSTRUCTIONS_LOCKED_DETAIL)
         self.assertEqual(_refusal(4, states), FINAL_LOCKED_DETAIL)
+        self.assertEqual(SLIDES_LOCKED_DETAIL, "Attach an album on Content first.")
         self.assertEqual(_refusal(3, states), SLIDES_LOCKED_DETAIL)
 
     def test_a_number_outside_the_stepper_is_refused(self) -> None:

@@ -36,7 +36,7 @@ STORED_EDITOR_STEPS: frozenset[int] = frozenset({
 })
 UNKNOWN_EDITOR_STEP_DETAIL: str = "editor_step must be 0, 2, or 3."
 INSTRUCTIONS_LOCKED_DETAIL: str = "Instructions is locked."
-SLIDES_LOCKED_DETAIL: str = "Slides is locked until an album is attached."
+SLIDES_LOCKED_DETAIL: str = "Attach an album on Content first."
 FINAL_LOCKED_DETAIL: str = "Final is locked."
 LOCKED_EDITOR_STEP_DETAIL: str = "That step is locked."
 _LOCKED_DETAIL_BY_STEP: dict[int, str] = {
@@ -124,7 +124,8 @@ def carousel_step_states(
     passes and available otherwise. ``slides`` is locked when the rule
     fails, available when it passes and the carousel has fewer than two
     slides, and done at two or more. ``basic`` is done. ``instructions``
-    and ``final`` are locked. This does not read or write ``editor_step``.
+    and ``final`` are locked. Research is optional and does not change
+    any state. This does not read or write ``editor_step``.
 
     Args:
         skeleton: The carousel's skeleton, with elements loaded.

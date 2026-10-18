@@ -26,11 +26,11 @@ from app.api.v1.schemas import (
     ResearchCreateRequest,
     ResearchReadResponse,
 )
-from app.carousels.slide_skeleton import CarouselStepState
+from app.carousels.slide_skeleton import SLIDES_LOCKED_DETAIL, CarouselStepState
 from app.models.carousel import Carousel
 from app.models.enums import BackgroundKind
 from app.models.research_item import ResearchItem
-from tests.test_carousel_editor_step import _create
+from tests.test_carousel_editor_step import _create, _store_step
 from tests.test_carousel_writes import _MemoryCarouselSession
 
 
@@ -295,6 +295,11 @@ class CarouselResearchLinkTests(unittest.TestCase):
         notes: ResearchReadResponse = _document(session, "Plate notes")
 
         attached: CarouselReadResponse = _append(session, created.id, notes.id)
+
+        with self.assertRaises(HTTPException) as refused:
+            _store_step(session, created.id, 3)
+
+        stayed: CarouselReadResponse = get_carousel(created.id, session)
         cleared: CarouselReadResponse = _reorder(session, created.id, [])
 
         self.assertEqual(created.steps.content, CarouselStepState.AVAILABLE)
@@ -307,6 +312,11 @@ class CarouselResearchLinkTests(unittest.TestCase):
         self.assertEqual(attached.editor_step, created.editor_step)
         self.assertIsNone(attached.album_id)
         self.assertEqual(len(attached.research), 1)
+        self.assertEqual(refused.exception.status_code, 400)
+        self.assertEqual(refused.exception.detail, SLIDES_LOCKED_DETAIL)
+        self.assertEqual(stayed.editor_step, created.editor_step)
+        self.assertEqual(stayed.steps.slides, CarouselStepState.LOCKED)
+        self.assertEqual(len(stayed.research), 1)
         self.assertEqual(cleared.research, [])
         self.assertEqual(cleared.steps.slides, CarouselStepState.LOCKED)
 
