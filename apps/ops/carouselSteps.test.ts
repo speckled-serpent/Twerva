@@ -10,6 +10,7 @@ import {
   carouselStepByIndex,
   carouselStepLabel,
   generationLabel,
+  INSTRUCTIONS_CLOSED_DETAIL,
   openStepSentence,
   stepClickStoresEditorStep,
   stepStateFor,
@@ -58,7 +59,18 @@ assert.deepEqual(
 );
 assert.equal(openStepSentence(CAROUSEL_STEP_SLIDES), "This carousel opens on Slides.");
 assert.equal(openStepSentence(0), "This carousel opens on Basic.");
-assert.equal(carouselStepAccessibleName(stepAt(1), "locked"), "1 Instructions, locked");
+const instructionsName: string = carouselStepAccessibleName(stepAt(1), "locked");
+assert.equal(
+  instructionsName,
+  `1 Instructions, locked. ${INSTRUCTIONS_CLOSED_DETAIL}`,
+);
+assert.match(instructionsName, /Versioned Markdown instructions are a later phase/);
+assert.match(
+  instructionsName,
+  /Phase 5 replaces the hidden inspiration and rules form/,
+);
+assert.equal(carouselStepAccessibleName(stepAt(1), "available"), instructionsName);
+assert.equal(carouselStepAccessibleName(stepAt(1), "done"), instructionsName);
 assert.equal(carouselStepAccessibleName(stepAt(3), "done"), "3 Slides, done");
 assert.equal(carouselStepAccessibleName(stepAt(3), "available"), "3 Slides");
 
@@ -95,3 +107,7 @@ assert.equal(stepClickStoresEditorStep(stepAt(3), "done", 0, true), true);
 assert.equal(stepClickStoresEditorStep(stepAt(3), "locked", 3, true), false);
 assert.equal(stepClickStoresEditorStep(stepAt(3), "available", 3, false), false);
 assert.equal(stepClickStoresEditorStep(stepAt(2), "available", 3, true), false);
+assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 0, true), false);
+assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 3, true), false);
+assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 0, false), false);
+assert.equal(canOpenCarouselStep(stepAt(1), "locked"), false);
