@@ -1,21 +1,16 @@
-"""Point a carousel at an album when its slides gain an image.
+"""Decide whether a carousel may leave an album, and whether an image is on it.
 
-Replacing or clearing that link is refused while a slide on the carousel
-still points at an image in the album being left.
+Replacing or clearing the album is refused while a slide on the carousel
+still points at an image in the album being left. Storing a slide image
+does not create an album.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.carousels.editing import (
-    allocate_unique_source_slug,
-    new_row_id,
-    slugify_carousel_name,
-)
 from app.models.album import Album, AlbumImage
 from app.models.carousel import Carousel, Slide
 
@@ -24,46 +19,6 @@ SLIDES_STILL_POINT_AT_ALBUM_DETAIL: str = (
     "Slides still point at that album's images, so clear those slide images first."
 )
 ALBUM_IMAGE_NOT_ON_CAROUSEL_DETAIL: str = "That image is not on this carousel's album."
-
-
-def ensure_carousel_album(carousel: Carousel, our_database_session: Session) -> Album:
-    """Return the carousel's album, creating one named after the carousel.
-
-    A carousel with no images has no album until the first image is stored.
-    The Content step is what later lets an operator pick a different album.
-
-    Args:
-        carousel: Carousel that is about to own an image.
-        our_database_session: Open session.
-
-    Returns:
-        The album the new image should join.
-    """
-
-    if carousel.album_id is not None:
-        found_album: Album | None = our_database_session.get(Album, carousel.album_id)
-
-        if found_album is not None:
-
-            return found_album
-
-    album_name: str = carousel.name.strip()
-    taken_slugs: set[str] = set(our_database_session.scalars(select(Album.slug)).all())
-    album_slug: str = allocate_unique_source_slug(
-        slugify_carousel_name(album_name),
-        taken_slugs,
-    )
-    created_album: Album = Album(
-        id=new_row_id(),
-        name=album_name,
-        slug=album_slug,
-    )
-    created_album.images = []
-    our_database_session.add(created_album)
-    carousel.album = created_album
-    carousel.album_id = created_album.id
-
-    return created_album
 
 
 def slides_point_at_album(

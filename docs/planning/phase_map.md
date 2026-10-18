@@ -217,7 +217,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Cleanup
 
-- [ ] **4.16 Remove the old carousel editor paths**
+- [x] **4.16 Remove the old carousel editor paths**
 
   Delete the inspiration and rules form that task 4.6 already hides, and delete the slide file upload and URL import (`ImageIntakeForm`, the new-slide file drafts, `uploadSlideImages`, `importSlideImage`). Point the slide card and preview at the album file URL the Albums page already uses, then remove the carousel slide upload, import, and metadata-write routes that only that form called. Remove `ensure_carousel_album` so storing a slide image cannot create an album. Keep the inspiration and rules columns and their stored text for phase 5, which replaces the form with Instructions. Keep `PATCH /api/v1/carousels/{carousel_id}/guidance`, Generate slide, and Generate text. Keep the album routes, the Research page, and the Default album seed.
 

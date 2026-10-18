@@ -10,13 +10,11 @@ os.environ.setdefault("TWERVA_ENV", "test")
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
-from pydantic import ValidationError
 
 from app.api.v1.schemas import (
     CarouselCreateRequest,
     CarouselPatchRequest,
     CarouselReadResponse,
-    SlideImageMetadataPatch,
     SlideReadResponse,
     SlideWriteRequest,
 )
@@ -29,7 +27,6 @@ from app.api.v1.carousel_writes import (
     get_slide_image_file,
     patch_carousel,
     patch_slide,
-    patch_slide_image_metadata,
 )
 from app.api.v1.carousels import get_carousel
 from app.models.album import Album, AlbumImage
@@ -43,15 +40,11 @@ from app.models.enums import (
     SkeletonElementContentKind,
     SkeletonElementTextSource,
     SkeletonStatus,
-    SlideImageLicense,
 )
 from app.models.skeleton import Skeleton
 from app.models.skeleton_element import SkeletonElement
 from app.carousels.default_carousel import DEFAULT_ALBUM_SKELETON_ID
-from app.carousels.editing import (
-    LICENSE_NOTE_DETAIL,
-    collect_used_paths,
-)
+from app.carousels.editing import collect_used_paths
 from app.carousels.slide_skeleton import IMAGE_REQUIRED_DETAIL, UNKNOWN_TEXT_ELEMENT_DETAIL
 from tests.test_carousels import _default_source_from_catalog
 
@@ -422,82 +415,8 @@ class AlbumAndSlideWriteTests(unittest.TestCase):
         self.assertEqual(stored.element_texts[0].value, "Stay")
 
 
-class ImageMetadataAndDeleteTests(unittest.TestCase):
-    """License gate, packaged file stream, and in-use deletes."""
-
-    def test_license_outside_the_allowlist_is_rejected(self) -> None:
-        """The request model does not accept a license the enum omits."""
-
-        with self.assertRaises(ValidationError):
-            SlideImageMetadataPatch.model_validate(
-                {
-                    "license": "copyright",
-                    "carousel": "https://example.com/photo",
-                    "license_note": "",
-                },
-            )
-
-    def test_licensed_without_a_note_leaves_the_row_unchanged(self) -> None:
-        """A missing note is 400 and does not commit."""
-
-        session: _MemoryCarouselSession = _MemoryCarouselSession()
-        session.carousels.append(_default_source_from_catalog())
-        carousel: Carousel = session.carousels[0]
-        slide: Slide = list(carousel.slides)[0]
-        image: AlbumImage = list(slide.images)[0]
-        original_license: SlideImageLicense = image.license
-        commits_before: int = session.commit_count
-
-        with self.assertRaises(HTTPException) as raised:
-            patch_slide_image_metadata(
-                carousel.id,
-                slide.id,
-                image.id,
-                SlideImageMetadataPatch(
-                    alt_text="Skyline",
-                    license=SlideImageLicense.LICENSED,
-                    source="https://example.com/rights",
-                    license_note="  ",
-                ),
-                session,
-                None,
-            )
-
-        self.assertEqual(raised.exception.status_code, 400)
-        self.assertEqual(raised.exception.detail, LICENSE_NOTE_DETAIL)
-        self.assertEqual(image.license, original_license)
-        self.assertEqual(image.license_note, "")
-        self.assertIsNone(image.alt_text)
-        self.assertEqual(session.commit_count, commits_before)
-        self.assertEqual(session.deleted, [])
-
-    def test_blank_image_source_leaves_the_row_unchanged(self) -> None:
-        """Carousel is required. The previous source URL stays."""
-
-        session: _MemoryCarouselSession = _MemoryCarouselSession()
-        session.carousels.append(_default_source_from_catalog())
-        carousel: Carousel = session.carousels[0]
-        slide: Slide = list(carousel.slides)[0]
-        image: AlbumImage = list(slide.images)[0]
-        original_source: str = image.source
-
-        with self.assertRaises(HTTPException) as raised:
-            patch_slide_image_metadata(
-                carousel.id,
-                slide.id,
-                image.id,
-                SlideImageMetadataPatch(
-                    license=SlideImageLicense.CC0,
-                    source="   ",
-                    license_note="ignored",
-                ),
-                session,
-                None,
-            )
-
-        self.assertEqual(raised.exception.status_code, 400)
-        self.assertEqual(image.source, original_source)
-        self.assertEqual(image.license_note, "")
+class ImageFileAndDeleteTests(unittest.TestCase):
+    """Packaged file stream and in-use deletes."""
 
     def test_packaged_default_file_streams_from_the_package(self) -> None:
         """theme-defaults/ is the packaged JPEG, not a copy on disk."""

@@ -1,9 +1,10 @@
 """Attach, create, and clear the one album on a carousel."""
 
-import inspect
+import importlib
 import os
 import unittest
 import uuid
+from types import ModuleType
 
 os.environ.setdefault("TWERVA_ENV", "test")
 
@@ -12,7 +13,6 @@ from pydantic import ValidationError
 
 from app.albums.linking import SLIDES_STILL_POINT_AT_ALBUM_DETAIL
 from app.api.v1.albums import create_album
-from app.api.v1.carousel_intake import add_images_from_payloads, create_slide_with_images
 from app.api.v1.carousel_writes import (
     delete_carousel_album,
     post_carousel_album,
@@ -340,14 +340,15 @@ class CarouselAlbumLinkTests(unittest.TestCase):
         self.assertEqual(cleared.steps.slides, CarouselStepState.AVAILABLE)
         self.assertEqual(session.commit_count, commits_before)
 
-    def test_slide_upload_still_creates_an_album_when_the_carousel_has_none(self) -> None:
-        """This task leaves ensure_carousel_album on the slide upload path."""
+    def test_storing_a_slide_image_cannot_create_an_album(self) -> None:
+        """The upload helper that created an album on the first slide image is gone."""
 
-        create_source: str = inspect.getsource(create_slide_with_images)
-        add_source: str = inspect.getsource(add_images_from_payloads)
+        linking: ModuleType = importlib.import_module("app.albums.linking")
 
-        self.assertIn("ensure_carousel_album(", create_source)
-        self.assertIn("ensure_carousel_album(", add_source)
+        self.assertFalse(hasattr(linking, "ensure_carousel_album"))
+
+        with self.assertRaises(ModuleNotFoundError):
+            importlib.import_module("app.api.v1.carousel_intake")
 
 
 def _attach(

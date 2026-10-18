@@ -39,6 +39,7 @@ import {
   SLIDE_IMAGE_NOTE_ERROR,
   SLIDE_IMAGE_SOURCE_ERROR,
   SLIDE_IMAGE_TYPE_ERROR,
+  SLIDE_IMAGE_URL_ERROR,
   SLIDE_IMAGE_URL_SCHEME_ERROR,
 } from "./src/pages/slideImageDraft.ts";
 
@@ -128,6 +129,7 @@ assert.equal(
   SLIDE_IMAGE_NOTE_ERROR,
 );
 assert.equal(albumImageFileIntakeError("lamp.png", "Author", "cc0", ""), null);
+assert.equal(albumImageUrlIntakeError("", "Author", "cc0", ""), SLIDE_IMAGE_URL_ERROR);
 assert.equal(
   albumImageUrlIntakeError("ftp://images.example/lamp.jpg", "Author", "cc0", ""),
   SLIDE_IMAGE_URL_SCHEME_ERROR,

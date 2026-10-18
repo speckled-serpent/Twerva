@@ -14,7 +14,7 @@ import {
   listCarousels,
   patchCarouselSlide,
   renameCarousel,
-  slideImageDisplayUrl,
+  albumImageDisplayUrl,
 } from "../api/client";
 import type {
   CarouselListItemResponse,
@@ -866,7 +866,7 @@ function AlbumView({
                           onOpenSlide(slide.id);
                         }}
                       >
-                        <SlideCardBody sourceId={carousel.id} slide={slide} />
+                        <SlideCardBody albumId={carousel.album_id} slide={slide} />
                       </button>
                       {canWrite ? (
                         <button
@@ -924,14 +924,17 @@ function AlbumView({
 }
 
 interface SlideCardBodyProps {
-  sourceId: string;
+  albumId: string | null;
   slide: SlideReadResponse;
 }
 
-function SlideCardBody({ sourceId, slide }: SlideCardBodyProps): ReactElement {
+function SlideCardBody({ albumId, slide }: SlideCardBodyProps): ReactElement {
 
   const firstImage: SlideImageReadResponse | undefined = slide.images[0];
   const excerpt: string = slideExcerpt(slide);
+  const imageUrl: string | null = albumId !== null && firstImage !== undefined
+    ? albumImageDisplayUrl(albumId, firstImage)
+    : null;
 
   return (
     <>
@@ -939,15 +942,15 @@ function SlideCardBody({ sourceId, slide }: SlideCardBodyProps): ReactElement {
         {slide.name}
         {slide.text_status === "draft" ? <span className="draft-badge">Draft</span> : null}
       </p>
-      {firstImage === undefined ? (
+      {imageUrl === null || firstImage === undefined ? (
         <p className="slide-card-excerpt">{excerpt}</p>
       ) : (
         <img
-          src={slideImageDisplayUrl(sourceId, slide.id, firstImage)}
+          src={imageUrl}
           alt={firstImage.alt_text ?? excerpt}
         />
       )}
-      {firstImage === undefined ? null : <p className="slide-card-excerpt">{excerpt}</p>}
+      {imageUrl === null ? null : <p className="slide-card-excerpt">{excerpt}</p>}
     </>
   );
 }

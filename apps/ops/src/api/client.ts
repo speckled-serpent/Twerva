@@ -22,11 +22,8 @@ import type {
   SkeletonReadResponse,
   SkeletonSampleRequest,
   SkeletonSampleResponse,
-  SlideImageCreatePayload,
   SlideImageImportRequest,
   SlideImageLicense,
-  SlideImageMetadataPatch,
-  SlideImageReadResponse,
   SlidePreviewRequest,
   SlideReadResponse,
   SlideWriteRequest,
@@ -481,75 +478,6 @@ export async function createCarouselSlide(
   );
 }
 
-interface SlideImageCreateItemJson {
-  kind: "file" | "url";
-  file_index: number | null;
-  url: string | null;
-  license: SlideImageLicense;
-  source: string;
-  license_note: string;
-}
-
-/**
- * Create a slide and its image in one multipart call. Disk storage.
- *
- * @param sourceId - Carousel UUID
- * @param slideWriteRequest - Name and one value per skeleton text element
- * @param images - The one image when the skeleton requires one
- * @returns The created slide, including the stored image
- */
-export async function createSlideWithImages(
-  sourceId: string,
-  slideWriteRequest: SlideWriteRequest,
-  images: SlideImageCreatePayload[],
-): Promise<SlideReadResponse> {
-
-  const formData: FormData = new FormData();
-  const imageItems: SlideImageCreateItemJson[] = [];
-  let fileIndex: number = 0;
-
-  for (const image of images) {
-    if (image.kind === "file") {
-      if (image.file === null) {
-        throw new Error("Choose an image file.");
-      }
-
-      formData.append("files", image.file);
-      imageItems.push({
-        kind: "file",
-        url: null,
-        license: image.license,
-        source: image.source,
-        license_note: image.license_note,
-        file_index: fileIndex,
-      });
-      fileIndex += 1;
-    } else {
-      imageItems.push({
-        kind: "url",
-        url: image.url,
-        license: image.license,
-        source: image.source,
-        license_note: image.license_note,
-        file_index: null,
-      });
-    }
-  }
-
-  formData.append("slide_json", JSON.stringify({
-    name: slideWriteRequest.name,
-    texts: slideWriteRequest.texts,
-    excluded_slide_ids: slideWriteRequest.excluded_slide_ids,
-    images: imageItems,
-  }));
-
-  return requestForm<SlideReadResponse>(
-    "POST",
-    `/api/v1/carousels/${sourceId}/slides/with-images`,
-    formData,
-  );
-}
-
 export async function patchCarouselSlide(
   sourceId: string,
   slideId: string,
@@ -571,122 +499,6 @@ export async function deleteCarouselSlide(sourceId: string, slideId: string): Pr
   );
 }
 
-export async function patchSlideImageMetadata(
-  sourceId: string,
-  slideId: string,
-  imageId: string,
-  imagePatchRequest: SlideImageMetadataPatch,
-): Promise<SlideImageReadResponse> {
-
-  return requestJson<SlideImageReadResponse>(
-    "PATCH",
-    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}`,
-    imagePatchRequest,
-  );
-}
-
-export async function deleteSlideImage(
-  sourceId: string,
-  slideId: string,
-  imageId: string,
-): Promise<void> {
-
-  await requestJson<undefined>(
-    "DELETE",
-    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}`,
-  );
-}
-
-export async function uploadSlideImages(
-  sourceId: string,
-  slideId: string,
-  files: File[],
-  imageLicense: SlideImageLicense,
-  source: string,
-  altText: string,
-  licenseNote: string,
-): Promise<SlideImageReadResponse[]> {
-
-  const formData: FormData = new FormData();
-
-  for (const file of files) {
-    formData.append("files", file);
-  }
-
-  formData.append("license", imageLicense);
-  formData.append("source", source);
-  formData.append("alt_text", altText);
-  formData.append("license_note", licenseNote);
-
-  return requestForm<SlideImageReadResponse[]>(
-    "POST",
-    `/api/v1/carousels/${sourceId}/slides/${slideId}/images`,
-    formData,
-  );
-}
-
-export async function importSlideImage(
-  sourceId: string,
-  slideId: string,
-  imageImportRequest: SlideImageImportRequest,
-): Promise<SlideImageReadResponse> {
-
-  return requestJson<SlideImageReadResponse>(
-    "POST",
-    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/import`,
-    imageImportRequest,
-  );
-}
-
-/**
- * Same-origin URL for an image that already exists. The session cookie
- * is sent with the request. This is not an upload.
- *
- * @param sourceId - Album UUID
- * @param slideId - Slide UUID
- * @param imageId - Image UUID
- * @returns Path the grid can use as an img src
- */
-export function slideImageFileUrl(
-  sourceId: string,
-  slideId: string,
-  imageId: string,
-): string {
-
-  const requestPath: string =
-    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}/file`;
-
-  return `${resolveApiBaseUrl()}${requestPath}`;
-}
-
-/**
- * Thumbnail URL when the row has one. SVG and packaged defaults do not.
- *
- * @param sourceId - Album UUID
- * @param slideId - Slide UUID
- * @param imageId - Image UUID
- * @returns Path the grid can use as an img src
- */
-export function slideImageThumbnailUrl(
-  sourceId: string,
-  slideId: string,
-  imageId: string,
-): string {
-
-  const requestPath: string =
-    `/api/v1/carousels/${sourceId}/slides/${slideId}/images/${imageId}/thumbnail`;
-
-  return `${resolveApiBaseUrl()}${requestPath}`;
-}
-
-/**
- * Prefer the thumbnail. Fall back to the original file.
- *
- * @param sourceId - Album UUID
- * @param slideId - Slide UUID
- * @param image - Image row
- * @returns img src for the grid or editor
- */
 export async function listAlbums(): Promise<AlbumListItemResponse[]> {
 
   return requestJson<AlbumListItemResponse[]>("GET", "/api/v1/albums");
@@ -843,19 +655,6 @@ export function albumImageDisplayUrl(
   }
 
   return albumImageFileUrl(albumId, image.id);
-}
-
-export function slideImageDisplayUrl(
-  sourceId: string,
-  slideId: string,
-  image: SlideImageReadResponse,
-): string {
-
-  if (image.thumbnail_path !== null && image.thumbnail_path !== "") {
-    return slideImageThumbnailUrl(sourceId, slideId, image.id);
-  }
-
-  return slideImageFileUrl(sourceId, slideId, image.id);
 }
 
 export async function listSkeletons(): Promise<SkeletonReadResponse[]> {
