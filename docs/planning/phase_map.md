@@ -201,7 +201,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Final
 
-- [ ] **4.14 Add the Final step as a closed control**
+- [x] **4.14 Add the Final step as a closed control**
 
   Step 4 stays disabled for an admin and a reader. Its accessible name says final assembly is a later phase. It does not call `POST /api/v1/generate/carousel` and it does not write campaign-run rows.
 

@@ -100,13 +100,24 @@ export const SLIDES_ALBUM_REQUIRED_DETAIL: string =
   "Attach an album on Content first.";
 
 /**
+ * Why Final stays closed.
+ *
+ * Phase 7 assembles the slides. This phase keeps the control locked.
+ * It does not call the template generate route and it does not write
+ * campaign-run rows. `editor_step` still stores only 0, 2, or 3.
+ */
+export const FINAL_CLOSED_DETAIL: string =
+  "Final assembly is a later phase.";
+
+/**
  * Accessible name, including locked or done when that is the derived state.
  *
  * Instructions stays closed for an admin and a reader. Its name says
  * versioned Markdown instructions are a later phase, and that phase 5
- * replaces the hidden inspiration and rules form. Locked Slides says
- * to attach an album on Content first. Available Slides stays unmarked.
- * Done Slides says done.
+ * replaces the hidden inspiration and rules form. Final stays closed
+ * for an admin and a reader. Its name says final assembly is a later
+ * phase. Locked Slides says to attach an album on Content first.
+ * Available Slides stays unmarked. Done Slides says done.
  *
  * @param step - A stepper step
  * @param stepState - Derived state from `steps`
@@ -123,6 +134,10 @@ export function carouselStepAccessibleName(
     return `${label}, locked. ${INSTRUCTIONS_CLOSED_DETAIL}`;
   }
 
+  if (step.index === CAROUSEL_STEP_FINAL) {
+    return `${label}, locked. ${FINAL_CLOSED_DETAIL}`;
+  }
+
   if (step.index === CAROUSEL_STEP_SLIDES && stepState === "locked") {
     return `${label}, locked. ${SLIDES_ALBUM_REQUIRED_DETAIL}`;
   }
@@ -136,6 +151,36 @@ export function carouselStepAccessibleName(
   }
 
   return label;
+}
+
+/**
+ * Tooltip for a closed step that names why it stays shut.
+ *
+ * Instructions and Final always show their later-phase sentence, for
+ * an admin and a reader. Locked Slides names the album rule. An open
+ * step has no tooltip. The title is the accessible name.
+ *
+ * @param step - A stepper step
+ * @param stepState - Derived state from `steps`
+ * @returns The accessible name, or undefined when the control needs no reason
+ */
+export function carouselStepTitle(
+  step: CarouselStepDefinition,
+  stepState: CarouselStepState,
+): string | undefined {
+
+  const closedForLaterPhase: boolean = step.index === CAROUSEL_STEP_INSTRUCTIONS
+    || step.index === CAROUSEL_STEP_FINAL;
+  const slidesNeedAlbum: boolean = step.index === CAROUSEL_STEP_SLIDES
+    && stepState === "locked";
+
+  if (!closedForLaterPhase && !slidesNeedAlbum) {
+    return undefined;
+  }
+
+  const title: string = carouselStepAccessibleName(step, stepState);
+
+  return title;
 }
 
 /**

@@ -5,7 +5,7 @@ import {
   carouselStepAccessibleName,
   carouselStepClassName,
   carouselStepMark,
-  CAROUSEL_STEP_INSTRUCTIONS,
+  carouselStepTitle,
   CAROUSEL_STEP_SLIDES,
   CAROUSEL_STEPS,
   canOpenCarouselStep,
@@ -52,8 +52,10 @@ export interface CarouselStepBarProps {
  * A locked step uses the existing disabled control. Available stays
  * unmarked. Slides follows `steps.slides`: locked, it stays disabled and
  * its name says to attach an album on Content first. Instructions stays
- * disabled, and its name says versioned Markdown is a later phase. A
- * reader can open a step to look. That click does not write.
+ * disabled, and its name says versioned Markdown is a later phase.
+ * Final stays disabled, and its name says final assembly is a later
+ * phase. That name is also the tooltip. A reader can open a step to
+ * look. That click does not write. Final does not navigate.
  *
  * @param props - Stored step, derived states, and the step PATCH callback
  * @returns The stepper
@@ -85,8 +87,7 @@ export function CarouselStepBar({
           const accessibleName: string = carouselStepAccessibleName(step, stepState);
           const className: string = carouselStepClassName(stepState, isCurrent);
           const mark: string | null = carouselStepMark(stepState);
-          const showsReason: boolean = step.index === CAROUSEL_STEP_INSTRUCTIONS
-            || (step.index === CAROUSEL_STEP_SLIDES && stepState === "locked");
+          const closedTitle: string | undefined = carouselStepTitle(step, stepState);
 
           return (
             <li key={step.key}>
@@ -96,7 +97,7 @@ export function CarouselStepBar({
                 className={className}
                 aria-current={isCurrent ? "step" : undefined}
                 aria-label={accessibleName}
-                title={showsReason ? accessibleName : undefined}
+                title={closedTitle}
                 disabled={!canOpen || isSavingStep}
                 onClick={(): void => {
 

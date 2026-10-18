@@ -5,6 +5,7 @@ import {
   CAROUSEL_STEPS,
   CAROUSEL_STEP_BASIC,
   CAROUSEL_STEP_CONTENT,
+  CAROUSEL_STEP_FINAL,
   CAROUSEL_STEP_SLIDES,
   canOpenCarouselStep,
   carouselStepAccessibleName,
@@ -12,9 +13,12 @@ import {
   carouselStepClassName,
   carouselStepLabel,
   carouselStepMark,
+  carouselStepTitle,
   displayedEditorStep,
+  FINAL_CLOSED_DETAIL,
   generationLabel,
   INSTRUCTIONS_CLOSED_DETAIL,
+  OPENABLE_EDITOR_STEPS,
   openStepSentence,
   shellEditorStep,
   SLIDES_ALBUM_REQUIRED_DETAIL,
@@ -78,6 +82,22 @@ assert.match(
 );
 assert.equal(carouselStepAccessibleName(stepAt(1), "available"), instructionsName);
 assert.equal(carouselStepAccessibleName(stepAt(1), "done"), instructionsName);
+assert.equal(carouselStepTitle(stepAt(1), "locked"), instructionsName);
+assert.equal(FINAL_CLOSED_DETAIL, "Final assembly is a later phase.");
+const finalName: string = carouselStepAccessibleName(stepAt(CAROUSEL_STEP_FINAL), "locked");
+assert.equal(
+  finalName,
+  `4 Final, locked. ${FINAL_CLOSED_DETAIL}`,
+);
+assert.match(finalName, /Final assembly is a later phase/);
+assert.equal(carouselStepAccessibleName(stepAt(CAROUSEL_STEP_FINAL), "available"), finalName);
+assert.equal(carouselStepAccessibleName(stepAt(CAROUSEL_STEP_FINAL), "done"), finalName);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_FINAL), "locked"), finalName);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_FINAL), "available"), finalName);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_FINAL), "done"), finalName);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_BASIC), "done"), undefined);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_CONTENT), "available"), undefined);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_CONTENT), "done"), undefined);
 assert.equal(SLIDES_ALBUM_REQUIRED_DETAIL, "Attach an album on Content first.");
 assert.equal(
   carouselStepAccessibleName(stepAt(3), "locked"),
@@ -85,6 +105,12 @@ assert.equal(
 );
 assert.equal(carouselStepAccessibleName(stepAt(3), "done"), "3 Slides, done");
 assert.equal(carouselStepAccessibleName(stepAt(3), "available"), "3 Slides");
+assert.equal(
+  carouselStepTitle(stepAt(3), "locked"),
+  `3 Slides, locked. ${SLIDES_ALBUM_REQUIRED_DETAIL}`,
+);
+assert.equal(carouselStepTitle(stepAt(3), "available"), undefined);
+assert.equal(carouselStepTitle(stepAt(3), "done"), undefined);
 assert.equal(carouselStepMark("locked"), "Locked");
 assert.equal(carouselStepMark("available"), null);
 assert.equal(carouselStepMark("done"), "Done");
@@ -160,3 +186,20 @@ assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 0, true), false);
 assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 3, true), false);
 assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 0, false), false);
 assert.equal(canOpenCarouselStep(stepAt(1), "locked"), false);
+assert.deepEqual(
+  [...OPENABLE_EDITOR_STEPS],
+  [CAROUSEL_STEP_BASIC, CAROUSEL_STEP_CONTENT, CAROUSEL_STEP_SLIDES],
+);
+assert.equal(OPENABLE_EDITOR_STEPS.includes(CAROUSEL_STEP_FINAL), false);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_FINAL), "locked", 0, true), false);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_FINAL), "locked", 3, true), false);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_FINAL), "locked", 0, false), false);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_FINAL), "available", 3, true), false);
+assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_FINAL), "done", 3, false), false);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_FINAL), "locked"), false);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_FINAL), "available"), false);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_FINAL), "done"), false);
+assert.equal(stepStateFor(doneSlides, stepAt(CAROUSEL_STEP_FINAL)), "locked");
+assert.equal(stepStateFor(availableSlides, stepAt(CAROUSEL_STEP_FINAL)), "locked");
+assert.equal(stepStateFor(lockedSlides, stepAt(CAROUSEL_STEP_FINAL)), "locked");
+assert.equal(displayedEditorStep(CAROUSEL_STEP_SLIDES, CAROUSEL_STEP_FINAL, true), CAROUSEL_STEP_SLIDES);
