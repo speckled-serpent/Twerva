@@ -55,6 +55,7 @@ from app.models.ops_user import OpsUser
 from app.settings import get_settings
 from app.albums.linking import (
     SLIDES_STILL_POINT_AT_ALBUM_DETAIL,
+    album_image_on_carousel,
     slides_point_at_album,
 )
 from app.carousels.editing import (
@@ -71,6 +72,7 @@ from app.carousels.editing import (
 )
 from app.carousels.slide_exclusions import normalized_exclusion_ids
 from app.carousels.slide_skeleton import (
+    IMAGE_NOT_USED_DETAIL,
     IMAGE_REQUIRED_DETAIL,
     CarouselStepStates,
     accepted_editor_step,
@@ -619,7 +621,12 @@ def create_slide(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> SlideReadResponse:
-    """Add a slide. A skeleton that needs an image is 400 here."""
+    """Add a slide. A set ``album_image_id`` points at an existing album image.
+
+    No file is written. A skeleton that needs a picture is 400 when the
+    slide would have no image. A skeleton that needs no picture is 400
+    when an image id is set.
+    """
 
     _ = current_ops_operator
     found_source: Carousel = fetch_carousel_by_id_or_raise(
@@ -641,7 +648,13 @@ def create_slide(
         slide_write_request.excluded_slide_ids,
         found_source,
     )
-    _require_image_when_skeleton_needs_one(found_skeleton, 0)
+    chosen_image: AlbumImage | None = _stored_album_image(
+        found_source,
+        found_skeleton,
+        slide_write_request,
+        None,
+        our_database_session,
+    )
     next_position: int = _next_slide_position(found_source.id, our_database_session)
     created_slide: Slide = Slide(
         id=created_slide_id,
@@ -649,10 +662,10 @@ def create_slide(
         position=next_position,
         name=slide_name,
     )
-    created_slide.images = []
     created_slide.element_texts = []
     created_slide.exclusions = []
     created_slide.text_status = SlideTextStatus.LIVE
+    _store_slide_image(created_slide, chosen_image)
     _replace_texts(created_slide, stored_texts, our_database_session)
     our_database_session.add(created_slide)
     _store_exclusion_pairs(created_slide, excluded_ids, found_source, our_database_session)
@@ -674,7 +687,12 @@ def patch_slide(
     our_database_session: Session = Depends(get_our_database_session),
     current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
 ) -> SlideReadResponse:
-    """Replace the name and skeleton text. Images are not changed here."""
+    """Replace the name, skeleton text, exclusions, and optional image.
+
+    An omitted ``album_image_id`` leaves the pointer. Null clears it.
+    A set id must be an image on the carousel's album. A bad id is 400
+    and the previous pointer stays. No file is written.
+    """
 
     _ = current_ops_operator
     found_slide: Slide = _fetch_slide_or_raise(carousel_id, slide_id, our_database_session)
@@ -696,7 +714,14 @@ def patch_slide(
         slide_write_request.excluded_slide_ids,
         found_source,
     )
-    _require_image_when_skeleton_needs_one(found_skeleton, len(list(found_slide.images)))
+    current_image: AlbumImage | None = _current_slide_image(found_slide)
+    chosen_image: AlbumImage | None = _stored_album_image(
+        found_source,
+        found_skeleton,
+        slide_write_request,
+        current_image,
+        our_database_session,
+    )
     found_slide.name = slide_name
 
     if found_slide.text_status == SlideTextStatus.DRAFT:
@@ -706,6 +731,7 @@ def patch_slide(
         found_slide.text_status = SlideTextStatus.LIVE
 
     _replace_exclusion_pairs(found_slide, excluded_ids, found_source, our_database_session)
+    _store_slide_image(found_slide, chosen_image)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",
@@ -1273,6 +1299,97 @@ def _require_image_when_skeleton_needs_one(skeleton: Skeleton, image_count: int)
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=IMAGE_REQUIRED_DETAIL,
     )
+
+
+def _current_slide_image(slide: Slide) -> AlbumImage | None:
+    """Return the album image this slide points at, or null."""
+
+    current_images: list[AlbumImage] = list(slide.images)
+
+    if len(current_images) == 0:
+
+        return None
+
+    current_image: AlbumImage = current_images[0]
+
+    return current_image
+
+
+def _stored_album_image(
+    carousel: Carousel,
+    skeleton: Skeleton,
+    slide_write_request: SlideWriteRequest,
+    current_image: AlbumImage | None,
+    our_database_session: Session,
+) -> AlbumImage | None:
+    """Return the image the slide should point at after this save.
+
+    An omitted ``album_image_id`` keeps ``current_image``. Null clears
+    the pointer. A set id must belong to the carousel's album. A
+    skeleton that does not use a picture rejects a set id. A skeleton
+    that needs a picture still needs an image when the save finishes.
+    This does not write the slide.
+
+    Args:
+        carousel: The carousel that owns the slide.
+        skeleton: That carousel's skeleton.
+        slide_write_request: The save body.
+        current_image: The image the slide points at now. Null on create.
+        our_database_session: Open session, used to load a set id.
+
+    Returns:
+        The image to store, or null when the slide should have none.
+
+    Raises:
+        HTTPException: 400 when the id is not on the attached album, the
+            skeleton does not use a slide image, or a picture skeleton
+            would be left with no image.
+    """
+
+    image_was_sent: bool = "album_image_id" in slide_write_request.model_fields_set
+    chosen_image: AlbumImage | None = current_image
+
+    if image_was_sent and slide_write_request.album_image_id is not None:
+
+        if not skeleton_requires_image(skeleton):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=IMAGE_NOT_USED_DETAIL,
+            )
+
+        try:
+            chosen_image = album_image_on_carousel(
+                carousel,
+                slide_write_request.album_image_id,
+                our_database_session,
+            )
+        except ValueError as image_error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(image_error),
+            ) from image_error
+
+    elif image_was_sent:
+        chosen_image = None
+
+    image_count: int = 0 if chosen_image is None else 1
+    _require_image_when_skeleton_needs_one(skeleton, image_count)
+
+    return chosen_image
+
+
+def _store_slide_image(slide: Slide, chosen_image: AlbumImage | None) -> None:
+    """Point the slide at one album image, or clear the pointer.
+
+    The album image row stays where it is. This does not write a file.
+    """
+
+    if chosen_image is None:
+        slide.images = []
+
+        return
+
+    slide.images = [chosen_image]
 
 
 def _parsed_image_metadata(

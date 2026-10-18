@@ -1168,13 +1168,19 @@ class SlideElementTextWrite(BaseModel):
 
 
 class SlideWriteRequest(BaseModel):
-    """Name, skeleton text, and the other slides this one cannot be shown with."""
+    """Name, skeleton text, exclusions, and an optional album image.
+
+    ``album_image_id`` is optional. Omit it to leave the slide's image
+    unchanged. Null clears the pointer. A set id must already be an
+    image on the carousel's album.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     name: str
     texts: list[SlideElementTextWrite] = Field(default_factory=list)
     excluded_slide_ids: list[uuid.UUID] = Field(default_factory=list)
+    album_image_id: uuid.UUID | None = None
 
 
 class SlideAcceptTextRequest(BaseModel):

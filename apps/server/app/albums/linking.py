@@ -23,6 +23,7 @@ from app.models.carousel import Carousel, Slide
 SLIDES_STILL_POINT_AT_ALBUM_DETAIL: str = (
     "Slides still point at that album's images, so clear those slide images first."
 )
+ALBUM_IMAGE_NOT_ON_CAROUSEL_DETAIL: str = "That image is not on this carousel's album."
 
 
 def ensure_carousel_album(carousel: Carousel, our_database_session: Session) -> Album:
@@ -93,6 +94,40 @@ def slides_point_at_album(
             return True
 
     return False
+
+
+def album_image_on_carousel(
+    carousel: Carousel,
+    album_image_id: uuid.UUID,
+    our_database_session: Session,
+) -> AlbumImage:
+    """Return the image when it belongs to the carousel's attached album.
+
+    Args:
+        carousel: The carousel being saved. ``album_id`` is the attach.
+        album_image_id: The image the slide should point at.
+        our_database_session: Open session.
+
+    Returns:
+        The album image row. This does not copy the file.
+
+    Raises:
+        ValueError: The carousel has no album, the id is unknown, or the
+            image belongs to a different album. The message is
+            ``ALBUM_IMAGE_NOT_ON_CAROUSEL_DETAIL``.
+    """
+
+    attached_album_id: uuid.UUID | None = carousel.album_id
+
+    if attached_album_id is None:
+        raise ValueError(ALBUM_IMAGE_NOT_ON_CAROUSEL_DETAIL)
+
+    found_image: AlbumImage | None = our_database_session.get(AlbumImage, album_image_id)
+
+    if found_image is None or found_image.album_id != attached_album_id:
+        raise ValueError(ALBUM_IMAGE_NOT_ON_CAROUSEL_DETAIL)
+
+    return found_image
 
 
 def next_album_image_position(album: Album) -> int:

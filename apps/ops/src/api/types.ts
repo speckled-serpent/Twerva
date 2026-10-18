@@ -764,6 +764,7 @@ export interface SlideWriteRequest {
   name: string;
   texts: SlideElementTextWrite[];
   excluded_slide_ids: string[];
+  album_image_id?: string | null;
 }
 
 export interface SlidePreviewRequest {
