@@ -15,6 +15,7 @@ import {
   stepStateFor,
   type CarouselStepDefinition,
 } from "./carouselSteps";
+import { slideCountFallbackHint } from "./slideCountFallback";
 
 export interface CarouselGenerationProps {
   generationNumber: number;
@@ -55,7 +56,9 @@ export interface CarouselStepBarProps {
  * disabled, and its name says versioned Markdown is a later phase.
  * Final stays disabled, and its name says final assembly is a later
  * phase. That name is also the tooltip. A reader can open a step to
- * look. That click does not write. Final does not navigate.
+ * look. That click does not write. Final does not navigate. While
+ * Slides is open, one hint names the global slide-count default. That
+ * hint is absent on the other steps and while Slides is locked.
  *
  * @param props - Stored step, derived states, and the step PATCH callback
  * @returns The stepper
@@ -75,6 +78,7 @@ export function CarouselStepBar({
     ? "locked"
     : stepStateFor(steps, slidesDefinition);
   const slidesLocked: boolean = slidesState === "locked";
+  const slideCountHint: string | null = slideCountFallbackHint(editorStep, slidesState);
 
   return (
     <nav className="carousel-stepper" aria-label="Carousel steps">
@@ -134,6 +138,11 @@ export function CarouselStepBar({
           {SLIDES_ALBUM_REQUIRED_DETAIL}
         </p>
       ) : null}
+      {slideCountHint === null ? null : (
+        <p className="field-hint" id="carousel-slide-count-fallback">
+          {slideCountHint}
+        </p>
+      )}
     </nav>
   );
 }

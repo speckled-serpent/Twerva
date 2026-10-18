@@ -11,6 +11,7 @@ from app.api.v1.carousel_writes import create_carousel, create_slide
 from app.api.v1.schemas import (
     CarouselCreateRequest,
     CarouselReadResponse,
+    SlideReadResponse,
     SlideWriteRequest,
 )
 from app.carousels.slide_skeleton import (
@@ -75,6 +76,16 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         self.assertEqual(one_slide.slides, CarouselStepState.AVAILABLE)
         self.assertEqual(two_slides.content, CarouselStepState.DONE)
         self.assertEqual(two_slides.slides, CarouselStepState.DONE)
+
+    def test_fourth_and_ninth_slides_stay_done(self) -> None:
+        """Four and nine slides stay done. The 5-to-8 default is not a cap."""
+
+        skeleton: Skeleton = _skeleton(BackgroundKind.COLOR)
+        four_slides: CarouselStepStates = carousel_step_states(skeleton, None, 4)
+        nine_slides: CarouselStepStates = carousel_step_states(skeleton, None, 9)
+
+        self.assertEqual(four_slides.slides, CarouselStepState.DONE)
+        self.assertEqual(nine_slides.slides, CarouselStepState.DONE)
 
     def test_gradient_without_an_image_element_needs_no_album(self) -> None:
         """A gradient skeleton passes the album rule immediately."""
@@ -172,6 +183,44 @@ class CarouselStepReadTests(unittest.TestCase):
         self.assertEqual(len(two_slides.slides), 2)
         self.assertEqual(two_slides.steps.content, CarouselStepState.DONE)
         self.assertEqual(two_slides.steps.slides, CarouselStepState.DONE)
+
+    def test_fourth_and_ninth_slides_save_after_the_step_is_done(self) -> None:
+        """Saving a fourth slide and a ninth slide both succeed.
+
+        The step is already done at two slides. The global default does
+        not add or remove slides, and it does not move that mark.
+        """
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        session.skeleton.background_kind = BackgroundKind.COLOR
+        session.skeleton.elements = []
+        created: CarouselReadResponse = _create(session, "Lengths")
+        saved_counts: list[int] = []
+        slide_index: int
+
+        for slide_index in range(1, 10):
+            saved: SlideReadResponse = create_slide(
+                created.id,
+                SlideWriteRequest(name=f"Slide {slide_index}"),
+                session,
+                None,
+            )
+            loaded: CarouselReadResponse = get_carousel(created.id, session)
+            saved_counts.append(len(loaded.slides))
+
+            self.assertEqual(saved.name, f"Slide {slide_index}")
+            self.assertEqual(len(loaded.slides), slide_index)
+
+            if slide_index < 2:
+                self.assertEqual(loaded.steps.slides, CarouselStepState.AVAILABLE)
+
+                continue
+
+            self.assertEqual(loaded.steps.slides, CarouselStepState.DONE)
+
+        self.assertEqual(saved_counts[1], 2)
+        self.assertEqual(saved_counts[3], 4)
+        self.assertEqual(saved_counts[8], 9)
 
     def test_draft_slides_count_toward_the_done_mark(self) -> None:
         """Slides is done at two slides, including drafts that are not live."""

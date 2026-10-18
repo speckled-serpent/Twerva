@@ -1007,6 +1007,10 @@ th {
   list-style: none;
 }
 
+.carousel-stepper > .field-hint {
+  margin-top: 0.65rem;
+}
+
 .carousel-step {
   gap: 0.4rem;
 }
