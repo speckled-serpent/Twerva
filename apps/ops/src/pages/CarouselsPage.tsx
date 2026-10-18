@@ -364,6 +364,7 @@ export function CarouselsPage({
         }}
         onCarouselSaved={(savedCarousel: CarouselReadResponse): void => {
           setSelectedCarousel(savedCarousel);
+          setStatusMessage("");
           setListedCarousels((
             currentCarousels: CarouselListItemResponse[],
           ): CarouselListItemResponse[] => (
