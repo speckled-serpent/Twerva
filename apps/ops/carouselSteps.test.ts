@@ -9,11 +9,15 @@ import {
   canOpenCarouselStep,
   carouselStepAccessibleName,
   carouselStepByIndex,
+  carouselStepClassName,
   carouselStepLabel,
+  carouselStepMark,
   displayedEditorStep,
   generationLabel,
   INSTRUCTIONS_CLOSED_DETAIL,
   openStepSentence,
+  shellEditorStep,
+  SLIDES_ALBUM_REQUIRED_DETAIL,
   stepClickStoresEditorStep,
   stepStateFor,
   type CarouselStepDefinition,
@@ -74,8 +78,26 @@ assert.match(
 );
 assert.equal(carouselStepAccessibleName(stepAt(1), "available"), instructionsName);
 assert.equal(carouselStepAccessibleName(stepAt(1), "done"), instructionsName);
+assert.equal(SLIDES_ALBUM_REQUIRED_DETAIL, "Attach an album on Content first.");
+assert.equal(
+  carouselStepAccessibleName(stepAt(3), "locked"),
+  `3 Slides, locked. ${SLIDES_ALBUM_REQUIRED_DETAIL}`,
+);
 assert.equal(carouselStepAccessibleName(stepAt(3), "done"), "3 Slides, done");
 assert.equal(carouselStepAccessibleName(stepAt(3), "available"), "3 Slides");
+assert.equal(carouselStepMark("locked"), "Locked");
+assert.equal(carouselStepMark("available"), null);
+assert.equal(carouselStepMark("done"), "Done");
+assert.equal(carouselStepClassName("done", false).includes("is-done"), true);
+assert.equal(carouselStepClassName("done", true).includes("is-done"), true);
+assert.equal(carouselStepClassName("available", true).includes("is-done"), false);
+assert.equal(carouselStepClassName("available", false).includes("is-locked"), false);
+assert.equal(carouselStepClassName("locked", false).includes("is-locked"), true);
+assert.equal(shellEditorStep(CAROUSEL_STEP_SLIDES, lockedSlides), CAROUSEL_STEP_CONTENT);
+assert.equal(shellEditorStep(CAROUSEL_STEP_SLIDES, availableSlides), CAROUSEL_STEP_SLIDES);
+assert.equal(shellEditorStep(CAROUSEL_STEP_SLIDES, doneSlides), CAROUSEL_STEP_SLIDES);
+assert.equal(shellEditorStep(CAROUSEL_STEP_BASIC, lockedSlides), CAROUSEL_STEP_BASIC);
+assert.equal(shellEditorStep(CAROUSEL_STEP_CONTENT, lockedSlides), CAROUSEL_STEP_CONTENT);
 
 assert.equal(stepStateFor(doneSlides, stepAt(3)), "done");
 assert.equal(canOpenCarouselStep(stepAt(3), doneSlides.slides), true);

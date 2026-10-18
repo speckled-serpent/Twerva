@@ -91,11 +91,22 @@ export const INSTRUCTIONS_CLOSED_DETAIL: string =
   "Versioned Markdown instructions are a later phase. Phase 5 replaces the hidden inspiration and rules form.";
 
 /**
+ * Why Slides stays closed.
+ *
+ * The album rule fails when the skeleton needs a picture and no album
+ * is attached. Research does not open Slides.
+ */
+export const SLIDES_ALBUM_REQUIRED_DETAIL: string =
+  "Attach an album on Content first.";
+
+/**
  * Accessible name, including locked or done when that is the derived state.
  *
  * Instructions stays closed for an admin and a reader. Its name says
  * versioned Markdown instructions are a later phase, and that phase 5
- * replaces the hidden inspiration and rules form.
+ * replaces the hidden inspiration and rules form. Locked Slides says
+ * to attach an album on Content first. Available Slides stays unmarked.
+ * Done Slides says done.
  *
  * @param step - A stepper step
  * @param stepState - Derived state from `steps`
@@ -110,6 +121,10 @@ export function carouselStepAccessibleName(
 
   if (step.index === CAROUSEL_STEP_INSTRUCTIONS) {
     return `${label}, locked. ${INSTRUCTIONS_CLOSED_DETAIL}`;
+  }
+
+  if (step.index === CAROUSEL_STEP_SLIDES && stepState === "locked") {
+    return `${label}, locked. ${SLIDES_ALBUM_REQUIRED_DETAIL}`;
   }
 
   if (stepState === "locked") {
@@ -214,6 +229,93 @@ export function stepClickStoresEditorStep(
   }
 
   return editorStep !== step.index;
+}
+
+/**
+ * Mark drawn on the control. Available stays unmarked.
+ *
+ * @param stepState - Derived state from `steps`
+ * @returns Locked, Done, or null while the step is still open
+ */
+export function carouselStepMark(stepState: CarouselStepState): string | null {
+
+  if (stepState === "locked") {
+    return "Locked";
+  }
+
+  if (stepState === "done") {
+    return "Done";
+  }
+
+  return null;
+}
+
+/**
+ * Classes for one step control.
+ *
+ * The open step uses the teal primary. A done step uses the success
+ * color. A locked step uses the stone disabled treatment. Available
+ * adds neither done nor locked.
+ *
+ * @param stepState - Derived state from `steps`
+ * @param isCurrent - True when this step is the one on screen
+ * @returns Space-separated class names
+ */
+export function carouselStepClassName(
+  stepState: CarouselStepState,
+  isCurrent: boolean,
+): string {
+
+  const classNames: string[] = ["carousel-step"];
+
+  if (isCurrent) {
+    classNames.push("is-current");
+  }
+
+  if (stepState === "done") {
+    classNames.push("is-done");
+  }
+
+  if (stepState === "locked") {
+    classNames.push("is-locked");
+  }
+
+  return classNames.join(" ");
+}
+
+/**
+ * Step the shell may show.
+ *
+ * Slides stays closed while `steps.slides` is locked. The shell shows
+ * Content, where the album is attached, and does not write
+ * `editor_step`. Any other stored step is shown as it is.
+ *
+ * @param editorStep - The stored step, or a step a reader is looking at
+ * @param steps - The five states from the carousel detail
+ * @returns The step whose panel is visible
+ */
+export function shellEditorStep(
+  editorStep: number,
+  steps: CarouselStepsResponse,
+): number {
+
+  if (editorStep !== CAROUSEL_STEP_SLIDES) {
+    return editorStep;
+  }
+
+  const slidesStep: CarouselStepDefinition | null = carouselStepByIndex(
+    CAROUSEL_STEP_SLIDES,
+  );
+
+  if (slidesStep === null) {
+    return editorStep;
+  }
+
+  if (stepStateFor(steps, slidesStep) === "locked") {
+    return CAROUSEL_STEP_CONTENT;
+  }
+
+  return editorStep;
 }
 
 /**

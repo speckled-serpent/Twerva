@@ -3,10 +3,14 @@ import type { ReactElement } from "react";
 import type { CarouselStepState, CarouselStepsResponse } from "../api/types";
 import {
   carouselStepAccessibleName,
+  carouselStepClassName,
+  carouselStepMark,
   CAROUSEL_STEP_INSTRUCTIONS,
+  CAROUSEL_STEP_SLIDES,
   CAROUSEL_STEPS,
   canOpenCarouselStep,
   generationLabel,
+  SLIDES_ALBUM_REQUIRED_DETAIL,
   stepClickStoresEditorStep,
   stepStateFor,
   type CarouselStepDefinition,
@@ -45,10 +49,11 @@ export interface CarouselStepBarProps {
  * Five pill controls for the carousel steps.
  *
  * The open step uses the teal primary. A done step uses the success color.
- * A locked or not-yet-enabled step uses the existing disabled control.
- * Content opens when it is available or done. Instructions stays disabled,
- * and its name says versioned Markdown is a later phase. A reader can open
- * a step to look. That click does not write.
+ * A locked step uses the existing disabled control. Available stays
+ * unmarked. Slides follows `steps.slides`: locked, it stays disabled and
+ * its name says to attach an album on Content first. Instructions stays
+ * disabled, and its name says versioned Markdown is a later phase. A
+ * reader can open a step to look. That click does not write.
  *
  * @param props - Stored step, derived states, and the step PATCH callback
  * @returns The stepper
@@ -61,6 +66,14 @@ export function CarouselStepBar({
   onOpenStep,
 }: CarouselStepBarProps): ReactElement {
 
+  const slidesDefinition: CarouselStepDefinition | undefined = CAROUSEL_STEPS.find(
+    (step: CarouselStepDefinition): boolean => step.index === CAROUSEL_STEP_SLIDES,
+  );
+  const slidesState: CarouselStepState = slidesDefinition === undefined
+    ? "locked"
+    : stepStateFor(steps, slidesDefinition);
+  const slidesLocked: boolean = slidesState === "locked";
+
   return (
     <nav className="carousel-stepper" aria-label="Carousel steps">
       <ol>
@@ -71,9 +84,9 @@ export function CarouselStepBar({
           const canOpen: boolean = canOpenCarouselStep(step, stepState);
           const accessibleName: string = carouselStepAccessibleName(step, stepState);
           const className: string = carouselStepClassName(stepState, isCurrent);
-          const closedTitle: string | undefined = step.index === CAROUSEL_STEP_INSTRUCTIONS
-            ? accessibleName
-            : undefined;
+          const mark: string | null = carouselStepMark(stepState);
+          const showsReason: boolean = step.index === CAROUSEL_STEP_INSTRUCTIONS
+            || (step.index === CAROUSEL_STEP_SLIDES && stepState === "locked");
 
           return (
             <li key={step.key}>
@@ -83,7 +96,7 @@ export function CarouselStepBar({
                 className={className}
                 aria-current={isCurrent ? "step" : undefined}
                 aria-label={accessibleName}
-                title={closedTitle}
+                title={showsReason ? accessibleName : undefined}
                 disabled={!canOpen || isSavingStep}
                 onClick={(): void => {
 
@@ -107,36 +120,19 @@ export function CarouselStepBar({
               >
                 <span className="carousel-step-index">{step.index}</span>
                 <span>{step.label}</span>
-                {stepState === "locked" ? (
-                  <span className="carousel-step-mark">Locked</span>
-                ) : null}
-                {stepState === "done" ? (
-                  <span className="carousel-step-mark">Done</span>
-                ) : null}
+                {mark === null ? null : (
+                  <span className="carousel-step-mark">{mark}</span>
+                )}
               </button>
             </li>
           );
         })}
       </ol>
+      {slidesLocked ? (
+        <p className="field-hint" id="carousel-slides-locked">
+          {SLIDES_ALBUM_REQUIRED_DETAIL}
+        </p>
+      ) : null}
     </nav>
   );
-}
-
-function carouselStepClassName(stepState: CarouselStepState, isCurrent: boolean): string {
-
-  const classNames: string[] = ["carousel-step"];
-
-  if (isCurrent) {
-    classNames.push("is-current");
-  }
-
-  if (stepState === "done") {
-    classNames.push("is-done");
-  }
-
-  if (stepState === "locked") {
-    classNames.push("is-locked");
-  }
-
-  return classNames.join(" ");
 }

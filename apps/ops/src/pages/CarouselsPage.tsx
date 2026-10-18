@@ -59,6 +59,7 @@ import {
   displayedEditorStep,
   generationLabel,
   openStepSentence,
+  shellEditorStep,
   type CarouselStepDefinition,
 } from "./carouselSteps";
 import {
@@ -299,13 +300,28 @@ export function CarouselsPage({
   };
 
   const storedEditorStep: number = selectedCarousel?.editor_step ?? CAROUSEL_STEP_SLIDES;
-  const displayStep: number = displayedEditorStep(
+  const requestedStep: number = displayedEditorStep(
     storedEditorStep,
     viewedStep,
     canWriteOps,
   );
+  const displayStep: number = selectedCarousel === null
+    ? requestedStep
+    : shellEditorStep(requestedStep, selectedCarousel.steps);
+  const slidesAreOpen: boolean = selectedCarousel === null
+    || shellEditorStep(CAROUSEL_STEP_SLIDES, selectedCarousel.steps) === CAROUSEL_STEP_SLIDES;
 
-  if (openedCarouselId !== null && (openedSlideId !== null || isCreatingSlide)) {
+  if (
+    selectedCarousel !== null
+    && !slidesAreOpen
+    && (openedSlideId !== null || isCreatingSlide)
+  ) {
+    setOpenedSlideId(null);
+    setIsCreatingSlide(false);
+    setHeldSlide(null);
+  }
+
+  if (openedCarouselId !== null && slidesAreOpen && (openedSlideId !== null || isCreatingSlide)) {
     const loadedSlide: SlideReadResponse | null = findSlide(selectedCarousel, openedSlideId);
     const openedSlide: SlideReadResponse | null = isCreatingSlide
       ? null

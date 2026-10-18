@@ -1008,6 +1008,7 @@ class CarouselStepsResponse(BaseModel):
 
     ``basic`` is done. ``instructions`` and ``final`` are locked.
     ``content`` and ``slides`` follow the album rule and the slide count.
+    Research does not change these states.
     """
 
     basic: CarouselStepState

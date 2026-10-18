@@ -33,6 +33,7 @@ SKELETONS_CAROUSELS_SLIDES_REVISION_ID: str = "skeletons_carousels_slides"
 ALBUMS_FROM_SLIDES_REVISION_ID: str = "albums_from_slides"
 RESEARCH_ITEMS_REVISION_ID: str = "research_items"
 CAROUSEL_STEPS_REVISION_ID: str = "carousel_steps"
+CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID: str = "carousel_editor_step_content"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -67,6 +68,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGN_THEME_SOURCE_REVISION_ID}.py",
                 f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py",
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
+                f"{CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID}.py",
                 f"{CAROUSEL_STEPS_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
@@ -846,6 +848,36 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn('op.drop_table("carousel_research_items")', revision_source)
         self.assertIn('op.drop_column("carousels", "generation_number")', revision_source)
         self.assertIn('op.drop_column("carousels", "editor_step")', revision_source)
+
+    def test_editor_step_content_follows_carousel_steps(self) -> None:
+        """Picture carousels with no album move to Content. The chain stays short."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID,
+        )
+        self.assertLessEqual(len(str(assigned_values.get("revision"))), 32)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_STEPS_REVISION_ID,
+        )
+        self.assertIn("UPDATE carousels", revision_source)
+        self.assertIn("editor_step = :editor_step", revision_source)
+        self.assertIn("'picture'::background_kind", revision_source)
+        self.assertIn("'image'::skeleton_element_content_kind", revision_source)
+        self.assertIn("album_id IS NULL", revision_source)
+        self.assertNotIn("op.create_check_constraint(", revision_source)
+        self.assertNotIn("research_items", revision_source)
+        self.assertIn("SET editor_step = :slides_step", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

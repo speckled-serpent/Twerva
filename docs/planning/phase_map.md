@@ -175,7 +175,7 @@ An earlier loop still renders a shipping carousel from `carousel_template_v1` of
 
 ### Slides
 
-- [ ] **4.11 Gate Slides on the album rule**
+- [x] **4.11 Gate Slides on the album rule**
 
   The Slides control follows `steps.slides`. Locked, it stays disabled and its name says to attach an album on Content first. Available, it opens and stays unmarked until the carousel has two slides. Done, it uses the done style. A small revision `carousel_editor_step_content` (down-revision `carousel_steps`) sets `editor_step` 2 where the album rule fails, and leaves every other carousel, including Default, on 3. Create of a picture skeleton still lands on Basic (step 0) with Slides disabled until an album is attached. A skeleton that needs no picture has Slides available immediately, with a null album, before Content is opened.
 
