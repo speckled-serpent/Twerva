@@ -4,6 +4,10 @@ Twerva makes Instagram and TikTok photo carousels for my own brands from my own 
 
 Twerva runs on a server in my own AWS account, as a separate service from Spotmu.
 
+## Why
+
+Most carousel tools optimize for ease. A paragraph prompt turns into hundreds of posts, and that ease leads to oversupply of the same kind of post. I want deep control instead: the drafts should stay grounded in the research, rules, specs, and images I upload, and I review them before they go live. The roadmap is to learn which research sources, topics, and angles perform, from intent signals such as saves, shares, and profile visits, rather than only which post did. The full case is in [`docs/theory_of_the_case.md`](docs/theory_of_the_case.md).
+
 ## Who it's for
 
 Me and my own brands first, with Spotmu as the first user. Also small teams with real products who want control over their content.
