@@ -5,7 +5,7 @@ Twerva is NOT a social network, ads bidder, or Outfy-class “post to the seller
 **Core product philosophy:**
 - **Rent pipes, build the brain.** Hosting/publish adapters can be bought; ingest, artifacts, clusters, approval, medians, steer, agent hooks are the product.
 - **Brand before orphan SKU.** High cadence needs a content world. Spotmu’s media hose is Phase 1–2; Phase 3 is brand-shaped suites, not one lamp photo × 200.
-- **Never a paid-ads bidder.** Separate service from Spotmu; same Spotmu AWS account for now.
+- **Never a paid-ads bidder.** Separate service from Spotmu; runs on a server in my own AWS account.
 
 Authoritative docs: `docs/prompts/project.md` (strategy), `docs/prompts/product.md` (product design), `docs/planning/phase_map.md` (what's left). Prefer those over chat memory when they conflict.
 

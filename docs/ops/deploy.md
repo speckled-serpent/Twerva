@@ -14,16 +14,18 @@ Until a secret-free helper lands under `tools/`, deploy is manual.
 | Fact | Value |
 |---|---|
 | Instance name | EC2 `twerva-server` |
-| Elastic IP | `3.19.233.237` |
+| Elastic IP | `<TWERVA_SERVER_IP>` |
 | Public URL | `https://twerva.com` |
-| SSH | `ubuntu@3.19.233.237` |
+| SSH | `ubuntu@<TWERVA_SERVER_IP>` |
 | SSH key (Mu’s archlinux) | `~/.ssh/twerva-key.pem` |
 | OS user | `ubuntu` (admin / sudo) |
+
+`<TWERVA_SERVER_IP>` is not in git. Ask the repo owner, or read the instance's Elastic IP from the AWS console (EC2 → Elastic IPs, instance `twerva-server`), or resolve `twerva.com`.
 
 There is **no** separate monitor account yet. Use `ubuntu`.
 
 ```bash
-ssh -i ~/.ssh/twerva-key.pem ubuntu@3.19.233.237
+ssh -i ~/.ssh/twerva-key.pem ubuntu@<TWERVA_SERVER_IP>
 ```
 
 ## On-box layout
@@ -74,7 +76,7 @@ production). Local Vite still proxies `/api` and `/health` to
 Off-box Swagger remains a tunnel to loopback:
 
 ```bash
-ssh -i ~/.ssh/twerva-key.pem -L 8000:127.0.0.1:8000 ubuntu@3.19.233.237
+ssh -i ~/.ssh/twerva-key.pem -L 8000:127.0.0.1:8000 ubuntu@<TWERVA_SERVER_IP>
 ```
 
 Then `http://127.0.0.1:8000/docs` on your machine. Do not paste
@@ -358,7 +360,7 @@ rsync -a --delete \
   --exclude '.venv/' \
   --exclude '__pycache__/' \
   --exclude '.env' \
-  apps/server/ ubuntu@3.19.233.237:/opt/twerva/server/
+  apps/server/ ubuntu@<TWERVA_SERVER_IP>:/opt/twerva/server/
 ```
 
 Equivalent: tar the same tree, extract on the box, keep `.venv`.
@@ -402,7 +404,7 @@ sudo mkdir -p /var/www/twerva-ops
 sudo rsync -a --delete apps/ops/dist/ /var/www/twerva-ops/
 ```
 
-Or rsync from your laptop to `ubuntu@3.19.233.237:/tmp/twerva-ops-dist/`
+Or rsync from your laptop to `ubuntu@<TWERVA_SERVER_IP>:/tmp/twerva-ops-dist/`
 then `sudo rsync -a --delete /tmp/twerva-ops-dist/ /var/www/twerva-ops/`.
 
 ### 4. nginx (replace the stub with the console)
@@ -568,7 +570,7 @@ Ask **Mu** before any of:
 
 Never:
 
-- Touch Spotmu’s EIP **`3.146.63.53`**
+- Touch Spotmu’s EIP **`<SPOTMU_SERVER_IP>`** (not in git; ask the repo owner — this is Spotmu’s Elastic IP, not `twerva.com` and not `<TWERVA_SERVER_IP>`)
 - Put secrets in git or chat (`database_url.env`, `ops_auth.env`,
   `postgres.env`, `DATABASE_URL` values, `SESSION_SECRET`,
   `OPS_ADMIN_PASSWORD`, key material)
@@ -580,7 +582,7 @@ Never:
   same-origin `/api`)
 
 Deferred (do not provision in this runbook): RDS, S3, Secrets Manager /
-SSM. Same Spotmu AWS account is fine; this file does not describe
+SSM. Twerva runs on a server in my own AWS account, as a separate service from Spotmu; this file does not describe
 console setup. **1.4 uses local disk**, not S3.
 
 ## Related notes

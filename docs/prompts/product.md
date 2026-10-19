@@ -191,7 +191,7 @@ approve gate, propose steer). Dry-run:
 - Buying or bidding platform ads
 - Virality-as-a-service / engagement bait that breaks topical purity
 - Infinite self-serve orphan SKUs
-- Hosting Twerva *inside* the Spotmu app/process (separate service — see §X). Sharing the Spotmu **AWS account** is fine and preferred for now.
+- Hosting Twerva *inside* the Spotmu app/process (separate service — see §X). Twerva runs on a server in my own AWS account, as a separate service from Spotmu.
 
 ---
 
@@ -199,14 +199,14 @@ approve gate, propose steer). Dry-run:
 
 Twerva gets its **own URL and basic server process**, separate from Spotmu’s app. Sibling product, sibling deploy. Spotmu remains a *source* (and Phase 1–2 customer), not the host process.
 
-**AWS account (locked for now):** run Twerva **inside the existing Spotmu AWS account** for one bill and one place to watch cost/IAM. Still a **different service** (own compute, own DB/schema or database, own storage prefix/bucket, own DNS name). If Twerva ever spins out as its own business, split accounts later — easy compared to untangling a shared process. Not a mistake to share the account early.
+**AWS account:** Twerva runs on a server in my own AWS account, as a separate service from Spotmu (own compute, own DB/schema or database, own storage prefix/bucket, own DNS name).
 
 ### Always rent / buy (do not build)
 
 | Need | Lean default | Why |
 |---|---|---|
 | **Domain** | `twerva.com` or available variant (confirm registrar) | Brand + stable ops URL |
-| **App host** | Own service on **Spotmu’s AWS** (ECS/EC2/App Runner/Lightsail — pick whatever Spotmu already operates comfortably) | Separate process; same bill |
+| **App host** | Own service on a server in my own AWS account, as a separate service from Spotmu | Separate process |
 | **Database** | Managed Postgres on that account (own instance or clearly separated DB/schema) | Do not share Spotmu app tables |
 | **Object storage** | S3 on that account (own bucket or hard prefix) | Carousel frames, video, exports |
 | **Secrets** | AWS Secrets Manager / SSM (Twerva-prefixed) | Platform tokens never in git |
@@ -249,7 +249,7 @@ Prefer Spotmu alignment to reduce friction:
 |---|---|
 | **Ops UI** | React + TypeScript + Vite (+ Tailwind as needed) |
 | **API** | Python 3.11+ / FastAPI |
-| **DB** | PostgreSQL (SQLAlchemy) — own DB on Spotmu AWS |
+| **DB** | PostgreSQL (SQLAlchemy) — own DB on a server in my own AWS account, as a separate service from Spotmu |
 | **Jobs** | Celery + Redis when we need async render/publish/metrics (not day-one blocking) |
 | **Layout** | Monorepo: `apps/server`, `apps/ops` (console), `packages/`, `tools/` |
 

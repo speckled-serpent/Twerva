@@ -26,7 +26,7 @@ Human gate: agents/scripts may **generate** drafts; **approve / schedule / publi
 
 - Repo on your Arch box: `~/projects/twerva` on `main` (`git pull`).
 - SSH key: `~/.ssh/twerva-key.pem` (mode `400`).
-- Host: `ubuntu@3.19.233.237` (EIP for `twerva.com`).
+- Host: `ubuntu@<TWERVA_SERVER_IP>` (EIP for `twerva.com`). `<TWERVA_SERVER_IP>` is not in git. Ask the repo owner, or read the instance's Elastic IP from the AWS console (EC2 → Elastic IPs, instance `twerva-server`), or resolve `twerva.com`.
 - Node 20+ for ops (`node -v`).
 
 Optional health from anywhere:
@@ -52,7 +52,7 @@ current role.
 Needed only for local Vite against the **box** API, or for `/docs`:
 
 ```bash
-ssh -i ~/.ssh/twerva-key.pem -L 8000:127.0.0.1:8000 ubuntu@3.19.233.237
+ssh -i ~/.ssh/twerva-key.pem -L 8000:127.0.0.1:8000 ubuntu@<TWERVA_SERVER_IP>
 ```
 
 Leave this open. Your laptop’s `http://127.0.0.1:8000` is now the box API.
@@ -113,7 +113,7 @@ Seeded Brand `spotmu` and example source may already exist; live Spotmu ingest (
 With the tunnel up you can hit the API from your laptop; scripts that need DB files/artifacts usually run **on the box**. Smokes now `POST /api/v1/auth/login` first — export the same bootstrap credentials (do not paste them into chat):
 
 ```bash
-ssh -i ~/.ssh/twerva-key.pem ubuntu@3.19.233.237
+ssh -i ~/.ssh/twerva-key.pem ubuntu@<TWERVA_SERVER_IP>
 set -a && source /opt/twerva/database_url.env && set +a
 # if split: set -a && source /opt/twerva/ops_auth.env && set +a
 cd /opt/twerva/server
