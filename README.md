@@ -1,6 +1,6 @@
 # Twerva
 
-Twerva makes Instagram and TikTok photo carousels for my own brands from my own source material. Skeletons are the frame layout. Albums are image libraries. Research is text documents. Carousels are built in stages. An LLM drafts slide text, and a person reviews it before it goes live.
+Twerva makes Instagram and TikTok photo carousels for my own brands from my own source material. Skeletons are the frame layout. Albums are image libraries. Research is text documents. Carousels are built in stages. An LLM drafts slide text, and a person reviews it before it goes live. This project may expand to other social media platforms and content types later.
 
 Twerva runs on a server in my own AWS account, as a separate service from Spotmu.
 
