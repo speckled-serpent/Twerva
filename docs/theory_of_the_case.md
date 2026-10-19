@@ -84,7 +84,7 @@ Signal availability varies by platform and provider (Upload-Post and Zernio docu
 
 ## 8. How this differs from what's on the market
 
-We checked 20 tools on 2026-10-18 (`twerva_option3_check.md`). **None does Option 3 as one product, organic or paid.** Several have real pieces of it:
+We checked 20 tools on 2026-10-18. **None does Option 3 as one product, organic or paid.** Several have real pieces of it:
 
 | Tool | What it has | What it lacks, relative to Twerva |
 |---|---|---|
