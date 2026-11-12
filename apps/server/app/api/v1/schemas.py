@@ -1018,9 +1018,10 @@ class CarouselInstructionReadResponse(BaseModel):
 class CarouselStepsResponse(BaseModel):
     """Derived step state. Not stored on the carousel.
 
-    ``basic`` is done. ``instructions`` and ``final`` are locked.
-    ``content`` and ``slides`` follow the album rule and the slide count.
-    Research does not change these states.
+    ``basic`` is done. ``instructions`` is done when a document has text
+    and available otherwise. ``final`` is locked. ``content`` and
+    ``slides`` follow the album rule and the slide count. Research
+    does not change these states.
     """
 
     basic: CarouselStepState
@@ -1116,8 +1117,8 @@ class CarouselPatchRequest(BaseModel):
 class CarouselStepPatchRequest(BaseModel):
     """JSON body for `PATCH /api/v1/carousels/{carousel_id}/step`.
 
-    Stored values are 0 Basic, 2 Content, and 3 Slides. The handler
-    refuses a locked step. The rename route stays
+    Stored values are 0 Basic, 1 Instructions, 2 Content, and 3 Slides.
+    The handler refuses a locked step. The rename route stays
     `PATCH /carousels/{carousel_id}`.
     """
 

@@ -507,6 +507,10 @@ class DomainEnumTests(unittest.TestCase):
             CAROUSEL_GENERATION_CHECK_SQL,
         )
         self.assertEqual(
+            CAROUSEL_EDITOR_STEP_CHECK_SQL,
+            "editor_step IN (0, 1, 2, 3)",
+        )
+        self.assertEqual(
             check_names["ck_carousels_editor_step"],
             CAROUSEL_EDITOR_STEP_CHECK_SQL,
         )

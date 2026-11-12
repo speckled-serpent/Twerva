@@ -305,7 +305,7 @@ class CarouselResearchLinkTests(unittest.TestCase):
         self.assertEqual(created.steps.content, CarouselStepState.AVAILABLE)
         self.assertEqual(created.steps.slides, CarouselStepState.LOCKED)
         self.assertEqual(attached.steps.basic, CarouselStepState.DONE)
-        self.assertEqual(attached.steps.instructions, CarouselStepState.LOCKED)
+        self.assertEqual(attached.steps.instructions, CarouselStepState.AVAILABLE)
         self.assertEqual(attached.steps.content, CarouselStepState.AVAILABLE)
         self.assertEqual(attached.steps.slides, CarouselStepState.LOCKED)
         self.assertEqual(attached.steps.final, CarouselStepState.LOCKED)

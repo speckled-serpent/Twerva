@@ -41,7 +41,11 @@ from app.models.carousel import (
 from app.models.enums import SlideTextStatus
 from app.models.research_item import ResearchItem
 from app.models.skeleton import Skeleton
-from app.carousels.slide_skeleton import CarouselStepStates, carousel_step_states
+from app.carousels.slide_skeleton import (
+    CarouselStepStates,
+    carousel_step_states,
+    instruction_bodies_have_text,
+)
 from app.carousels.slide_text_review import live_slides, slide_counts_as_live
 
 
@@ -181,10 +185,14 @@ def serialize_carousel(
     instruction_responses: list[CarouselInstructionReadResponse] = (
         _instructions_in_position_order(carousel)
     )
+    has_instruction_text: bool = instruction_bodies_have_text(
+        [document.body for document in list(carousel.instructions)],
+    )
     step_states: CarouselStepStates = carousel_step_states(
         skeleton,
         carousel.album_id,
         len(slide_responses),
+        has_instruction_text,
     )
     source_read_response: CarouselReadResponse = CarouselReadResponse(
         id=carousel.id,

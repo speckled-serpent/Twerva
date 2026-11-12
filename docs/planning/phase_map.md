@@ -292,7 +292,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
   Acceptance: a copied carousel reloads its one document in order. Default reloads an empty list. A reader can GET the detail. The list route's shape is unchanged.
 
-- [ ] **5.3 Store Instructions as an open step**
+- [x] **5.3 Store Instructions as an open step**
 
   Alembic revision `carousel_editor_step_instructions`, down-revision `carousel_instructions`. Replace `ck_carousels_editor_step` so the check matches `editor_step IN (0, 1, 2, 3)`. Update `CAROUSEL_EDITOR_STEP_CHECK_SQL`. Existing rows stay on 0, 2, or 3. Downgrade sets any stored 1 back to 0, then restores `editor_step IN (0, 2, 3)`.
 

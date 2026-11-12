@@ -142,7 +142,7 @@ class CarouselReadApiTests(unittest.TestCase):
         self.assertEqual(response.inspiration, "")
         self.assertEqual(response.rules, "")
         self.assertEqual(response.steps.basic, CarouselStepState.DONE)
-        self.assertEqual(response.steps.instructions, CarouselStepState.LOCKED)
+        self.assertEqual(response.steps.instructions, CarouselStepState.AVAILABLE)
         self.assertEqual(response.steps.content, CarouselStepState.DONE)
         self.assertEqual(response.steps.slides, CarouselStepState.DONE)
         self.assertEqual(response.steps.final, CarouselStepState.LOCKED)

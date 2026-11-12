@@ -75,6 +75,7 @@ from app.carousels.slide_skeleton import (
     CarouselStepStates,
     accepted_editor_step,
     carousel_step_states,
+    instruction_bodies_have_text,
     skeleton_requires_image,
     text_values_for_skeleton,
 )
@@ -919,16 +920,20 @@ def _accepted_editor_step(
         step_patch_request: The requested open step.
 
     Returns:
-        0, 2, or 3 when that step is open.
+        0, 1, 2, or 3 when that step is open.
 
     Raises:
         HTTPException: 400 when the step is locked or is not stored.
     """
 
+    has_instruction_text: bool = instruction_bodies_have_text(
+        [document.body for document in list(carousel.instructions)],
+    )
     step_states: CarouselStepStates = carousel_step_states(
         skeleton,
         carousel.album_id,
         len(list(carousel.slides)),
+        has_instruction_text,
     )
 
     try:

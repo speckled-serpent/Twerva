@@ -177,7 +177,7 @@ class CarouselAlbumLinkTests(unittest.TestCase):
         cleared: CarouselReadResponse = _clear(session, created.id)
 
         self.assertEqual(attached.steps.basic, CarouselStepState.DONE)
-        self.assertEqual(attached.steps.instructions, CarouselStepState.LOCKED)
+        self.assertEqual(attached.steps.instructions, CarouselStepState.AVAILABLE)
         self.assertEqual(attached.steps.content, CarouselStepState.DONE)
         self.assertEqual(attached.steps.slides, CarouselStepState.AVAILABLE)
         self.assertEqual(attached.steps.final, CarouselStepState.LOCKED)

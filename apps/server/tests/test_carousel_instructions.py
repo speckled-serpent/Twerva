@@ -277,7 +277,7 @@ class CarouselInstructionReadTests(unittest.TestCase):
         )
         self.assertEqual(loaded.inspiration, COPIED_INSPIRATION)
         self.assertEqual(loaded.rules, COPIED_RULES)
-        self.assertEqual(loaded.steps.instructions, CarouselStepState.LOCKED)
+        self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
 
     def test_documents_reload_in_position_order(self) -> None:
         """A later row stored first still reloads as position 0 then 1."""
@@ -292,7 +292,7 @@ class CarouselInstructionReadTests(unittest.TestCase):
             [(item.position, item.body) for item in loaded.instructions],
             [(0, FIRST_BODY), (1, SECOND_BODY)],
         )
-        self.assertEqual(loaded.steps.instructions, CarouselStepState.LOCKED)
+        self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
 
     def test_default_reloads_an_empty_instruction_list(self) -> None:
         """Default has no copied document. Inspiration and rules stay blank."""
@@ -308,7 +308,8 @@ class CarouselInstructionReadTests(unittest.TestCase):
         self.assertEqual(loaded.instructions, [])
         self.assertEqual(loaded.inspiration, "")
         self.assertEqual(loaded.rules, "")
-        self.assertEqual(loaded.steps.instructions, CarouselStepState.LOCKED)
+        self.assertEqual(loaded.editor_step, 3)
+        self.assertEqual(loaded.steps.instructions, CarouselStepState.AVAILABLE)
 
 
 class _GetSession:
@@ -402,7 +403,9 @@ class ReaderInstructionDetailTests(unittest.TestCase):
         )
         self.assertEqual(detail["inspiration"], COPIED_INSPIRATION)
         self.assertEqual(detail["rules"], COPIED_RULES)
-        self.assertEqual(detail["steps"]["instructions"], "locked")  # type: ignore[index]
+        self.assertEqual(detail["steps"]["instructions"], "done")  # type: ignore[index]
+        self.assertEqual(default_detail["editor_step"], 3)
+        self.assertEqual(default_detail["steps"]["instructions"], "available")  # type: ignore[index]
         self.assertEqual(default_detail["slug"], DEFAULT_ALBUM_SLUG)
         self.assertEqual(default_instructions, [])
         self.assertEqual(default_detail["inspiration"], "")

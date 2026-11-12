@@ -6,7 +6,8 @@ stays a draft until a person accepts it. ``slide_exclusions`` stores the
 other slide ids it cannot be shown with. The carousel stores inspiration
 and rules for that draft, and may point at the album its images came
 from. ``generation_number`` starts at 1. ``editor_step`` remembers Basic,
-Content, or Slides. A carousel created through the API opens on Basic.
+Instructions, Content, or Slides. A carousel created through the API
+opens on Basic.
 Rows that already exist keep their stored step. Research attaches as
 an ordered list in ``carousel_research_items``. There is no
 ``research_id`` column. Instruction documents live in
@@ -43,7 +44,7 @@ CAROUSEL_GENERATION_NUMBER_DEFAULT: int = 1
 CAROUSEL_EDITOR_STEP_DEFAULT: int = 3
 CAROUSEL_CREATE_EDITOR_STEP: int = 0
 CAROUSEL_GENERATION_CHECK_SQL: str = "generation_number >= 1"
-CAROUSEL_EDITOR_STEP_CHECK_SQL: str = "editor_step IN (0, 2, 3)"
+CAROUSEL_EDITOR_STEP_CHECK_SQL: str = "editor_step IN (0, 1, 2, 3)"
 CAROUSEL_RESEARCH_POSITION_CHECK_SQL: str = "position >= 0"
 CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL: str = "position >= 0"
 # Same cap as a research body: 1,000,000 characters.
@@ -59,10 +60,12 @@ SLIDE_FIELD_TEXT_CHECK_SQL: str = "btrim(label) <> '' AND btrim(value) <> ''"
 class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """Row in ``carousels``. Every carousel requires one skeleton.
 
-    ``generation_number`` starts at 1. ``editor_step`` is 0 Basic, 2
-    Content, or 3 Slides. The column default stays on Slides. Create
-    stores Basic. ``carousel_editor_step_content`` moves a carousel to
-    Content when its skeleton needs a picture and no album is attached.
+    ``generation_number`` starts at 1. ``editor_step`` is 0 Basic, 1
+    Instructions, 2 Content, or 3 Slides. The column default stays on
+    Slides. Create stores Basic. ``carousel_editor_step_instructions``
+    allows storing Instructions. ``carousel_editor_step_content`` moves
+    a carousel to Content when its skeleton needs a picture and no album
+    is attached.
     Default stays on Slides. The skeleton stays the one chosen at create.
     ``instructions`` is the current documents, ordered by position.
     Inspiration and rules stay on this row.
