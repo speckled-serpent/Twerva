@@ -47,10 +47,15 @@ from app.models.carousel import (
     CAROUSEL_EDITOR_STEP_DEFAULT,
     CAROUSEL_GENERATION_CHECK_SQL,
     CAROUSEL_GENERATION_NUMBER_DEFAULT,
+    CAROUSEL_INSTRUCTION_BODY_CHECK_SQL,
+    CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL,
     CAROUSEL_RESEARCH_POSITION_CHECK_SQL,
+    INSTRUCTION_BODY_MAX_CHARACTERS,
     Carousel,
+    CarouselInstruction,
     CarouselResearchItem,
 )
+from app.models.research_item import RESEARCH_BODY_MAX_CHARACTERS
 from app.models.skeleton_element import (
     SKELETON_ELEMENT_CONTENT_CHECK_SQL,
     SKELETON_ELEMENT_NAME_CHECK_SQL,
@@ -515,6 +520,65 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(delete_actions["carousel_id"], "CASCADE")
         self.assertEqual(delete_actions["research_item_id"], "CASCADE")
         self.assertNotIn("research_id", CarouselResearchItem.__table__.columns.keys())
+
+    def test_carousel_instruction_documents(self) -> None:
+        """A document is a body and a position. The guidance columns stay."""
+
+        column_names: set[str] = set(CarouselInstruction.__table__.columns.keys())
+        carousel_columns: set[str] = set(Carousel.__table__.columns.keys())
+        body_column: Column[str] = CarouselInstruction.__table__.c.body
+        position_column: Column[int] = CarouselInstruction.__table__.c.position
+        check_names: dict[str, str] = {
+            constraint.name: str(constraint.sqltext)
+            for constraint in CarouselInstruction.__table__.constraints
+            if isinstance(constraint, CheckConstraint) and constraint.name is not None
+        }
+        unique_pairs: list[tuple[str, ...]] = _unique_column_tuples(
+            CarouselInstruction.__table__,
+        )
+        delete_actions: dict[str, str | None] = {
+            foreign_key.parent.name: foreign_key.ondelete
+            for foreign_key in CarouselInstruction.__table__.foreign_keys
+        }
+        order_by: tuple[Column[int], ...] = tuple(Carousel.instructions.property.order_by)
+
+        self.assertEqual(CarouselInstruction.__tablename__, "carousel_instructions")
+        self.assertIn("carousel_instructions", set(Base.metadata.tables.keys()))
+        self.assertEqual(INSTRUCTION_BODY_MAX_CHARACTERS, 1_000_000)
+        self.assertEqual(INSTRUCTION_BODY_MAX_CHARACTERS, RESEARCH_BODY_MAX_CHARACTERS)
+        self.assertEqual(column_names, {
+            "id",
+            "carousel_id",
+            "position",
+            "body",
+            "created_at",
+            "updated_at",
+        })
+        self.assertNotIn("title", column_names)
+        self.assertNotIn("version", column_names)
+        self.assertIn("inspiration", carousel_columns)
+        self.assertIn("rules", carousel_columns)
+        self.assertFalse(body_column.nullable)
+        self.assertFalse(position_column.nullable)
+        self.assertEqual(body_column.server_default.arg, "")
+        self.assertIsNone(position_column.server_default)
+        self.assertEqual(
+            check_names["ck_carousel_instructions_position"],
+            CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL,
+        )
+        self.assertEqual(
+            check_names["ck_carousel_instructions_body"],
+            CAROUSEL_INSTRUCTION_BODY_CHECK_SQL,
+        )
+        self.assertNotIn(
+            "ck_carousel_instructions_ck_carousel_instructions_position",
+            check_names,
+        )
+        self.assertIn(("carousel_id", "position"), unique_pairs)
+        self.assertEqual(delete_actions["carousel_id"], "CASCADE")
+        self.assertEqual(len(order_by), 1)
+        self.assertEqual(order_by[0].name, "position")
+        self.assertEqual(order_by[0].table.name, "carousel_instructions")
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

@@ -9,7 +9,12 @@ from. ``generation_number`` starts at 1. ``editor_step`` remembers Basic,
 Content, or Slides. A carousel created through the API opens on Basic.
 Rows that already exist keep their stored step. Research attaches as
 an ordered list in ``carousel_research_items``. There is no
-``research_id`` column.
+``research_id`` column. Instruction documents live in
+``carousel_instructions``: the current body and a position, with no
+title and no version. The copy revision fills one document from the
+stored inspiration and rules when either field has text. Those two
+columns stay and still steer the draft.
+
 Skeletons still store a concrete image path. They do not reference
 these rows.
 """
@@ -28,7 +33,7 @@ from app.models.enums import (
     SLIDE_TEXT_STATUS_ENUM,
     SlideTextStatus,
 )
-from app.models.research_item import ResearchItem
+from app.models.research_item import RESEARCH_BODY_MAX_CHARACTERS, ResearchItem
 
 
 CAROUSEL_NAME_CHECK_SQL: str = (
@@ -40,6 +45,12 @@ CAROUSEL_CREATE_EDITOR_STEP: int = 0
 CAROUSEL_GENERATION_CHECK_SQL: str = "generation_number >= 1"
 CAROUSEL_EDITOR_STEP_CHECK_SQL: str = "editor_step IN (0, 2, 3)"
 CAROUSEL_RESEARCH_POSITION_CHECK_SQL: str = "position >= 0"
+CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL: str = "position >= 0"
+# Same cap as a research body: 1,000,000 characters.
+INSTRUCTION_BODY_MAX_CHARACTERS: int = RESEARCH_BODY_MAX_CHARACTERS
+CAROUSEL_INSTRUCTION_BODY_CHECK_SQL: str = (
+    f"char_length(body) <= {INSTRUCTION_BODY_MAX_CHARACTERS}"
+)
 SLIDE_POSITION_CHECK_SQL: str = "position >= 0"
 SLIDE_NAME_CHECK_SQL: str = "btrim(name) <> ''"
 SLIDE_FIELD_TEXT_CHECK_SQL: str = "btrim(label) <> '' AND btrim(value) <> ''"
@@ -53,6 +64,8 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     stores Basic. ``carousel_editor_step_content`` moves a carousel to
     Content when its skeleton needs a picture and no album is attached.
     Default stays on Slides. The skeleton stays the one chosen at create.
+    ``instructions`` is the current documents, ordered by position.
+    Inspiration and rules stay on this row.
     """
 
     __tablename__ = "carousels"
@@ -114,6 +127,12 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="carousel",
         cascade="all, delete-orphan",
         order_by="CarouselResearchItem.position",
+    )
+    instructions: Mapped[list["CarouselInstruction"]] = relationship(
+        "CarouselInstruction",
+        back_populates="carousel",
+        cascade="all, delete-orphan",
+        order_by="CarouselInstruction.position",
     )
 
 
@@ -313,3 +332,42 @@ class CarouselResearchItem(Base, UuidPrimaryKeyMixin):
         back_populates="research_links",
     )
     research_item: Mapped[ResearchItem] = relationship("ResearchItem")
+
+
+class CarouselInstruction(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One instruction document on a carousel, in order.
+
+    ``position`` starts at zero and is unique inside the carousel.
+    ``body`` is the current text, including an empty string. There is
+    no title and no version. Deleting the carousel removes this row.
+    """
+
+    __tablename__ = "carousel_instructions"
+    __table_args__ = (
+        UniqueConstraint(
+            "carousel_id",
+            "position",
+            name="uq_carousel_instructions_carousel_id_position",
+        ),
+        CheckConstraint(CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL, name="position"),
+        CheckConstraint(CAROUSEL_INSTRUCTION_BODY_CHECK_SQL, name="body"),
+    )
+
+    carousel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("carousels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    body: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+    )
+
+    carousel: Mapped[Carousel] = relationship(
+        "Carousel",
+        back_populates="instructions",
+    )

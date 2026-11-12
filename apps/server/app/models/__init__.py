@@ -19,6 +19,8 @@ text element. ``slide_exclusions`` stores the other slide ids a slide
 cannot be shown with. ``slides.text_status`` is ``live`` or ``draft``.
 A draft is generated text that is not live until a person accepts it.
 ``carousels.inspiration`` and ``carousels.rules`` steer that draft.
+``carousel_instructions`` stores the current instruction documents:
+a body and a position, with no title and no version. The columns stay.
 ``album_images`` holds the files. A slide points at most one of them.
 A carousel may point at the album those images came from.
 ``research_items`` is one text document: a title, a slug, and a body.
@@ -56,6 +58,7 @@ from app.models.campaign import (
 from app.models.cluster import Cluster, cluster_source_items
 from app.models.carousel import (
     Carousel,
+    CarouselInstruction,
     CarouselResearchItem,
     Slide,
     SlideElementText,
@@ -147,6 +150,7 @@ __all__ = [
     "CampaignType",
     "Cluster",
     "Carousel",
+    "CarouselInstruction",
     "CarouselResearchItem",
     "RESOURCE_FILE_MEDIA_TYPE_ENUM",
     "ResourceFileMediaType",

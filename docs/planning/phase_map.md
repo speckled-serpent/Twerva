@@ -262,7 +262,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
 ### Data model
 
-- [ ] **5.1 Add instruction documents and copy inspiration and rules**
+- [x] **5.1 Add instruction documents and copy inspiration and rules**
 
   Alembic revision `carousel_instructions`, down-revision `carousel_editor_step_content`. New table `carousel_instructions`: `id`, `carousel_id` (cascade on carousel delete), `position` (check `position >= 0`), `body` (text, not null, server default `""`, check `char_length(body) <= 1000000`), and the timestamp columns from `TimestampMixin`. Unique `(carousel_id, position)`. No title column and no version column.
 
