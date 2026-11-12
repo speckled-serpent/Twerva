@@ -160,3 +160,96 @@ export function moveInstructionDocuments(
 
   return nextDocuments;
 }
+
+/** Accessible name while Generate cannot fill slides yet. */
+export const INSTRUCTIONS_GENERATE_LATER_DETAIL: string =
+  "Filling slides from these instructions is a later phase.";
+
+/** Line under the Instructions Generate button. */
+export const INSTRUCTIONS_GENERATE_HINT: string =
+  "Generate fills slides in a later phase.";
+
+/**
+ * Whether Generate can be pressed.
+ *
+ * The open draft counts for the selected document. The other documents
+ * use their stored bodies. Empty and whitespace-only text do not count.
+ * The sample placeholder does not count. A reader is never enabled.
+ *
+ * @param documents - Stored instruction documents
+ * @param draft - The textarea for the selected document
+ * @param canWrite - True for an admin
+ * @param placeholder - The sample text, which does not count as instruction text
+ * @returns True when some body has text after trim
+ */
+export function instructionsGenerateEnabled(
+  documents: readonly CarouselInstructionReadResponse[],
+  draft: InstructionDraft,
+  canWrite: boolean,
+  placeholder: string = "",
+): boolean {
+
+  if (!canWrite) {
+    return false;
+  }
+
+  const bodies: string[] = documents.map(
+    (document: CarouselInstructionReadResponse): string => {
+
+      if (draft.instructionId !== null && document.id === draft.instructionId) {
+        return draft.body;
+      }
+
+      return document.body;
+    },
+  );
+
+  if (draft.instructionId === null) {
+    bodies.push(draft.body);
+  }
+
+  const hasInstructionText: boolean = bodies.some(
+    (body: string): boolean => instructionBodyEnablesGenerate(body, placeholder),
+  );
+
+  return hasInstructionText;
+}
+
+/**
+ * Accessible name for the Instructions Generate button.
+ *
+ * Disabled, it says filling slides from these instructions is a later phase.
+ *
+ * @param enabled - Whether the button can be pressed
+ * @returns The accessible name
+ */
+export function instructionsGenerateAccessibleName(enabled: boolean): string {
+
+  if (!enabled) {
+    return `Generate. ${INSTRUCTIONS_GENERATE_LATER_DETAIL}`;
+  }
+
+  return "Generate";
+}
+
+/**
+ * The Generate click does not change slides or documents.
+ *
+ * There is no request. The same carousel is returned.
+ *
+ * @param carousel - The open carousel
+ * @returns That same carousel
+ */
+export function instructionsAfterGenerateClick<T>(carousel: T): T {
+
+  return carousel;
+}
+
+function instructionBodyEnablesGenerate(body: string, placeholder: string): boolean {
+
+  if (placeholder !== "" && body === placeholder) {
+    return false;
+  }
+
+  return body.trim() !== "";
+}

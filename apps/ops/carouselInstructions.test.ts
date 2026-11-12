@@ -9,6 +9,10 @@ import {
   instructionDraftFingerprint,
   instructionDraftFromDocument,
   instructionDraftReadiness,
+  type InstructionDraft,
+  instructionsAfterGenerateClick,
+  instructionsGenerateAccessibleName,
+  instructionsGenerateEnabled,
   moveInstructionDocuments,
 } from "./src/pages/carouselInstructions.ts";
 import { INSTRUCTION_SAMPLE_TEMPLATE } from "./src/pages/instructionTemplate.ts";
@@ -70,3 +74,74 @@ assert.deepEqual(
 );
 assert.equal(moveInstructionDocuments([firstDocument, secondDocument], 0, -1), null);
 assert.equal(moveInstructionDocuments([firstDocument, secondDocument], 1, 1), null);
+
+const blankDocument: CarouselInstructionReadResponse = {
+  id: "blank",
+  position: 0,
+  body: "",
+};
+const spaceDocument: CarouselInstructionReadResponse = {
+  id: "space",
+  position: 1,
+  body: "  \n",
+};
+const writtenDocument: CarouselInstructionReadResponse = {
+  id: "written",
+  position: 2,
+  body: "Keep the quay.",
+};
+const emptyDraft: InstructionDraft = { instructionId: null, body: "" };
+const placeholderDraft: InstructionDraft = {
+  instructionId: null,
+  body: INSTRUCTION_SAMPLE_TEMPLATE,
+};
+const clearedDraft: InstructionDraft = { instructionId: "written", body: "" };
+
+assert.equal(instructionsGenerateEnabled([], emptyDraft, true, INSTRUCTION_SAMPLE_TEMPLATE), false);
+assert.equal(
+  instructionsGenerateEnabled([], placeholderDraft, true, INSTRUCTION_SAMPLE_TEMPLATE),
+  false,
+);
+assert.equal(
+  instructionsGenerateEnabled(
+    [blankDocument, spaceDocument, writtenDocument],
+    { instructionId: "blank", body: "" },
+    true,
+    INSTRUCTION_SAMPLE_TEMPLATE,
+  ),
+  true,
+);
+assert.equal(
+  instructionsGenerateEnabled(
+    [blankDocument, spaceDocument, writtenDocument],
+    clearedDraft,
+    true,
+    INSTRUCTION_SAMPLE_TEMPLATE,
+  ),
+  false,
+);
+assert.equal(
+  instructionsGenerateEnabled(
+    [writtenDocument],
+    { instructionId: "written", body: "Keep the quay." },
+    false,
+    INSTRUCTION_SAMPLE_TEMPLATE,
+  ),
+  false,
+);
+assert.match(
+  instructionsGenerateAccessibleName(false),
+  /Filling slides from these instructions is a later phase/,
+);
+
+const carouselBeforeGenerate: {
+  slides: { id: string }[];
+  instructions: CarouselInstructionReadResponse[];
+} = {
+  slides: [{ id: "slide-1" }],
+  instructions: [writtenDocument],
+};
+const carouselAfterGenerate = instructionsAfterGenerateClick(carouselBeforeGenerate);
+assert.equal(carouselAfterGenerate, carouselBeforeGenerate);
+assert.equal(carouselAfterGenerate.slides, carouselBeforeGenerate.slides);
+assert.equal(carouselAfterGenerate.instructions, carouselBeforeGenerate.instructions);

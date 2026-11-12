@@ -13,12 +13,16 @@ import type {
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import {
   INSTRUCTION_ADD_BODY,
+  INSTRUCTIONS_GENERATE_HINT,
   instructionBodyForSave,
   instructionDocumentIds,
   instructionDocumentLabel,
   instructionDraftFingerprint,
   instructionDraftFromDocument,
   instructionDraftReadiness,
+  instructionsAfterGenerateClick,
+  instructionsGenerateAccessibleName,
+  instructionsGenerateEnabled,
   moveInstructionDocuments,
   type InstructionDraft,
 } from "./carouselInstructions";
@@ -307,6 +311,12 @@ export function CarouselInstructionsStep({
   const previewSource: string = previewIsSample
     ? INSTRUCTION_SAMPLE_TEMPLATE
     : draft.body;
+  const generateEnabled: boolean = instructionsGenerateEnabled(
+    documents,
+    draft,
+    canWrite,
+    INSTRUCTION_SAMPLE_TEMPLATE,
+  );
 
   return (
     <section
@@ -420,6 +430,22 @@ export function CarouselInstructionsStep({
         />
       ) : null}
       <InstructionMarkdownPreview source={previewSource} isSample={previewIsSample} />
+      <div className="button-row">
+        <button
+          id="generate-instructions"
+          type="button"
+          disabled={!generateEnabled}
+          aria-label={instructionsGenerateAccessibleName(generateEnabled)}
+          onClick={(): void => {
+            instructionsAfterGenerateClick(carouselRef.current);
+          }}
+        >
+          Generate
+        </button>
+      </div>
+      <p className="field-hint" id="generate-instructions-hint">
+        {INSTRUCTIONS_GENERATE_HINT}
+      </p>
     </section>
   );
 }

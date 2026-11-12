@@ -367,7 +367,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
   Acceptance: two documents stay in the chosen order after reload. The preview follows the selected document. Removing one closes the gap in the labels. Add on a carousel that had no rows creates an empty stored document, and the sample is still not the stored body. Reorder does not change either body.
 
-- [ ] **5.8 Place Generate, disabled until there is real instruction text**
+- [x] **5.8 Place Generate, disabled until there is real instruction text**
 
   One button, `#generate-instructions`, sits below the editor. Its label is "Generate". It is disabled when every document body is empty after trim. The check uses the open draft for the selected document and the stored bodies for the others, via `instructionsGenerateEnabled` in `carouselInstructions.ts`. The sample and a whitespace-only body do not enable it. A reader always sees it disabled. While it is disabled, its accessible name says filling slides from these instructions is a later phase.
 
