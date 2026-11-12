@@ -238,18 +238,177 @@ None. Settled with Mu:
 
 ## 5. Instructions
 
-**Goal.** Step 1 is the carousel's instructions, written in markdown, that the model follows when it fills slides.
+**Status.** Checklist. Head revision on main is `carousel_editor_step_content`. Implement in the order below. Each box is one PR, and the console still works after that PR. Each box names the tests that land with it. Task 5.11 runs the full suites.
 
-**Scope.** One or more markdown documents per carousel, stored in the database, edited with a preview. A new or empty document starts from a sample markdown template, the placeholder text shown in the field, so the operator sees what to write. Only the current text is stored. There is no version history in v1. The Generate button sits below the instructions editor. It is disabled until there is real instruction text. The sample does not count. This phase places the button and the rule for when it is enabled. What pressing it does is phase 6. Per-slide generate from inspiration and rules keeps working until phase 6 replaces it. This phase does not write slide rows.
+**Goal.** Step 1 is the carousel's instructions, written in Markdown, that the model follows when it fills slides. One or more documents live on the carousel. The editor shows a preview. Only the current text is stored.
 
-**Migration.** Copy each carousel's existing inspiration and rules into one markdown document on that carousel. A carousel with neither gets no copied text, so its editor shows the sample template and Generate stays disabled. Drop the two columns after the copy.
+**What the code does today.** Instructions is a closed step. `carousel_step_states` in `app/carousels/slide_skeleton.py` sets `instructions` to `locked`. `STORED_EDITOR_STEPS` is 0, 2, and 3. `CAROUSEL_EDITOR_STEP_CHECK_SQL` is `editor_step IN (0, 2, 3)`, and the check on `carousels` is `ck_carousels_editor_step`. `PATCH /api/v1/carousels/{carousel_id}/step` returns 400 for step 1 (`INSTRUCTIONS_LOCKED_DETAIL`, "Instructions is locked.") and for step 4. `OPENABLE_EDITOR_STEPS` in `apps/ops/src/pages/carouselSteps.ts` omits step 1. The control's accessible name uses `INSTRUCTIONS_CLOSED_DETAIL`. `apps/ops/carouselSteps.test.ts` asserts that sentence.
 
-**Settled for this phase:**
+Inspiration and rules are still two `text` columns on `carousels` (`app/models/carousel.py`), not null, server default `""`. `POST /api/v1/carousels` in `app/api/v1/carousel_writes.py` writes both as `""`. `CarouselReadResponse` still returns them. `PATCH /api/v1/carousels/{carousel_id}/guidance` (`patch_source_guidance` in `app/api/v1/carousel_text.py`) still saves them, capped at `MAX_GUIDANCE_LENGTH` (8000). The ops form that edited them is gone (task 4.16). `patchCarouselGuidance` in `apps/ops/src/api/client.ts` has no caller.
 
-- Generate does not return a revised document. The written text is the instructions.
-- Review applies to slides in phase 6, not to the instructions.
-- There is no version history in v1, just the current text.
-- When a carousel has several documents, they are sent together as one prompt in a fixed order.
+Per-slide generate still reads the columns. `generate_source_slide` is `POST /api/v1/carousels/{carousel_id}/slides/generate` (the Slides button `#generate-slide`, "Generate slide"). `generate_slide_text` is `POST /api/v1/carousels/{carousel_id}/slides/{slide_id}/generate` (the slide editor button `#generate-slide-text`, "Generate text"). Both call `_draft_or_http`, which passes `carousel.inspiration` and `carousel.rules` into `TextGenerationProvider.draft_slide_text`. The fake provider and the OpenAI prompt in `app/carousels/text_generation.py` label those two strings Inspiration and Rules. Dropping the columns in the copy revision would break both routes. Tasks 5.1, 5.9, and 5.10 split the copy, the read switch, and the drop so those two buttons keep drafting.
+
+There is no instruction table. Research is the nearest pattern: `research_items.body` is Markdown or plain text up to `RESEARCH_BODY_MAX_CHARACTERS` (1,000,000), and `carousel_research_items.position` orders the links. Research routes live in `register_source_write_routes` (`POST`, `PUT`, and `DELETE` under `/api/v1/carousels/{carousel_id}/research`). Delete closes positions the way `_close_research_positions` does. The Research page edits a title and a body in a textarea, with no preview. Autosave is `useSkeletonAutosave` at `SKELETON_AUTOSAVE_DELAY_MS` (700), `SkeletonAutosaveStatus`, and `leaveAfterAutosave`. `CarouselsPage` already flushes the open step in `flushOpenEdits` before `handleStep` changes steps. Album image edits join that flush through `AlbumEditorActions`. `apps/ops/package.json` depends on React only. There is no Markdown library.
+
+**Decisions.** Settled with Mu, plus the choices this sheet needs so a task can name a file. The open decisions at the end are the choices Mu can still change.
+
+- A document is one row in `carousel_instructions`: the current body and a `position` starting at 0. Several documents are one prompt later, in position order. This phase does not call the provider from step 1.
+- The written text is the instructions. Generate does not return a revised document. Review of slides is phase 6.
+- An empty body is stored as `""`. The textarea placeholder is a sample template. The sample is not written unless the operator types it. A carousel with no rows still shows that empty editor, so the sample is visible and Generate stays disabled.
+- The copy revision keeps `inspiration` and `rules`. Per-slide generate keeps reading them until task 5.9. Task 5.10 drops the columns after that.
+- Instructions do not lock Content or Slides. Final stays locked. Create still opens on Basic.
+- One Generate button sits under the instructions editor, for the whole carousel. Phase 5 places it and disables it until some document has real text. Pressing it is phase 6.
+- Add, remove, and reorder are explicit actions, the way research links are. The body autosaves. There is no Save button.
+
+### Data model
+
+- [ ] **5.1 Add instruction documents and copy inspiration and rules**
+
+  Alembic revision `carousel_instructions`, down-revision `carousel_editor_step_content`. New table `carousel_instructions`: `id`, `carousel_id` (cascade on carousel delete), `position` (check `position >= 0`), `body` (text, not null, server default `""`, check `char_length(body) <= 1000000`), and the timestamp columns from `TimestampMixin`. Unique `(carousel_id, position)`. No title column and no version column.
+
+  `CarouselInstruction` lives in `app/models/carousel.py` next to `CarouselResearchItem`, exported from `app/models/__init__.py`. `Carousel.instructions` is ordered by `position`. `CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL` and `INSTRUCTION_BODY_MAX_CHARACTERS` sit in that file next to `CAROUSEL_RESEARCH_POSITION_CHECK_SQL`. `INSTRUCTION_BODY_MAX_CHARACTERS` is 1,000,000, the same number as `RESEARCH_BODY_MAX_CHARACTERS` in `app/models/research_item.py`.
+
+  Upgrade inserts one row at position 0 when `btrim(inspiration) <> ''` or `btrim(rules) <> ''`. The body is the stored strings under two headings, including a field that is blank:
+
+  ```
+  ## Inspiration
+
+  {inspiration}
+
+  ## Rules
+
+  {rules}
+  ```
+
+  The trailing newline is part of the body. A carousel whose inspiration and rules both trim to empty gets no row. That includes the Default carousel, whose columns are the server default `""`. The revision does not drop `inspiration` or `rules`, does not change `ck_carousels_editor_step`, and does not move `editor_step`, albums, research, or slides. Downgrade drops `carousel_instructions` and the rows in it. The two columns stay.
+
+  Acceptance: upgrade, downgrade, upgrade again. A carousel with both fields gets one document whose body equals that template filled with the stored strings. A carousel with only rules gets the same shape, with a blank Inspiration section. A carousel with both fields blank, including Default, has no instruction row, and its inspiration and rules still read back. `POST /api/v1/carousels/{carousel_id}/slides/generate` and Generate text still draft from the columns. Tests live in `apps/server/tests/test_carousel_instructions_migration.py`, on the pattern of `test_carousel_steps_migration.py` (skip when Postgres is down). `test_carousel_steps_migration.py` still rejects `editor_step` 1 at revision `carousel_steps`.
+
+### API
+
+- [ ] **5.2 Return instruction documents on the carousel detail**
+
+  `CarouselReadResponse` gains `instructions`: `{id, position, body}` in position order, one entry per row. The list item stays without them, the same way research stays off `CarouselListItemResponse`. Serialize beside `_research_in_position_order` in `app/api/v1/carousels.py`. Readers can call the existing GET. `inspiration` and `rules` stay on the detail until task 5.10. This PR does not add write routes and does not change `steps`.
+
+  Acceptance: a copied carousel reloads its one document in order. Default reloads an empty list. A reader can GET the detail. The list route's shape is unchanged.
+
+- [ ] **5.3 Store Instructions as an open step**
+
+  Alembic revision `carousel_editor_step_instructions`, down-revision `carousel_instructions`. Replace `ck_carousels_editor_step` so the check matches `editor_step IN (0, 1, 2, 3)`. Update `CAROUSEL_EDITOR_STEP_CHECK_SQL`. Existing rows stay on 0, 2, or 3. Downgrade sets any stored 1 back to 0, then restores `editor_step IN (0, 2, 3)`.
+
+  `carousel_step_states` takes `has_instruction_text`. The caller sets it when any instruction body strips to a non-empty string. `instructions` is `done` when that flag is true and `available` when it is false. It is not locked. `content`, `slides`, and `final` stay on their current rules. Research still does not change step state. `STORED_EDITOR_STEPS` includes 1. `UNKNOWN_EDITOR_STEP_DETAIL` says `editor_step` must be 0, 1, 2, or 3. `PATCH /api/v1/carousels/{carousel_id}/step` stores 1 for an admin. Step 4 is still 400. A reader is still rejected. Create still stores step 0.
+
+  Update the callers and the tests that require `instructions` to be locked: `test_carousel_step_state.py`, `test_carousel_editor_step.py` (including `test_instructions_and_final_are_refused` and `test_refusing_instructions_leaves_inspiration_and_rules`), `test_carousel_album_link.py`, `test_carousel_research_link.py`, `test_carousels.py`, and `test_models.py`. The migration test is `test_carousel_editor_step_instructions_migration.py`.
+
+  Acceptance: an admin can store step 1 on a carousel with no documents and on one that has text. A carousel with a non-blank body reads `instructions: done`. Default reads `instructions: available` and still opens on Slides. Step 4 is 400 and the stored step stays. A picture carousel with no album still refuses step 3. Inspiration and rules are unchanged by the step PATCH.
+
+- [ ] **5.4 Create, update, reorder, and delete instruction documents**
+
+  Register these on `register_source_write_routes` in `app/api/v1/carousel_writes.py`, next to the research routes. Admin only. The response is the carousel detail, with `instructions` in position order and `steps` from task 5.3.
+
+  `POST /api/v1/carousels/{carousel_id}/instructions` with `{body}` appends at the next position. A missing body stores `""`. `PATCH /api/v1/carousels/{carousel_id}/instructions/{instruction_id}` with `{body}` replaces that body. `PUT /api/v1/carousels/{carousel_id}/instructions` with `{instruction_ids}` replaces the order. `DELETE /api/v1/carousels/{carousel_id}/instructions/{instruction_id}` drops that row. Positions close up to 0, 1, 2, the way `_assign_research_positions` does, including the park-then-assign move that the unique `(carousel_id, position)` constraint needs.
+
+  Unknown id is 404. The same id twice in one list is 400 and the stored order stays. An id from another carousel is 404. A body longer than `INSTRUCTION_BODY_MAX_CHARACTERS` is 400 and nothing is written. Deleting the carousel drops its documents. These routes do not write `inspiration` or `rules`, do not call `draft_slide_text`, and do not insert slides.
+
+  Acceptance, in `apps/server/tests/test_carousel_instructions.py`: two documents round-trip in the stored order. Reorder survives a reload. Delete closes the gap. A duplicate id is 400. A reader is rejected. A too-long body is 400. After a write, inspiration and rules still read back, and Generate text still drafts from those columns.
+
+### Step shell
+
+- [ ] **5.5 Open the Instructions step**
+
+  Enable step 1 in `OPENABLE_EDITOR_STEPS`. `carouselStepAccessibleName` and `carouselStepTitle` stop treating Instructions as a closed later phase. Remove `INSTRUCTIONS_CLOSED_DETAIL`. An available Instructions control is unmarked. A done one uses the existing done style (`--ops-success` through `is-done`). The current step stays `--ops-primary`. Update `apps/ops/carouselSteps.test.ts`.
+
+  `CarouselsPage` shows `CarouselInstructionsStep` when the displayed step is 1, the same way it shows `CarouselBasicStep` and `CarouselContentStep`. Changing step still goes through `handleStep` and `flushOpenEdits`, and PATCHes `editor_step` for an admin. A reader can look, via `displayedEditorStep`, and does not PATCH. Final stays disabled. Slides, Generate slide, and Generate text stay where they are.
+
+  The sample text for an empty document lives in `apps/ops/src/pages/instructionTemplate.ts` as `INSTRUCTION_SAMPLE_TEMPLATE`. Task 5.6 uses that same constant as the textarea placeholder.
+
+  ```
+  # What this carousel is for
+
+  Who it is for, and what they should take from it.
+
+  ## Voice
+
+  Short sentences. One idea per slide.
+
+  ## Include
+
+  - The claim this carousel makes
+  - A fact that has to stay accurate
+
+  ## Leave out
+
+  - Anything this carousel should not say
+  ```
+
+  This PR shows the documents in position order as read-only source. Zero documents shows "No instructions yet." and that sample, labeled as a sample that is not saved. There is no textarea and no Generate button yet. The sample is not written to a row.
+
+  Acceptance: an admin can open Instructions, reload, and land there again (`editor_step` 1). Default can open it and still has no document row. Content and Slides open under the same rules as now. The Instructions control is not described as a later phase. Final still does not navigate.
+
+### Editor
+
+- [ ] **5.6 Edit a document with a preview, the sample placeholder, and autosave**
+
+  Replace the read-only body with a textarea and a preview. The textarea's placeholder is `INSTRUCTION_SAMPLE_TEMPLATE` from task 5.5. The value stays `""` until the operator types. The preview is `InstructionMarkdownPreview`, fed by `renderInstructionMarkdown` in `apps/ops/src/pages/instructionMarkdown.ts`. That function escapes HTML and renders ATX headings (`#`, `##`, `###`), paragraphs, unordered lists, and `**strong**` / `*emphasis*`. Those are the marks in the sample. When the draft is empty, the preview renders the sample and says "Sample. Not saved." When the draft has text, the preview renders the draft.
+
+  The body autosaves at 700ms through `useSkeletonAutosave`, `SkeletonAutosaveStatus`, and `SKELETON_AUTOSAVE_DELAY_MS`. The readiness helper lives in `apps/ops/src/pages/carouselInstructions.ts`. A draft with text is ready. A stored document's empty body is ready, and the save PATCHes `""`. An empty draft with no row is idle, so autosave does not POST. The first draft that has text POSTs `/instructions`. A later edit PATCHes that id. Clearing a stored document leaves the row, and the placeholder comes back. The placeholder string is never the saved body.
+
+  `CarouselInstructionsStep` exposes flush and dirty the way `AlbumEditorActions` does. `flushOpenEdits` in `CarouselsPage` awaits it, and `handleStep` and Back keep using `leaveAfterAutosave`. A reader sees `ReadOnlyNotice` and a disabled textarea, and does not schedule a save.
+
+  Tests: `apps/ops/carouselInstructions.test.ts` for the readiness helper (a stored empty body is ready, an empty draft with no row is idle, and the sample is not the stored value) and `apps/ops/instructionMarkdown.test.ts` for the renderer.
+
+  Acceptance: typing into an empty carousel creates one document after the 700ms delay, and a reload shows that text, not the sample. Clearing it stores `""`, the placeholder returns, and Generate text on Slides still uses the inspiration and rules columns. Leaving the step flushes a pending edit. A body the API rejects as too long shows the autosave error and does not drop the previous body.
+
+- [ ] **5.7 Add, remove, and reorder documents**
+
+  The step lists documents as Document 1, Document 2, from `position + 1`, in position order. The selected one's body is the editor from task 5.6. Add calls POST with `{body: ""}`, selects the new row, and shows the sample placeholder. Remove calls DELETE. Move up and Move down call PUT with the full id list, the same interaction as `moveAttachedResearch` in `carouselResearch.ts`. There is no drag library.
+
+  Switching documents or removing the open one flushes through `leaveAfterAutosave` first. Removing the last row returns the step to the empty editor from task 5.6, with no id until the next typed save. A reader can look and cannot add, remove, or reorder.
+
+  Acceptance: two documents stay in the chosen order after reload. The preview follows the selected document. Removing one closes the gap in the labels. Add on a carousel that had no rows creates an empty stored document, and the sample is still not the stored body. Reorder does not change either body.
+
+- [ ] **5.8 Place Generate, disabled until there is real instruction text**
+
+  One button, `#generate-instructions`, sits below the editor. Its label is "Generate". It is disabled when every document body is empty after trim. The check uses the open draft for the selected document and the stored bodies for the others, via `instructionsGenerateEnabled` in `carouselInstructions.ts`. The sample and a whitespace-only body do not enable it. A reader always sees it disabled. While it is disabled, its accessible name says filling slides from these instructions is a later phase.
+
+  The button has no request. It does not call `generateCarouselSlide`, `generateSlideText`, `generateCarouselArtifact`, or a new route. It does not write slides. A line under it says Generate fills slides in a later phase. `#generate-slide` and `#generate-slide-text` stay on Slides.
+
+  Acceptance, in `carouselInstructions.test.ts`: an empty draft is disabled, a placeholder-only editor is disabled, one non-blank document among blanks is enabled, and a cleared draft with no other text is disabled. Clicking the enabled button leaves the carousel's slides and documents unchanged.
+
+### Per-slide generate
+
+- [ ] **5.9 Read instruction documents from Generate slide and Generate text**
+
+  Add `instruction_prompt_text` in `app/carousels/instructions.py`. It takes bodies in position order, drops any body that strips to empty, and joins the rest with a blank line. `_draft_or_http` loads `carousel.instructions` in that order and calls `draft_slide_text` with that string as `inspiration` and `""` as `rules`. `FakeTextGenerationProvider` and `OpenAITextGenerationProvider` keep their two arguments. Phase 6 should use this same join for the instructions button.
+
+  The columns stay in this PR. `PATCH .../guidance` still writes them. Generate slide and Generate text ignore them. A carousel with no documents, or only blank bodies, passes two empty strings, which is what both columns being `""` does today. Direct tests that call `draft_slide_text` with an inspiration and a rules string stay. HTTP tests in `test_slide_text_generation.py` that set the columns and then generate must store instruction documents and expect the joined text in the fake draft.
+
+  Acceptance: a carousel whose only text is the copied document drafts from that body, and a guidance PATCH that changes the columns does not change the next draft. A new carousel with no documents still drafts from two empty strings. Generate slide still creates one draft slide, and Generate text still leaves the live text in place until Accept.
+
+- [ ] **5.10 Drop inspiration and rules**
+
+  Alembic revision `carousel_instructions_drop_guidance`, down-revision `carousel_editor_step_instructions`. Drop `carousels.inspiration` and `carousels.rules`. Downgrade adds both columns back as text, not null, server default `""`, and leaves them empty. It does not parse documents back into the columns. Instruction rows stay through both directions.
+
+  Remove the columns from `Carousel`, from `CarouselReadResponse`, and from `CarouselGuidancePatchRequest`. Remove `PATCH /api/v1/carousels/{carousel_id}/guidance` and `patch_source_guidance`. `POST /api/v1/carousels` stops setting the two fields. Delete `patchCarouselGuidance` from `apps/ops/src/api/client.ts`. Update the model notes in `app/models/carousel.py` and `app/models/__init__.py` so the draft is described as coming from `carousel_instructions`. Update `test_models.py` and any HTTP test that still sends a guidance body. Leave the historical assertions in `test_alembic.py` and `test_source_theme_migration.py` that read older revisions of `sources.inspiration`.
+
+  Acceptance: the detail has `instructions` and has neither column. Guidance PATCH is gone. Upgrade from a database that already ran 5.1 keeps the copied documents, and Generate text still drafts from them. Downgrade recreates two empty columns and keeps the documents. Default still has no instruction row.
+
+### Tests
+
+- [ ] **5.11 Run the full server and ops suites**
+
+  From `apps/server`, `python -m unittest discover -s tests`. From `apps/ops`, `node --test *.test.ts`. This PR adds no product behavior. It fixes failures that this phase's tasks left, and it does not start a new feature. Migration tests that skip because Postgres is down stay skipped, the same way `test_carousel_steps_migration.py` skips. A skip is not a failure. The phase is done when both suites pass aside from those skips.
+
+### Open decisions
+
+1. The copied document uses the two headings `## Inspiration` and `## Rules`, in that order, even when one field is blank. The sample template is a different text, and only the empty editor shows it.
+2. The columns stay through tasks 5.1–5.9 because `_draft_or_http` reads them. Task 5.9 passes the joined document text as `inspiration` and `""` as `rules`, which changes the fake draft and the OpenAI user prompt for a carousel that had both fields. Task 5.10 then drops the columns. Say if the joined text should be the rules argument instead, or if the two headings should be parsed back into the two arguments until phase 6 replaces the call.
+3. A document has no title. The list labels it Document 1, Document 2 from `position`.
+4. The body cap is 1,000,000 characters, the research cap. The old guidance cap is 8,000 per column. Migrated text fits either cap.
+5. The preview is a local renderer for headings, paragraphs, lists, and emphasis. `apps/ops` has no Markdown dependency. Links, fences, and tables can wait for a library.
+6. The sample wording is the block in task 5.5.
+7. Downgrade of task 5.10 restores empty inspiration and rules columns and does not copy the documents back into them.
+8. Phase 8 still calls the generation snapshot "the instruction version." This sheet does not add a version table, and it does not rewrite phase 8.
 
 ## 6. AI slide generation
 
