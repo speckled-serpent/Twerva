@@ -302,7 +302,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
   Acceptance: an admin can store step 1 on a carousel with no documents and on one that has text. A carousel with a non-blank body reads `instructions: done`. Default reads `instructions: available` and still opens on Slides. Step 4 is 400 and the stored step stays. A picture carousel with no album still refuses step 3. Inspiration and rules are unchanged by the step PATCH.
 
-- [ ] **5.4 Create, update, reorder, and delete instruction documents**
+- [x] **5.4 Create, update, reorder, and delete instruction documents**
 
   Register these on `register_source_write_routes` in `app/api/v1/carousel_writes.py`, next to the research routes. Admin only. The response is the carousel detail, with `instructions` in position order and `steps` from task 5.3.
 

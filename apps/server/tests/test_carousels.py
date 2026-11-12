@@ -261,7 +261,14 @@ class CarouselReadApiTests(unittest.TestCase):
         )
         self.assertNotIn("/carousels/resource", methods_by_path)
         self.assertNotIn("/carousels/{carousel_id}/resource", methods_by_path)
-        self.assertNotIn("/carousels/{carousel_id}/instructions", methods_by_path)
+        self.assertEqual(
+            methods_by_path["/carousels/{carousel_id}/instructions"],
+            {"POST", "PUT"},
+        )
+        self.assertEqual(
+            methods_by_path["/carousels/{carousel_id}/instructions/{instruction_id}"],
+            {"PATCH", "DELETE"},
+        )
 
     def test_list_echoes_stored_generation_and_editor_step(self) -> None:
         """The list returns the stored numbers. It does not derive them."""

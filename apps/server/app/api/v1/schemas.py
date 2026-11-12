@@ -1174,6 +1174,41 @@ class CarouselResearchOrderRequest(BaseModel):
     research_item_ids: list[uuid.UUID]
 
 
+class CarouselInstructionCreateRequest(BaseModel):
+    """JSON body for `POST /api/v1/carousels/{carousel_id}/instructions`.
+
+    A missing ``body`` stores an empty string. The document is appended.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = ""
+
+
+class CarouselInstructionPatchRequest(BaseModel):
+    """JSON body for `PATCH .../instructions/{instruction_id}`.
+
+    ``body`` replaces the stored text. A missing body stores an empty string.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = ""
+
+
+class CarouselInstructionOrderRequest(BaseModel):
+    """JSON body for `PUT /api/v1/carousels/{carousel_id}/instructions`.
+
+    ``instruction_ids`` is every document on this carousel, in the new
+    order. The same id twice is rejected. Omitting the field does not
+    change the order.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    instruction_ids: list[uuid.UUID]
+
+
 class SlideElementTextWrite(BaseModel):
     """One skeleton text element and the value to store on the slide."""
 

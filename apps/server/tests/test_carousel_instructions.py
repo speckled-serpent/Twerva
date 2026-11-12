@@ -1,4 +1,4 @@
-"""The carousel detail returns instruction documents. The list does not."""
+"""Instruction documents on the carousel detail, and the writes that store them."""
 
 import os
 import unittest
@@ -10,13 +10,32 @@ os.environ.setdefault("TWERVA_ENV", "test")
 os.environ.setdefault("SESSION_SECRET", "test-session-secret-not-for-production")
 os.environ.setdefault("SESSION_COOKIE_SECURE", "false")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.api.v1.carousel_text import generate_slide_text, patch_source_guidance
+from app.api.v1.carousel_writes import (
+    create_carousel,
+    create_slide,
+    delete_carousel,
+    delete_carousel_instruction,
+    patch_carousel_instruction,
+    post_carousel_instruction,
+    put_carousel_instructions,
+)
 from app.api.v1.carousels import get_carousel
 from app.api.v1.router import api_v1_router
-from app.api.v1.schemas import CarouselReadResponse
+from app.api.v1.schemas import (
+    CarouselCreateRequest,
+    CarouselGuidancePatchRequest,
+    CarouselInstructionCreateRequest,
+    CarouselInstructionOrderRequest,
+    CarouselInstructionPatchRequest,
+    CarouselReadResponse,
+    SlideElementTextWrite,
+    SlideWriteRequest,
+)
 from app.auth.passwords import hash_plain_password
 from app.carousels.default_carousel import (
     DEFAULT_ALBUM_SKELETON_ID,
@@ -24,12 +43,17 @@ from app.carousels.default_carousel import (
 )
 from app.carousels.slide_skeleton import CarouselStepState
 from app.db import get_our_database_session
-from app.models.carousel import Carousel, CarouselInstruction
+from app.models.carousel import (
+    INSTRUCTION_BODY_MAX_CHARACTERS,
+    Carousel,
+    CarouselInstruction,
+)
 from app.models.enums import OpsUserRole
 from app.models.ops_user import OpsUser
 from app.models.skeleton import Skeleton
 from app.settings import clear_settings_cache
 from tests.test_carousels import _default_source_from_catalog, _paper_skeleton, _session_get
+from tests.test_carousel_writes import _MemoryCarouselSession, _title_element
 
 
 READER_USERNAME: str = "reader-agent"
@@ -417,6 +441,336 @@ class ReaderInstructionDetailTests(unittest.TestCase):
             self.assertNotIn("instructions", list_item)
             self.assertNotIn("research", list_item)
             self.assertNotIn("steps", list_item)
+
+    def test_a_reader_cannot_write_instructions(self) -> None:
+        """POST, PATCH, PUT, and DELETE are 403. The stored document stays."""
+
+        create_response = self.test_client.post(
+            f"/api/v1/carousels/{self.copied.id}/instructions",
+            json={"body": "Blocked"},
+        )
+        reorder_response = self.test_client.put(
+            f"/api/v1/carousels/{self.copied.id}/instructions",
+            json={"instruction_ids": []},
+        )
+        patch_response = self.test_client.patch(
+            f"/api/v1/carousels/{self.copied.id}/instructions/{self.document_id}",
+            json={"body": "Blocked"},
+        )
+        delete_response = self.test_client.delete(
+            f"/api/v1/carousels/{self.copied.id}/instructions/{self.document_id}",
+        )
+        loaded: CarouselReadResponse = get_carousel(
+            self.copied.id,
+            self.session,  # type: ignore[arg-type]
+        )
+
+        self.assertEqual(create_response.status_code, 403)
+        self.assertEqual(reorder_response.status_code, 403)
+        self.assertEqual(patch_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        self.assertIn("read-only", create_response.json()["detail"].lower())
+        self.assertEqual(len(loaded.instructions), 1)
+        self.assertEqual(loaded.instructions[0].id, self.document_id)
+
+
+class CarouselInstructionWriteTests(unittest.TestCase):
+    """Create, reorder, and delete documents. Guidance columns stay put."""
+
+    def test_two_documents_round_trip_reorder_and_delete(self) -> None:
+        """Order survives a reload. Delete closes the gap. Text marks the step done."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        created: CarouselReadResponse = _create_carousel(session, "Harbor notes")
+        patch_source_guidance(
+            created.id,
+            CarouselGuidancePatchRequest(inspiration="Harbor fog", rules="Keep it short"),
+            session,
+            None,
+        )
+        missing: CarouselReadResponse = post_carousel_instruction(
+            created.id,
+            CarouselInstructionCreateRequest(),
+            session,
+            None,
+        )
+        first: CarouselReadResponse = post_carousel_instruction(
+            created.id,
+            CarouselInstructionCreateRequest(body="Open with the quay."),
+            session,
+            None,
+        )
+        second: CarouselReadResponse = post_carousel_instruction(
+            created.id,
+            CarouselInstructionCreateRequest(body="Close on the tide."),
+            session,
+            None,
+        )
+        loaded: CarouselReadResponse = get_carousel(created.id, session)
+        reversed_order: CarouselReadResponse = put_carousel_instructions(
+            created.id,
+            CarouselInstructionOrderRequest(
+                instruction_ids=[
+                    second.instructions[2].id,
+                    missing.instructions[0].id,
+                    first.instructions[1].id,
+                ],
+            ),
+            session,
+            None,
+        )
+        reloaded: CarouselReadResponse = get_carousel(created.id, session)
+        removed: CarouselReadResponse = delete_carousel_instruction(
+            created.id,
+            reversed_order.instructions[1].id,
+            session,
+            None,
+        )
+
+        self.assertEqual(missing.instructions[0].body, "")
+        self.assertEqual(missing.instructions[0].position, 0)
+        self.assertEqual(missing.steps.instructions, CarouselStepState.AVAILABLE)
+        self.assertEqual(
+            [(item.position, item.body) for item in loaded.instructions],
+            [(0, ""), (1, "Open with the quay."), (2, "Close on the tide.")],
+        )
+        self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
+        self.assertEqual(loaded.inspiration, "Harbor fog")
+        self.assertEqual(loaded.rules, "Keep it short")
+        self.assertEqual(loaded.slides, [])
+        self.assertEqual(
+            [(item.position, item.body) for item in reversed_order.instructions],
+            [(0, "Close on the tide."), (1, ""), (2, "Open with the quay.")],
+        )
+        self.assertEqual(
+            [(item.position, item.body) for item in reloaded.instructions],
+            [(item.position, item.body) for item in reversed_order.instructions],
+        )
+        self.assertEqual(
+            [(item.position, item.body) for item in removed.instructions],
+            [(0, "Close on the tide."), (1, "Open with the quay.")],
+        )
+        self.assertEqual(removed.inspiration, "Harbor fog")
+        self.assertEqual(removed.rules, "Keep it short")
+
+    def test_duplicate_unknown_and_other_carousel_ids_write_nothing(self) -> None:
+        """A duplicate id is 400. An id from elsewhere is 404. The order stays."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        created: CarouselReadResponse = _create_carousel(session, "Harbor notes")
+        other: CarouselReadResponse = _create_carousel(session, "Other notes")
+        first: CarouselReadResponse = post_carousel_instruction(
+            created.id,
+            CarouselInstructionCreateRequest(body="First"),
+            session,
+            None,
+        )
+        second: CarouselReadResponse = post_carousel_instruction(
+            created.id,
+            CarouselInstructionCreateRequest(body="Second"),
+            session,
+            None,
+        )
+        foreign: CarouselReadResponse = post_carousel_instruction(
+            other.id,
+            CarouselInstructionCreateRequest(body="Foreign"),
+            session,
+            None,
+        )
+        before: list[tuple[uuid.UUID, int, str]] = [
+            (item.id, item.position, item.body) for item in second.instructions
+        ]
+        commits_before: int = session.commit_count
+        first_id: uuid.UUID = second.instructions[0].id
+        second_id: uuid.UUID = second.instructions[1].id
+        foreign_id: uuid.UUID = foreign.instructions[0].id
+
+        with self.assertRaises(HTTPException) as duplicate:
+            put_carousel_instructions(
+                created.id,
+                CarouselInstructionOrderRequest(instruction_ids=[first_id, first_id]),
+                session,
+                None,
+            )
+
+        with self.assertRaises(HTTPException) as unknown:
+            patch_carousel_instruction(
+                created.id,
+                uuid.uuid4(),
+                CarouselInstructionPatchRequest(body="Nope"),
+                session,
+                None,
+            )
+
+        with self.assertRaises(HTTPException) as other_carousel:
+            delete_carousel_instruction(created.id, foreign_id, session, None)
+
+        with self.assertRaises(HTTPException) as incomplete:
+            put_carousel_instructions(
+                created.id,
+                CarouselInstructionOrderRequest(instruction_ids=[second_id]),
+                session,
+                None,
+            )
+
+        loaded: CarouselReadResponse = get_carousel(created.id, session)
+        foreign_loaded: CarouselReadResponse = get_carousel(other.id, session)
+
+        self.assertEqual(duplicate.exception.status_code, 400)
+        self.assertEqual(unknown.exception.status_code, 404)
+        self.assertEqual(other_carousel.exception.status_code, 404)
+        self.assertEqual(incomplete.exception.status_code, 400)
+        self.assertEqual(
+            [(item.id, item.position, item.body) for item in loaded.instructions],
+            before,
+        )
+        self.assertEqual(foreign_loaded.instructions[0].id, foreign_id)
+        self.assertEqual(foreign_loaded.instructions[0].body, "Foreign")
+        self.assertEqual(session.commit_count, commits_before)
+        self.assertEqual(first.instructions[0].id, first_id)
+
+    def test_a_too_long_body_writes_nothing(self) -> None:
+        """A body past the cap is 400. The previous body stays."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        created: CarouselReadResponse = _create_carousel(session, "Harbor notes")
+        at_limit: str = "a" * INSTRUCTION_BODY_MAX_CHARACTERS
+        over_limit: str = at_limit + "b"
+        commits_before: int = session.commit_count
+
+        with self.assertRaises(HTTPException) as created_over:
+            post_carousel_instruction(
+                created.id,
+                CarouselInstructionCreateRequest(body=over_limit),
+                session,
+                None,
+            )
+
+        self.assertEqual(created_over.exception.status_code, 400)
+        self.assertEqual(get_carousel(created.id, session).instructions, [])
+        self.assertEqual(session.commit_count, commits_before)
+
+        saved: CarouselReadResponse = post_carousel_instruction(
+            created.id,
+            CarouselInstructionCreateRequest(body=at_limit),
+            session,
+            None,
+        )
+        document_id: uuid.UUID = saved.instructions[0].id
+
+        with self.assertRaises(HTTPException) as patched_over:
+            patch_carousel_instruction(
+                created.id,
+                document_id,
+                CarouselInstructionPatchRequest(body=over_limit),
+                session,
+                None,
+            )
+
+        loaded: CarouselReadResponse = get_carousel(created.id, session)
+
+        self.assertEqual(len(saved.instructions[0].body), INSTRUCTION_BODY_MAX_CHARACTERS)
+        self.assertEqual(patched_over.exception.status_code, 400)
+        self.assertEqual(loaded.instructions[0].body, at_limit)
+        self.assertEqual(loaded.slides, [])
+
+    def test_deleting_the_carousel_drops_its_documents(self) -> None:
+        """The carousel delete cascades to the instruction rows."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        created: CarouselReadResponse = _create_carousel(session, "Harbor notes")
+        saved: CarouselReadResponse = post_carousel_instruction(
+            created.id,
+            CarouselInstructionCreateRequest(body="Keep the quay."),
+            session,
+            None,
+        )
+        document_id: uuid.UUID = saved.instructions[0].id
+
+        delete_carousel(created.id, session, None)
+
+        deleted_ids: set[uuid.UUID] = {
+            row.id for row in session.deleted if isinstance(row, CarouselInstruction)
+        }
+
+        with self.assertRaises(HTTPException) as missing:
+            get_carousel(created.id, session)
+
+        self.assertEqual(missing.exception.status_code, 404)
+        self.assertIn(document_id, deleted_ids)
+        self.assertIsNone(session.get(Carousel, created.id))
+
+    def test_generate_text_still_drafts_from_the_columns(self) -> None:
+        """An instruction write does not change the next Generate text draft."""
+
+        previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
+        os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
+        clear_settings_cache()
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        text_element = _title_element(session.skeleton.id)
+        session.skeleton.elements = [text_element]
+
+        try:
+            created: CarouselReadResponse = _create_carousel(session, "Harbor notes")
+            patch_source_guidance(
+                created.id,
+                CarouselGuidancePatchRequest(
+                    inspiration="Harbor fog",
+                    rules="Keep it short",
+                ),
+                session,
+                None,
+            )
+            harbor = create_slide(
+                created.id,
+                SlideWriteRequest(
+                    name="Harbor",
+                    texts=[
+                        SlideElementTextWrite(
+                            skeleton_element_id=text_element.id,
+                            value="Fog on the water",
+                        ),
+                    ],
+                ),
+                session,
+                None,
+            )
+            post_carousel_instruction(
+                created.id,
+                CarouselInstructionCreateRequest(body="INSTRUCTION-ONLY"),
+                session,
+                None,
+            )
+            drafted = generate_slide_text(created.id, harbor.id, session, None)
+        finally:
+            if previous_provider is None:
+                os.environ.pop("TEXT_GENERATION_PROVIDER", None)
+            else:
+                os.environ["TEXT_GENERATION_PROVIDER"] = previous_provider
+
+            clear_settings_cache()
+
+        loaded: CarouselReadResponse = get_carousel(created.id, session)
+
+        self.assertEqual(drafted.draft_texts[0].value, "Title. Harbor fog. Keep it short")
+        self.assertNotIn("INSTRUCTION-ONLY", drafted.draft_texts[0].value)
+        self.assertEqual(drafted.texts[0].value, "Fog on the water")
+        self.assertEqual(len(loaded.slides), 1)
+        self.assertEqual(loaded.inspiration, "Harbor fog")
+        self.assertEqual(loaded.rules, "Keep it short")
+        self.assertEqual(loaded.instructions[0].body, "INSTRUCTION-ONLY")
+
+
+def _create_carousel(session: _MemoryCarouselSession, name: str) -> CarouselReadResponse:
+    """Create one carousel on the session skeleton."""
+
+    created: CarouselReadResponse = create_carousel(
+        CarouselCreateRequest(name=name, skeleton_id=session.skeleton.id),
+        session,
+        None,
+    )
+
+    return created
 
 
 def _build_client(session: _InstructionReadSession) -> TestClient:

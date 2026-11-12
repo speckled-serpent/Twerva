@@ -31,6 +31,8 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/carousels/{carousel_id}/album",
         "/api/v1/carousels/{carousel_id}/research",
         "/api/v1/carousels/{carousel_id}/research/{research_item_id}",
+        "/api/v1/carousels/{carousel_id}/instructions",
+        "/api/v1/carousels/{carousel_id}/instructions/{instruction_id}",
         "/api/v1/carousels/{carousel_id}/slides",
         "/api/v1/carousels/{carousel_id}/slides/{slide_id}",
         "/api/v1/carousels/{carousel_id}/slides/{slide_id}/images/{image_id}",

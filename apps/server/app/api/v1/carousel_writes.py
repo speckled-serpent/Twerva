@@ -4,7 +4,8 @@ No new image bytes on the slide routes. The skeleton stays the one
 chosen at create. Create stores generation 1 and opens on Basic.
 A slide image is an album image that already exists. Storing one
 does not create an album. Research is an ordered list and does not
-gate a step.
+gate a step. Instruction documents are the carousel's own rows.
+Writing one does not change inspiration, rules, or slides.
 """
 
 from __future__ import annotations
@@ -26,6 +27,9 @@ from app.api.v1.schemas import (
     CarouselAlbumAttachRequest,
     CarouselAlbumCreateRequest,
     CarouselCreateRequest,
+    CarouselInstructionCreateRequest,
+    CarouselInstructionOrderRequest,
+    CarouselInstructionPatchRequest,
     CarouselResearchAttachRequest,
     CarouselResearchOrderRequest,
     CarouselPatchRequest,
@@ -41,7 +45,9 @@ from app.models.album import Album, AlbumImage
 from app.models.carousel import (
     CAROUSEL_CREATE_EDITOR_STEP,
     CAROUSEL_GENERATION_NUMBER_DEFAULT,
+    INSTRUCTION_BODY_MAX_CHARACTERS,
     Carousel,
+    CarouselInstruction,
     CarouselResearchItem,
     Slide,
     SlideElementText,
@@ -92,10 +98,18 @@ CAROUSEL_SLUG_CONFLICT_DETAIL: str = "A carousel with that name already exists."
 DUPLICATE_RESEARCH_DETAIL: str = "Each research item is stored once."
 ALREADY_ATTACHED_RESEARCH_DETAIL: str = "That research item is already attached."
 RESEARCH_NOT_ATTACHED_DETAIL: str = "That research item is not attached."
+DUPLICATE_INSTRUCTION_DETAIL: str = "Each instruction is stored once."
+INSTRUCTION_NOT_FOUND_DETAIL: str = "Instruction not found."
+INSTRUCTION_LIST_INCOMPLETE_DETAIL: str = (
+    "The instruction list must include every document."
+)
+INSTRUCTION_BODY_TOO_LONG_DETAIL: str = (
+    f"Instruction body must be {INSTRUCTION_BODY_MAX_CHARACTERS:,} characters or fewer."
+)
 
 
 def register_source_write_routes(carousels_router: APIRouter) -> None:
-    """Attach album, research, and slide writes, plus the image file streams."""
+    """Attach album, research, instruction, and slide writes, plus image streams."""
 
     carousels_router.add_api_route(
         "",
@@ -150,6 +164,30 @@ def register_source_write_routes(carousels_router: APIRouter) -> None:
     carousels_router.add_api_route(
         "/{carousel_id}/research/{research_item_id}",
         delete_carousel_research,
+        methods=["DELETE"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/instructions",
+        post_carousel_instruction,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/instructions",
+        put_carousel_instructions,
+        methods=["PUT"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/instructions/{instruction_id}",
+        patch_carousel_instruction,
+        methods=["PATCH"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/instructions/{instruction_id}",
+        delete_carousel_instruction,
         methods=["DELETE"],
         response_model=CarouselReadResponse,
     )
@@ -538,6 +576,140 @@ def delete_carousel_research(
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Research could not be detached.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def post_carousel_instruction(
+    carousel_id: uuid.UUID,
+    instruction_create_request: CarouselInstructionCreateRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Append one instruction document at the next position.
+
+    Readers cannot call this. A missing body stores an empty string.
+    A body over the cap is 400 and nothing is written. Inspiration,
+    rules, and slides stay as they were. The response lists documents
+    in position order, with steps from the stored text.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    body: str = _require_instruction_body(instruction_create_request.body)
+    _append_instruction(found_source, body, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Instruction could not be saved.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def patch_carousel_instruction(
+    carousel_id: uuid.UUID,
+    instruction_id: uuid.UUID,
+    instruction_patch_request: CarouselInstructionPatchRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Replace one instruction body. A missing body stores an empty string.
+
+    Readers cannot call this. An unknown id is 404. An id from another
+    carousel is 404 and that carousel stays unchanged. A body over the
+    cap is 400 and the stored body stays. Inspiration, rules, and slides
+    are not written.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_document: CarouselInstruction = _instruction_or_raise(
+        found_source,
+        instruction_id,
+    )
+    body: str = _require_instruction_body(instruction_patch_request.body)
+    found_document.body = body
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Instruction could not be saved.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def put_carousel_instructions(
+    carousel_id: uuid.UUID,
+    instruction_order_request: CarouselInstructionOrderRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Replace the order of the documents already on this carousel.
+
+    Readers cannot call this. The same id twice is 400 and the stored
+    order stays. An unknown id, or an id from another carousel, is 404
+    and the stored order stays. A list that omits a document on this
+    carousel is 400 and the stored order stays. Positions become 0, 1,
+    2, and so on. Bodies are not changed.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    ordered_ids: list[uuid.UUID] = list(instruction_order_request.instruction_ids)
+    _require_unique_instruction_ids(ordered_ids)
+    ordered_documents: list[CarouselInstruction] = _instructions_for_reorder(
+        found_source,
+        ordered_ids,
+    )
+    _assign_instruction_positions(ordered_documents, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Instruction order could not be saved.",
+    )
+    our_database_session.refresh(found_source)
+
+    return _read_carousel(found_source, our_database_session)
+
+
+def delete_carousel_instruction(
+    carousel_id: uuid.UUID,
+    instruction_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Drop one instruction document. The remaining positions close up.
+
+    Readers cannot call this. An unknown id is 404. An id from another
+    carousel is 404 and that document stays. The remaining documents
+    become positions 0, 1, 2, and so on.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_document: CarouselInstruction = _instruction_or_raise(
+        found_source,
+        instruction_id,
+    )
+    _drop_instruction(found_source, found_document, our_database_session)
+    _close_instruction_positions(found_source, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Instruction could not be deleted.",
     )
     our_database_session.refresh(found_source)
 
@@ -1253,6 +1425,205 @@ def _research_link_position(link: CarouselResearchItem) -> int:
     position: int = link.position
 
     return position
+
+
+def _require_instruction_body(raw_body: str) -> str:
+    """Return the body unchanged, or 400 when it is over the cap.
+
+    The check runs before any write. A body at the cap is stored.
+    """
+
+    if len(raw_body) > INSTRUCTION_BODY_MAX_CHARACTERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INSTRUCTION_BODY_TOO_LONG_DETAIL,
+        )
+
+    return raw_body
+
+
+def _require_unique_instruction_ids(instruction_ids: list[uuid.UUID]) -> None:
+    """400 when one list names the same document twice. Nothing is written."""
+
+    seen_ids: set[uuid.UUID] = set()
+
+    for instruction_id in instruction_ids:
+
+        if instruction_id in seen_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=DUPLICATE_INSTRUCTION_DETAIL,
+            )
+
+        seen_ids.add(instruction_id)
+
+
+def _instruction_or_raise(
+    carousel: Carousel,
+    instruction_id: uuid.UUID,
+) -> CarouselInstruction:
+    """Return a document on this carousel, or 404.
+
+    An unknown id and an id from another carousel are both 404.
+    """
+
+    found_document: CarouselInstruction | None = _instruction_on_carousel(
+        carousel,
+        instruction_id,
+    )
+
+    if found_document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=INSTRUCTION_NOT_FOUND_DETAIL,
+        )
+
+    return found_document
+
+
+def _instruction_on_carousel(
+    carousel: Carousel,
+    instruction_id: uuid.UUID,
+) -> CarouselInstruction | None:
+    """Return the document on this carousel, or null when it is not here."""
+
+    for document in list(carousel.instructions):
+
+        if document.id == instruction_id:
+
+            return document
+
+    return None
+
+
+def _instructions_for_reorder(
+    carousel: Carousel,
+    instruction_ids: list[uuid.UUID],
+) -> list[CarouselInstruction]:
+    """Return this carousel's documents in the requested order.
+
+    An id that is not on this carousel is 404. A list that skips one
+    of the stored documents is 400. Nothing is reordered until both
+    checks pass.
+    """
+
+    by_id: dict[uuid.UUID, CarouselInstruction] = {
+        document.id: document for document in list(carousel.instructions)
+    }
+    ordered_documents: list[CarouselInstruction] = []
+
+    for instruction_id in instruction_ids:
+        found_document: CarouselInstruction | None = by_id.get(instruction_id)
+
+        if found_document is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=INSTRUCTION_NOT_FOUND_DETAIL,
+            )
+
+        ordered_documents.append(found_document)
+
+    if len(ordered_documents) != len(by_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INSTRUCTION_LIST_INCOMPLETE_DETAIL,
+        )
+
+    return ordered_documents
+
+
+def _append_instruction(
+    carousel: Carousel,
+    body: str,
+    our_database_session: Session,
+) -> CarouselInstruction:
+    """Append one document at the next position. The caller commits."""
+
+    created_document: CarouselInstruction = CarouselInstruction(
+        id=new_row_id(),
+        carousel_id=carousel.id,
+        position=_next_instruction_position(carousel),
+        body=body,
+    )
+    created_document.carousel = carousel
+    our_database_session.add(created_document)
+
+    return created_document
+
+
+def _drop_instruction(
+    carousel: Carousel,
+    document: CarouselInstruction,
+    our_database_session: Session,
+) -> None:
+    """Remove one document from the carousel collection and the session."""
+
+    remaining_documents: list[CarouselInstruction] = [
+        stored
+        for stored in list(carousel.instructions)
+        if stored.id != document.id
+    ]
+    carousel.instructions = remaining_documents
+    our_database_session.delete(document)
+
+
+def _close_instruction_positions(carousel: Carousel, our_database_session: Session) -> None:
+    """Renumber the remaining documents in their current order, from zero."""
+
+    ordered_documents: list[CarouselInstruction] = sorted(
+        list(carousel.instructions),
+        key=_instruction_position,
+    )
+    _assign_instruction_positions(ordered_documents, our_database_session)
+
+
+def _assign_instruction_positions(
+    ordered_documents: list[CarouselInstruction],
+    our_database_session: Session,
+) -> None:
+    """Store ``ordered_documents`` as positions 0, 1, 2, and so on.
+
+    Positions are parked above the current maximum first so the unique
+    ``(carousel_id, position)`` constraint can move every row.
+    """
+
+    if len(ordered_documents) == 0:
+
+        return
+
+    parked_base: int = max(document.position for document in ordered_documents) + 1
+
+    for offset, document in enumerate(ordered_documents):
+        document.position = parked_base + offset
+
+    our_database_session.flush()
+
+    for position, document in enumerate(ordered_documents):
+        document.position = position
+
+
+def _instruction_position(document: CarouselInstruction) -> int:
+    """Return the sort key for an instruction document."""
+
+    position: int = document.position
+
+    return position
+
+
+def _next_instruction_position(carousel: Carousel) -> int:
+    """Return the next position at the end of the instruction list."""
+
+    positions: list[int] = [
+        document.position for document in list(carousel.instructions)
+    ]
+
+    if len(positions) == 0:
+
+        return 0
+
+    next_position: int = max(positions) + 1
+
+    return next_position
 
 
 def _next_research_position(carousel: Carousel) -> int:
