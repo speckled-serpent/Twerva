@@ -1,7 +1,10 @@
-"""Inspiration, rules, and drafted slide text.
+"""Instruction documents and drafted slide text.
 
-Generate writes a draft. Accept copies that draft onto the live text.
-Images are not part of this path.
+Generate writes a draft from the instruction documents, joined in
+position order and passed as inspiration with empty rules. The
+inspiration and rules columns stay, and guidance PATCH still writes
+them. Generate slide and Generate text ignore those columns. Accept
+copies the draft onto the live text. Images are not part of this path.
 """
 
 from __future__ import annotations
@@ -32,12 +35,13 @@ from app.api.v1.carousel_writes import (
 )
 from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
-from app.models.carousel import Carousel, Slide
+from app.models.carousel import Carousel, CarouselInstruction, Slide
 from app.models.enums import SlideTextStatus
 from app.models.ops_user import OpsUser
 from app.models.skeleton import Skeleton
 from app.settings import get_settings
 from app.carousels.editing import new_row_id
+from app.carousels.instructions import instruction_prompt_text
 from app.carousels.text_generation import (
     DraftedSlideText,
     TextElementPrompt,
@@ -284,7 +288,12 @@ def _draft_or_http(
     skeleton: Skeleton,
     slide_name: str | None,
 ) -> DraftedSlideText:
-    """Draft text for every skeleton text element. A failure writes nothing."""
+    """Draft text for every skeleton text element. A failure writes nothing.
+
+    Instruction documents are loaded in position order. Blank bodies
+    are dropped, and the rest are one inspiration string. Rules are
+    empty. The inspiration and rules columns are not read.
+    """
 
     prompts: list[TextElementPrompt] = _text_prompts(skeleton)
 
@@ -294,10 +303,14 @@ def _draft_or_http(
             detail=NO_TEXT_ELEMENTS_DETAIL,
         )
 
+    inspiration: str = instruction_prompt_text(
+        _instruction_bodies_in_position_order(carousel),
+    )
+
     try:
         drafted_text: DraftedSlideText = provider.draft_slide_text(
-            carousel.inspiration or "",
-            carousel.rules or "",
+            inspiration,
+            "",
             slide_name,
             prompts,
         )
@@ -308,6 +321,26 @@ def _draft_or_http(
         ) from generation_error
 
     return drafted_text
+
+
+def _instruction_bodies_in_position_order(carousel: Carousel) -> list[str]:
+    """Return instruction bodies from position 0 upward."""
+
+    ordered_documents: list[CarouselInstruction] = sorted(
+        list(carousel.instructions),
+        key=_instruction_position,
+    )
+    bodies: list[str] = [document.body for document in ordered_documents]
+
+    return bodies
+
+
+def _instruction_position(document: CarouselInstruction) -> int:
+    """Return the sort key for an instruction document."""
+
+    position: int = document.position
+
+    return position
 
 
 def _text_prompts(skeleton: Skeleton) -> list[TextElementPrompt]:

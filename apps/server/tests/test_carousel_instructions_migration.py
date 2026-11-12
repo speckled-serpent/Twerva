@@ -319,7 +319,7 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
         self.assertIn(BOTH_CAROUSEL_ID, self._carousel_ids())
 
     def _assert_generate_still_reads_the_columns(self) -> None:
-        """Generate slide and Generate text draft from inspiration and rules."""
+        """Generate drafts from the copied document. The columns still read back."""
 
         previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
         os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
@@ -331,7 +331,9 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
             expire_on_commit=False,
         )
         session: Session = session_factory()
-        expected_draft: str = f"{TEXT_ELEMENT_NAME}. {BOTH_INSPIRATION}. {BOTH_RULES}"
+        copied_body: str = _copied_instruction_body(BOTH_INSPIRATION, BOTH_RULES).strip()
+        expected_draft: str = f"{TEXT_ELEMENT_NAME}. {copied_body}"
+        expected_name: str = " ".join(copied_body.split())[:200]
         documents_before: dict[str, list[InstructionSnapshot]] = self._instruction_rows()
 
         try:
@@ -358,17 +360,18 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
 
         guidance: CarouselSnapshot = self._carousel_rows()[BOTH_SLUG]
 
-        self.assertEqual(created.name, BOTH_INSPIRATION)
+        self.assertEqual(created.name, expected_name)
         self.assertEqual(created.text_status, SlideTextStatus.DRAFT)
         self.assertEqual(created.texts[0].value, "")
         self.assertEqual(created.draft_texts[0].value, expected_draft)
-        self.assertNotIn("## Inspiration", created.draft_texts[0].value)
-        self.assertNotIn("## Rules", created.draft_texts[0].value)
+        self.assertIn("## Inspiration", created.draft_texts[0].value)
+        self.assertIn(BOTH_INSPIRATION, created.draft_texts[0].value)
+        self.assertIn(BOTH_RULES, created.draft_texts[0].value)
         self.assertEqual(drafted.name, SLIDE_NAME)
         self.assertEqual(drafted.text_status, SlideTextStatus.DRAFT)
         self.assertEqual(drafted.texts[0].value, "")
         self.assertEqual(drafted.draft_texts[0].value, expected_draft)
-        self.assertNotIn("## Inspiration", drafted.draft_texts[0].value)
+        self.assertIn("## Inspiration", drafted.draft_texts[0].value)
         self.assertEqual(guidance[0], BOTH_INSPIRATION)
         self.assertEqual(guidance[1], BOTH_RULES)
         self.assertEqual(self._instruction_rows(), documents_before)

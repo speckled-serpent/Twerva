@@ -700,8 +700,8 @@ class CarouselInstructionWriteTests(unittest.TestCase):
         self.assertIn(document_id, deleted_ids)
         self.assertIsNone(session.get(Carousel, created.id))
 
-    def test_generate_text_still_drafts_from_the_columns(self) -> None:
-        """An instruction write does not change the next Generate text draft."""
+    def test_generate_text_drafts_from_the_instruction_document(self) -> None:
+        """Generate text uses the document. A guidance PATCH does not change it."""
 
         previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
         os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
@@ -741,6 +741,15 @@ class CarouselInstructionWriteTests(unittest.TestCase):
                 session,
                 None,
             )
+            patch_source_guidance(
+                created.id,
+                CarouselGuidancePatchRequest(
+                    inspiration="A later column",
+                    rules="Another column",
+                ),
+                session,
+                None,
+            )
             drafted = generate_slide_text(created.id, harbor.id, session, None)
         finally:
             if previous_provider is None:
@@ -752,12 +761,13 @@ class CarouselInstructionWriteTests(unittest.TestCase):
 
         loaded: CarouselReadResponse = get_carousel(created.id, session)
 
-        self.assertEqual(drafted.draft_texts[0].value, "Title. Harbor fog. Keep it short")
-        self.assertNotIn("INSTRUCTION-ONLY", drafted.draft_texts[0].value)
+        self.assertEqual(drafted.draft_texts[0].value, "Title. INSTRUCTION-ONLY")
+        self.assertNotIn("A later column", drafted.draft_texts[0].value)
+        self.assertNotIn("Harbor fog", drafted.draft_texts[0].value)
         self.assertEqual(drafted.texts[0].value, "Fog on the water")
         self.assertEqual(len(loaded.slides), 1)
-        self.assertEqual(loaded.inspiration, "Harbor fog")
-        self.assertEqual(loaded.rules, "Keep it short")
+        self.assertEqual(loaded.inspiration, "A later column")
+        self.assertEqual(loaded.rules, "Another column")
         self.assertEqual(loaded.instructions[0].body, "INSTRUCTION-ONLY")
 
 

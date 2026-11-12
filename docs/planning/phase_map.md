@@ -377,7 +377,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
 ### Per-slide generate
 
-- [ ] **5.9 Read instruction documents from Generate slide and Generate text**
+- [x] **5.9 Read instruction documents from Generate slide and Generate text**
 
   Add `instruction_prompt_text` in `app/carousels/instructions.py`. It takes bodies in position order, drops any body that strips to empty, and joins the rest with a blank line. `_draft_or_http` loads `carousel.instructions` in that order and calls `draft_slide_text` with that string as `inspiration` and `""` as `rules`. `FakeTextGenerationProvider` and `OpenAITextGenerationProvider` keep their two arguments. Phase 6 should use this same join for the instructions button.
 
