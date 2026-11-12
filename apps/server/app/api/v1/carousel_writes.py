@@ -233,6 +233,7 @@ def create_carousel(
     )
     created_source.slides = []
     created_source.research_links = []
+    created_source.instructions = []
     our_database_session.add(created_source)
     commit_database_session_or_raise_conflict(
         our_database_session,

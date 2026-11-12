@@ -286,7 +286,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
 ### API
 
-- [ ] **5.2 Return instruction documents on the carousel detail**
+- [x] **5.2 Return instruction documents on the carousel detail**
 
   `CarouselReadResponse` gains `instructions`: `{id, position, body}` in position order, one entry per row. The list item stays without them, the same way research stays off `CarouselListItemResponse`. Serialize beside `_research_in_position_order` in `app/api/v1/carousels.py`. Readers can call the existing GET. `inspiration` and `rules` stay on the detail until task 5.10. This PR does not add write routes and does not change `steps`.
 

@@ -14,6 +14,7 @@ from app.api.v1.lookups import (
 )
 from app.api.v1.carousel_preview import register_source_preview_routes
 from app.api.v1.schemas import (
+    CarouselInstructionReadResponse,
     CarouselListItemResponse,
     CarouselReadResponse,
     CarouselResearchReadResponse,
@@ -30,7 +31,13 @@ from app.carousels.text_generation import (
 )
 from app.db import get_our_database_session
 from app.models.album import AlbumImage
-from app.models.carousel import Carousel, CarouselResearchItem, Slide, SlideElementText
+from app.models.carousel import (
+    Carousel,
+    CarouselInstruction,
+    CarouselResearchItem,
+    Slide,
+    SlideElementText,
+)
 from app.models.enums import SlideTextStatus
 from app.models.research_item import ResearchItem
 from app.models.skeleton import Skeleton
@@ -65,7 +72,10 @@ def carousels_list_statement() -> Select[tuple[Carousel]]:
 def list_carousels(
     our_database_session: Session = Depends(get_our_database_session),
 ) -> list[CarouselListItemResponse]:
-    """Return carousels. Readers may call this."""
+    """Return carousels. Readers may call this.
+
+    Instruction documents stay on the detail route.
+    """
 
     statement: Select[tuple[Carousel]] = carousels_list_statement()
     source_scalars = our_database_session.scalars(statement)
@@ -101,7 +111,8 @@ def get_carousel(
     """Return one carousel and its slides. A missing id is HTTP 404.
 
     Readers may call this. The response includes the stored generation
-    and open step, the attached research, and the derived step state.
+    and open step, the attached research, the instruction documents,
+    and the derived step state.
     """
 
     found_source: Carousel = fetch_carousel_by_id_or_raise(
@@ -123,7 +134,8 @@ def get_carousel(
 def serialize_carousel_list_item(carousel: Carousel) -> CarouselListItemResponse:
     """Return the list shape, with a count and no slide bodies.
 
-    Research and derived step state stay on the detail route.
+    Research, instruction documents, and derived step state stay on
+    the detail route.
     """
 
     list_item: CarouselListItemResponse = CarouselListItemResponse(
@@ -146,15 +158,18 @@ def serialize_carousel(
     carousel: Carousel,
     skeleton: Skeleton,
 ) -> CarouselReadResponse:
-    """Return one carousel with research, step state, and slides.
+    """Return one carousel with research, instructions, step state, and slides.
 
     Args:
-        carousel: The carousel row, with slides and research links loaded.
+        carousel: The carousel row, with slides, research links, and
+            instruction documents loaded.
         skeleton: That carousel's skeleton, with elements loaded.
 
     Returns:
         The detail response. ``editor_step`` is the stored open step.
         ``steps`` is derived from the skeleton, the album, and the slides.
+        ``instructions`` follows position. ``inspiration`` and ``rules``
+        stay on the response.
     """
 
     slide_responses: list[SlideReadResponse] = [
@@ -162,6 +177,9 @@ def serialize_carousel(
     ]
     research_responses: list[CarouselResearchReadResponse] = _research_in_position_order(
         carousel,
+    )
+    instruction_responses: list[CarouselInstructionReadResponse] = (
+        _instructions_in_position_order(carousel)
     )
     step_states: CarouselStepStates = carousel_step_states(
         skeleton,
@@ -182,11 +200,57 @@ def serialize_carousel(
         created_at=carousel.created_at,
         updated_at=carousel.updated_at,
         research=research_responses,
+        instructions=instruction_responses,
         steps=_steps_response(step_states),
         slides=slide_responses,
     )
 
     return source_read_response
+
+
+def _instructions_in_position_order(
+    carousel: Carousel,
+) -> list[CarouselInstructionReadResponse]:
+    """Return instruction documents in position order.
+
+    Args:
+        carousel: The carousel, with instruction documents loaded.
+
+    Returns:
+        One entry per row. ``id`` is the document.
+    """
+
+    ordered_documents: list[CarouselInstruction] = sorted(
+        list(carousel.instructions),
+        key=_instruction_position,
+    )
+    instruction_responses: list[CarouselInstructionReadResponse] = [
+        _serialize_instruction(document) for document in ordered_documents
+    ]
+
+    return instruction_responses
+
+
+def _instruction_position(document: CarouselInstruction) -> int:
+    """Return the sort key for an instruction document."""
+
+    position: int = document.position
+
+    return position
+
+
+def _serialize_instruction(
+    document: CarouselInstruction,
+) -> CarouselInstructionReadResponse:
+    """Return one instruction document."""
+
+    instruction_response: CarouselInstructionReadResponse = CarouselInstructionReadResponse(
+        id=document.id,
+        position=document.position,
+        body=document.body,
+    )
+
+    return instruction_response
 
 
 def _research_in_position_order(carousel: Carousel) -> list[CarouselResearchReadResponse]:

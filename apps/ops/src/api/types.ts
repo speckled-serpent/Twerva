@@ -592,6 +592,12 @@ export interface CarouselResearchReadResponse {
   position: number;
 }
 
+export interface CarouselInstructionReadResponse {
+  id: string;
+  position: number;
+  body: string;
+}
+
 export interface CarouselStepsResponse {
   basic: CarouselStepState;
   instructions: CarouselStepState;
@@ -627,6 +633,7 @@ export interface CarouselReadResponse {
   created_at: string;
   updated_at: string;
   research: CarouselResearchReadResponse[];
+  instructions: CarouselInstructionReadResponse[];
   steps: CarouselStepsResponse;
   slides: SlideReadResponse[];
 }

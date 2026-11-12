@@ -138,6 +138,9 @@ class CarouselReadApiTests(unittest.TestCase):
         self.assertEqual(response.generation_number, 1)
         self.assertEqual(response.editor_step, 3)
         self.assertEqual(response.research, [])
+        self.assertEqual(response.instructions, [])
+        self.assertEqual(response.inspiration, "")
+        self.assertEqual(response.rules, "")
         self.assertEqual(response.steps.basic, CarouselStepState.DONE)
         self.assertEqual(response.steps.instructions, CarouselStepState.LOCKED)
         self.assertEqual(response.steps.content, CarouselStepState.DONE)
@@ -183,6 +186,8 @@ class CarouselReadApiTests(unittest.TestCase):
         self.assertEqual(list_items[0].slide_count, 6)
         self.assertFalse(hasattr(list_items[0], "steps"))
         self.assertFalse(hasattr(list_items[0], "research"))
+        self.assertFalse(hasattr(list_items[0], "instructions"))
+        self.assertNotIn("instructions", list_items[0].model_dump())
         self.assertIsNone(statement.whereclause)
         self.assertIsNone(carousels_list_statement().whereclause)
 
@@ -256,6 +261,7 @@ class CarouselReadApiTests(unittest.TestCase):
         )
         self.assertNotIn("/carousels/resource", methods_by_path)
         self.assertNotIn("/carousels/{carousel_id}/resource", methods_by_path)
+        self.assertNotIn("/carousels/{carousel_id}/instructions", methods_by_path)
 
     def test_list_echoes_stored_generation_and_editor_step(self) -> None:
         """The list returns the stored numbers. It does not derive them."""
@@ -346,6 +352,7 @@ def _default_source_from_catalog() -> Carousel:
 
     carousel.slides = slides
     carousel.research_links = []
+    carousel.instructions = []
 
     return carousel
 

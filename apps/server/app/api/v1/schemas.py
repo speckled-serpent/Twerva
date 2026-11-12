@@ -1003,6 +1003,18 @@ class CarouselResearchReadResponse(BaseModel):
     position: int
 
 
+class CarouselInstructionReadResponse(BaseModel):
+    """One instruction document on a carousel, in position order.
+
+    ``id`` is the document row. ``position`` starts at zero. ``body`` is
+    the current text, including an empty string.
+    """
+
+    id: uuid.UUID
+    position: int
+    body: str
+
+
 class CarouselStepsResponse(BaseModel):
     """Derived step state. Not stored on the carousel.
 
@@ -1038,11 +1050,13 @@ class CarouselListItemResponse(BaseModel):
 
 
 class CarouselReadResponse(BaseModel):
-    """One carousel, its research, derived step state, and slides.
+    """One carousel, its research, instruction documents, and slides.
 
     ``editor_step`` is the stored open step. ``steps`` is derived and
     does not change that stored value. ``research`` is the attached
-    documents in position order.
+    research in position order. ``instructions`` is one entry per
+    document, in position order. ``inspiration`` and ``rules`` stay
+    on this response.
     """
 
     id: uuid.UUID
@@ -1058,6 +1072,7 @@ class CarouselReadResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     research: list[CarouselResearchReadResponse]
+    instructions: list[CarouselInstructionReadResponse]
     steps: CarouselStepsResponse
     slides: list[SlideReadResponse]
 
