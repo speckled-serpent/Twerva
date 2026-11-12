@@ -314,8 +314,8 @@ class CarouselEditorStepWriteTests(unittest.TestCase):
         self.assertEqual(raised.exception.detail, SLIDES_LOCKED_DETAIL)
         self.assertEqual(loaded.editor_step, 0)
 
-    def test_storing_instructions_leaves_inspiration_and_rules(self) -> None:
-        """Step 1 is stored. Inspiration and rules read back as they were."""
+    def test_storing_instructions_leaves_the_document(self) -> None:
+        """Step 1 is stored. The document body stays."""
 
         session: _MemoryCarouselSession = _MemoryCarouselSession()
         created: CarouselReadResponse = _create(session, "Harbor notes")
@@ -323,20 +323,16 @@ class CarouselEditorStepWriteTests(unittest.TestCase):
 
         self.assertIsNotNone(stored)
         assert stored is not None
-        stored.inspiration = "Harbor fog"
-        stored.rules = "Keep the caption short"
+        stored.instructions = [_instruction(stored.id, "Harbor fog")]
         before: CarouselReadResponse = get_carousel(created.id, session)
 
         loaded: CarouselReadResponse = _store_step(session, created.id, 1)
 
-        self.assertEqual(before.inspiration, "Harbor fog")
-        self.assertEqual(before.rules, "Keep the caption short")
-        self.assertEqual(loaded.inspiration, before.inspiration)
-        self.assertEqual(loaded.rules, before.rules)
+        self.assertEqual(before.instructions[0].body, "Harbor fog")
+        self.assertEqual(loaded.instructions[0].body, "Harbor fog")
         self.assertEqual(loaded.editor_step, 1)
-        self.assertEqual(loaded.steps.instructions, CarouselStepState.AVAILABLE)
-        self.assertEqual(stored.inspiration, "Harbor fog")
-        self.assertEqual(stored.rules, "Keep the caption short")
+        self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
+        self.assertEqual(stored.instructions[0].body, "Harbor fog")
 
     def test_instructions_can_be_stored_with_or_without_text(self) -> None:
         """An admin stores step 1 on an empty carousel and on one with text."""
@@ -359,8 +355,7 @@ class CarouselEditorStepWriteTests(unittest.TestCase):
         self.assertEqual(stored_empty.steps.instructions, CarouselStepState.AVAILABLE)
         self.assertEqual(stored_written.editor_step, 1)
         self.assertEqual(stored_written.steps.instructions, CarouselStepState.DONE)
-        self.assertEqual(stored_written.inspiration, "")
-        self.assertEqual(stored_written.rules, "")
+        self.assertEqual(stored_written.instructions[0].body, "Keep the quay.")
 
     def test_final_stays_refused_after_instructions_is_stored(self) -> None:
         """Step 1 is stored. Step 4 is 400 and the stored step stays."""

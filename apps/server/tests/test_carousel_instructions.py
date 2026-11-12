@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.api.v1.carousel_text import generate_slide_text, patch_source_guidance
+from app.api.v1.carousel_text import generate_slide_text
 from app.api.v1.carousel_writes import (
     create_carousel,
     create_slide,
@@ -28,7 +28,6 @@ from app.api.v1.carousels import get_carousel
 from app.api.v1.router import api_v1_router
 from app.api.v1.schemas import (
     CarouselCreateRequest,
-    CarouselGuidancePatchRequest,
     CarouselInstructionCreateRequest,
     CarouselInstructionOrderRequest,
     CarouselInstructionPatchRequest,
@@ -218,8 +217,6 @@ def _copied_carousel() -> tuple[Carousel, uuid.UUID]:
         skeleton_id=DEFAULT_ALBUM_SKELETON_ID,
         name="Copied guidance",
         slug="copied-guidance",
-        inspiration=COPIED_INSPIRATION,
-        rules=COPIED_RULES,
         generation_number=1,
         editor_step=3,
         created_at=now,
@@ -248,8 +245,6 @@ def _ordered_carousel() -> Carousel:
         skeleton_id=DEFAULT_ALBUM_SKELETON_ID,
         name="Two documents",
         slug="two-documents",
-        inspiration="",
-        rules="",
         generation_number=1,
         editor_step=0,
         created_at=now,
@@ -278,7 +273,7 @@ class CarouselInstructionReadTests(unittest.TestCase):
     """Detail includes the copied document. The list shape stays the same."""
 
     def test_a_copied_carousel_reloads_its_one_document_in_order(self) -> None:
-        """GET returns the copied body at position 0. The columns stay."""
+        """GET returns the copied body at position 0. The columns are gone."""
 
         carousel: Carousel
         document_id: uuid.UUID
@@ -299,8 +294,8 @@ class CarouselInstructionReadTests(unittest.TestCase):
             loaded.instructions[0].body,
             _copied_instruction_body(COPIED_INSPIRATION, COPIED_RULES),
         )
-        self.assertEqual(loaded.inspiration, COPIED_INSPIRATION)
-        self.assertEqual(loaded.rules, COPIED_RULES)
+        self.assertNotIn("inspiration", loaded.model_dump())
+        self.assertNotIn("rules", loaded.model_dump())
         self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
 
     def test_documents_reload_in_position_order(self) -> None:
@@ -319,7 +314,7 @@ class CarouselInstructionReadTests(unittest.TestCase):
         self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
 
     def test_default_reloads_an_empty_instruction_list(self) -> None:
-        """Default has no copied document. Inspiration and rules stay blank."""
+        """Default has no copied document and neither guidance column."""
 
         carousel: Carousel = _default_source_from_catalog()
         skeleton: Skeleton = _paper_skeleton()
@@ -330,8 +325,8 @@ class CarouselInstructionReadTests(unittest.TestCase):
 
         self.assertEqual(carousel.slug, DEFAULT_ALBUM_SLUG)
         self.assertEqual(loaded.instructions, [])
-        self.assertEqual(loaded.inspiration, "")
-        self.assertEqual(loaded.rules, "")
+        self.assertNotIn("inspiration", loaded.model_dump())
+        self.assertNotIn("rules", loaded.model_dump())
         self.assertEqual(loaded.editor_step, 3)
         self.assertEqual(loaded.steps.instructions, CarouselStepState.AVAILABLE)
 
@@ -425,15 +420,16 @@ class ReaderInstructionDetailTests(unittest.TestCase):
             instructions[0]["body"],
             _copied_instruction_body(COPIED_INSPIRATION, COPIED_RULES),
         )
-        self.assertEqual(detail["inspiration"], COPIED_INSPIRATION)
-        self.assertEqual(detail["rules"], COPIED_RULES)
+        self.assertNotIn("inspiration", detail)
+        self.assertNotIn("rules", detail)
+        self.assertIn("instructions", detail)
         self.assertEqual(detail["steps"]["instructions"], "done")  # type: ignore[index]
         self.assertEqual(default_detail["editor_step"], 3)
         self.assertEqual(default_detail["steps"]["instructions"], "available")  # type: ignore[index]
         self.assertEqual(default_detail["slug"], DEFAULT_ALBUM_SLUG)
         self.assertEqual(default_instructions, [])
-        self.assertEqual(default_detail["inspiration"], "")
-        self.assertEqual(default_detail["rules"], "")
+        self.assertNotIn("inspiration", default_detail)
+        self.assertNotIn("rules", default_detail)
         self.assertGreaterEqual(len(list_items), 1)
 
         for list_item in list_items:
@@ -441,6 +437,22 @@ class ReaderInstructionDetailTests(unittest.TestCase):
             self.assertNotIn("instructions", list_item)
             self.assertNotIn("research", list_item)
             self.assertNotIn("steps", list_item)
+
+    def test_guidance_patch_is_gone(self) -> None:
+        """PATCH guidance is not a route. The detail still has instructions."""
+
+        response = self.test_client.patch(
+            f"/api/v1/carousels/{self.copied.id}/guidance",
+            json={"inspiration": "Harbor", "rules": "Short"},
+        )
+        detail: dict[str, object] = self.test_client.get(
+            f"/api/v1/carousels/{self.copied.id}",
+        ).json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("instructions", detail)
+        self.assertNotIn("inspiration", detail)
+        self.assertNotIn("rules", detail)
 
     def test_a_reader_cannot_write_instructions(self) -> None:
         """POST, PATCH, PUT, and DELETE are 403. The stored document stays."""
@@ -475,19 +487,13 @@ class ReaderInstructionDetailTests(unittest.TestCase):
 
 
 class CarouselInstructionWriteTests(unittest.TestCase):
-    """Create, reorder, and delete documents. Guidance columns stay put."""
+    """Create, reorder, and delete documents. Slides stay empty."""
 
     def test_two_documents_round_trip_reorder_and_delete(self) -> None:
         """Order survives a reload. Delete closes the gap. Text marks the step done."""
 
         session: _MemoryCarouselSession = _MemoryCarouselSession()
         created: CarouselReadResponse = _create_carousel(session, "Harbor notes")
-        patch_source_guidance(
-            created.id,
-            CarouselGuidancePatchRequest(inspiration="Harbor fog", rules="Keep it short"),
-            session,
-            None,
-        )
         missing: CarouselReadResponse = post_carousel_instruction(
             created.id,
             CarouselInstructionCreateRequest(),
@@ -535,8 +541,8 @@ class CarouselInstructionWriteTests(unittest.TestCase):
             [(0, ""), (1, "Open with the quay."), (2, "Close on the tide.")],
         )
         self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
-        self.assertEqual(loaded.inspiration, "Harbor fog")
-        self.assertEqual(loaded.rules, "Keep it short")
+        self.assertNotIn("inspiration", loaded.model_dump())
+        self.assertNotIn("rules", loaded.model_dump())
         self.assertEqual(loaded.slides, [])
         self.assertEqual(
             [(item.position, item.body) for item in reversed_order.instructions],
@@ -550,8 +556,8 @@ class CarouselInstructionWriteTests(unittest.TestCase):
             [(item.position, item.body) for item in removed.instructions],
             [(0, "Close on the tide."), (1, "Open with the quay.")],
         )
-        self.assertEqual(removed.inspiration, "Harbor fog")
-        self.assertEqual(removed.rules, "Keep it short")
+        self.assertNotIn("inspiration", removed.model_dump())
+        self.assertNotIn("rules", removed.model_dump())
 
     def test_duplicate_unknown_and_other_carousel_ids_write_nothing(self) -> None:
         """A duplicate id is 400. An id from elsewhere is 404. The order stays."""
@@ -701,7 +707,7 @@ class CarouselInstructionWriteTests(unittest.TestCase):
         self.assertIsNone(session.get(Carousel, created.id))
 
     def test_generate_text_drafts_from_the_instruction_document(self) -> None:
-        """Generate text uses the document. A guidance PATCH does not change it."""
+        """Generate text uses the document. Guidance PATCH is not a route."""
 
         previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
         os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
@@ -712,15 +718,6 @@ class CarouselInstructionWriteTests(unittest.TestCase):
 
         try:
             created: CarouselReadResponse = _create_carousel(session, "Harbor notes")
-            patch_source_guidance(
-                created.id,
-                CarouselGuidancePatchRequest(
-                    inspiration="Harbor fog",
-                    rules="Keep it short",
-                ),
-                session,
-                None,
-            )
             harbor = create_slide(
                 created.id,
                 SlideWriteRequest(
@@ -741,15 +738,6 @@ class CarouselInstructionWriteTests(unittest.TestCase):
                 session,
                 None,
             )
-            patch_source_guidance(
-                created.id,
-                CarouselGuidancePatchRequest(
-                    inspiration="A later column",
-                    rules="Another column",
-                ),
-                session,
-                None,
-            )
             drafted = generate_slide_text(created.id, harbor.id, session, None)
         finally:
             if previous_provider is None:
@@ -762,12 +750,10 @@ class CarouselInstructionWriteTests(unittest.TestCase):
         loaded: CarouselReadResponse = get_carousel(created.id, session)
 
         self.assertEqual(drafted.draft_texts[0].value, "Title. INSTRUCTION-ONLY")
-        self.assertNotIn("A later column", drafted.draft_texts[0].value)
-        self.assertNotIn("Harbor fog", drafted.draft_texts[0].value)
         self.assertEqual(drafted.texts[0].value, "Fog on the water")
         self.assertEqual(len(loaded.slides), 1)
-        self.assertEqual(loaded.inspiration, "A later column")
-        self.assertEqual(loaded.rules, "Another column")
+        self.assertNotIn("inspiration", loaded.model_dump())
+        self.assertNotIn("rules", loaded.model_dump())
         self.assertEqual(loaded.instructions[0].body, "INSTRUCTION-ONLY")
 
 

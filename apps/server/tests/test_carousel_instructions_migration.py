@@ -26,6 +26,8 @@ SERVER_ROOT: Path = Path(__file__).resolve().parents[1]
 ADMIN_DATABASE_URL: str = "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/postgres"
 CONTENT_REVISION: str = "carousel_editor_step_content"
 INSTRUCTIONS_REVISION: str = "carousel_instructions"
+DROP_GUIDANCE_REVISION: str = "carousel_instructions_drop_guidance"
+EDITOR_STEP_INSTRUCTIONS_REVISION: str = "carousel_editor_step_instructions"
 SKELETON_ID: str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01"
 ALBUM_ID: str = "cccccccc-cccc-4ccc-8ccc-cccccccccc01"
 BOTH_CAROUSEL_ID: str = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa01"
@@ -182,6 +184,35 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
         self._assert_table_checks()
         self._assert_cascade_drops_the_document()
         self._assert_generate_still_reads_the_columns()
+
+    def test_dropping_guidance_keeps_the_copied_documents(self) -> None:
+        """Upgrade from the copy keeps documents. Downgrade restores empty columns."""
+
+        self._upgrade(CONTENT_REVISION)
+        self._insert_existing_rows()
+        self._upgrade(INSTRUCTIONS_REVISION)
+        documents_after_copy: dict[str, list[InstructionSnapshot]] = self._instruction_rows()
+        identity_after_copy: dict[str, tuple[str | None, int, int]] = (
+            self._carousel_identity_rows()
+        )
+
+        self._upgrade(DROP_GUIDANCE_REVISION)
+
+        self.assertNotIn("inspiration", self._carousel_column_names())
+        self.assertNotIn("rules", self._carousel_column_names())
+        self.assertEqual(self._instruction_rows(), documents_after_copy)
+        self.assertNotIn(DEFAULT_ALBUM_SLUG, self._instruction_rows())
+        self.assertEqual(self._carousel_identity_rows(), identity_after_copy)
+        self.assertIsNotNone(self._regclass("carousel_instructions"))
+        self._assert_generate_drafts_from_the_copied_document()
+        self.assertEqual(self._instruction_rows(), documents_after_copy)
+
+        self._downgrade(EDITOR_STEP_INSTRUCTIONS_REVISION)
+
+        self.assertEqual(self._instruction_rows(), documents_after_copy)
+        self.assertNotIn(DEFAULT_ALBUM_SLUG, self._instruction_rows())
+        self.assertEqual(self._carousel_identity_rows(), identity_after_copy)
+        self._assert_restored_guidance_columns_are_empty()
 
     def _assert_copied_documents(
         self,
@@ -375,6 +406,64 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
         self.assertEqual(guidance[0], BOTH_INSPIRATION)
         self.assertEqual(guidance[1], BOTH_RULES)
         self.assertEqual(self._instruction_rows(), documents_before)
+
+    def _assert_generate_drafts_from_the_copied_document(self) -> None:
+        """Generate text after the drop still drafts from the copied body."""
+
+        previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
+        os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
+        clear_settings_cache()
+        session_factory: sessionmaker[Session] = sessionmaker(
+            bind=self.database_engine,
+            autoflush=False,
+            autocommit=False,
+            expire_on_commit=False,
+        )
+        session: Session = session_factory()
+        copied_body: str = _copied_instruction_body(BOTH_INSPIRATION, BOTH_RULES).strip()
+        expected_draft: str = f"{TEXT_ELEMENT_NAME}. {copied_body}"
+
+        try:
+            drafted: SlideReadResponse = generate_slide_text(
+                uuid.UUID(BOTH_CAROUSEL_ID),
+                uuid.UUID(SLIDE_ID),
+                session,
+                None,
+            )
+        finally:
+            session.close()
+
+            if previous_provider is None:
+                os.environ.pop("TEXT_GENERATION_PROVIDER", None)
+            else:
+                os.environ["TEXT_GENERATION_PROVIDER"] = previous_provider
+
+            clear_settings_cache()
+
+        self.assertEqual(drafted.name, SLIDE_NAME)
+        self.assertEqual(drafted.text_status, SlideTextStatus.DRAFT)
+        self.assertEqual(drafted.texts[0].value, "")
+        self.assertEqual(drafted.draft_texts[0].value, expected_draft)
+        self.assertIn(BOTH_INSPIRATION, drafted.draft_texts[0].value)
+        self.assertIn(BOTH_RULES, drafted.draft_texts[0].value)
+
+    def _assert_restored_guidance_columns_are_empty(self) -> None:
+        """Downgrade adds both columns back empty, not null, default blank."""
+
+        self.assertIn("inspiration", self._carousel_column_names())
+        self.assertIn("rules", self._carousel_column_names())
+        restored: dict[str, tuple[str, str]] = self._guidance_column_values()
+
+        for slug, column_values in restored.items():
+            self.assertEqual(column_values, ("", ""), slug)
+
+        inspiration_default: tuple[str, str] = self._carousel_column_default("inspiration")
+        rules_default: tuple[str, str] = self._carousel_column_default("rules")
+
+        self.assertEqual(inspiration_default[0], "NO")
+        self.assertEqual(rules_default[0], "NO")
+        self.assertIn("''", inspiration_default[1])
+        self.assertIn("''", rules_default[1])
 
     def _insert_existing_rows(self) -> None:
         """Add guidance that should copy, guidance that should not, and a slide."""
@@ -760,6 +849,63 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
             documents[slug_text] = current
 
         return documents
+
+    def _carousel_identity_rows(self) -> dict[str, tuple[str | None, int, int]]:
+        """Return album, editor step, and generation by slug."""
+
+        with self.database_engine.connect() as connection:
+            rows: dict[str, tuple[str | None, int, int]] = {
+                str(row[0]): (
+                    None if row[1] is None else str(row[1]),
+                    int(row[2]),
+                    int(row[3]),
+                )
+                for row in connection.execute(
+                    text(
+                        """
+                        SELECT slug, album_id::text, editor_step, generation_number
+                        FROM carousels
+                        """
+                    ),
+                ).fetchall()
+            }
+
+        return rows
+
+    def _guidance_column_values(self) -> dict[str, tuple[str, str]]:
+        """Return inspiration and rules by slug. The columns must exist."""
+
+        with self.database_engine.connect() as connection:
+            values: dict[str, tuple[str, str]] = {
+                str(row[0]): (str(row[1]), str(row[2]))
+                for row in connection.execute(
+                    text("SELECT slug, inspiration, rules FROM carousels"),
+                ).fetchall()
+            }
+
+        return values
+
+    def _carousel_column_default(self, column_name: str) -> tuple[str, str]:
+        """Return nullability and the server default for one carousel column."""
+
+        with self.database_engine.connect() as connection:
+            row = connection.execute(
+                text(
+                    """
+                    SELECT is_nullable, column_default
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'carousels'
+                      AND column_name = :column_name
+                    """
+                ),
+                {"column_name": column_name},
+            ).one()
+
+        is_nullable: str = str(row[0])
+        column_default: str = "" if row[1] is None else str(row[1])
+
+        return is_nullable, column_default
 
     def _carousel_column_names(self) -> set[str]:
         """Return column names on ``carousels``."""

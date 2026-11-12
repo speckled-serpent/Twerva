@@ -526,7 +526,7 @@ class DomainEnumTests(unittest.TestCase):
         self.assertNotIn("research_id", CarouselResearchItem.__table__.columns.keys())
 
     def test_carousel_instruction_documents(self) -> None:
-        """A document is a body and a position. The guidance columns stay."""
+        """A document is a body and a position. The draft comes from it."""
 
         column_names: set[str] = set(CarouselInstruction.__table__.columns.keys())
         carousel_columns: set[str] = set(Carousel.__table__.columns.keys())
@@ -560,8 +560,8 @@ class DomainEnumTests(unittest.TestCase):
         })
         self.assertNotIn("title", column_names)
         self.assertNotIn("version", column_names)
-        self.assertIn("inspiration", carousel_columns)
-        self.assertIn("rules", carousel_columns)
+        self.assertNotIn("inspiration", carousel_columns)
+        self.assertNotIn("rules", carousel_columns)
         self.assertFalse(body_column.nullable)
         self.assertFalse(position_column.nullable)
         self.assertEqual(body_column.server_default.arg, "")

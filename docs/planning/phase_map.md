@@ -385,7 +385,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
   Acceptance: a carousel whose only text is the copied document drafts from that body, and a guidance PATCH that changes the columns does not change the next draft. A new carousel with no documents still drafts from two empty strings. Generate slide still creates one draft slide, and Generate text still leaves the live text in place until Accept.
 
-- [ ] **5.10 Drop inspiration and rules**
+- [x] **5.10 Drop inspiration and rules**
 
   Alembic revision `carousel_instructions_drop_guidance`, down-revision `carousel_editor_step_instructions`. Drop `carousels.inspiration` and `carousels.rules`. Downgrade adds both columns back as text, not null, server default `""`, and leaves them empty. It does not parse documents back into the columns. Instruction rows stay through both directions.
 

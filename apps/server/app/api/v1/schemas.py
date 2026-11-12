@@ -1056,8 +1056,7 @@ class CarouselReadResponse(BaseModel):
     ``editor_step`` is the stored open step. ``steps`` is derived and
     does not change that stored value. ``research`` is the attached
     research in position order. ``instructions`` is one entry per
-    document, in position order. ``inspiration`` and ``rules`` stay
-    on this response.
+    document, in position order.
     """
 
     id: uuid.UUID
@@ -1067,8 +1066,6 @@ class CarouselReadResponse(BaseModel):
     album_id: uuid.UUID | None = None
     generation_number: int
     editor_step: int
-    inspiration: str
-    rules: str
     live_slide_count: int
     created_at: datetime
     updated_at: datetime
@@ -1076,15 +1073,6 @@ class CarouselReadResponse(BaseModel):
     instructions: list[CarouselInstructionReadResponse]
     steps: CarouselStepsResponse
     slides: list[SlideReadResponse]
-
-
-class CarouselGuidancePatchRequest(BaseModel):
-    """Inspiration and rules for drafted slide text."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    inspiration: str = ""
-    rules: str = ""
 
 
 class TextGenerationStatusResponse(BaseModel):

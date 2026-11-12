@@ -5,7 +5,7 @@ chosen at create. Create stores generation 1 and opens on Basic.
 A slide image is an album image that already exists. Storing one
 does not create an album. Research is an ordered list and does not
 gate a step. Instruction documents are the carousel's own rows.
-Writing one does not change inspiration, rules, or slides.
+Writing one does not change slides.
 """
 
 from __future__ import annotations
@@ -265,8 +265,6 @@ def create_carousel(
         skeleton_id=source_create_request.skeleton_id,
         name=album_name,
         slug=album_slug,
-        inspiration="",
-        rules="",
         generation_number=CAROUSEL_GENERATION_NUMBER_DEFAULT,
         editor_step=CAROUSEL_CREATE_EDITOR_STEP,
     )
@@ -591,9 +589,9 @@ def post_carousel_instruction(
     """Append one instruction document at the next position.
 
     Readers cannot call this. A missing body stores an empty string.
-    A body over the cap is 400 and nothing is written. Inspiration,
-    rules, and slides stay as they were. The response lists documents
-    in position order, with steps from the stored text.
+    A body over the cap is 400 and nothing is written. Slides stay as
+    they were. The response lists documents in position order, with
+    steps from the stored text.
     """
 
     _ = current_ops_operator
@@ -623,8 +621,7 @@ def patch_carousel_instruction(
 
     Readers cannot call this. An unknown id is 404. An id from another
     carousel is 404 and that carousel stays unchanged. A body over the
-    cap is 400 and the stored body stays. Inspiration, rules, and slides
-    are not written.
+    cap is 400 and the stored body stays. Slides are not written.
     """
 
     _ = current_ops_operator

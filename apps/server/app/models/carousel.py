@@ -3,18 +3,15 @@
 A slide keeps its id, has a name, and points at most one album image.
 Its text is one value per text element on that skeleton. Generated text
 stays a draft until a person accepts it. ``slide_exclusions`` stores the
-other slide ids it cannot be shown with. The carousel stores inspiration
-and rules for that draft, and may point at the album its images came
-from. ``generation_number`` starts at 1. ``editor_step`` remembers Basic,
-Instructions, Content, or Slides. A carousel created through the API
-opens on Basic.
+other slide ids it cannot be shown with. The carousel may point at
+the album its images came from. ``generation_number`` starts at 1.
+``editor_step`` remembers Basic, Instructions, Content, or Slides. A
+carousel created through the API opens on Basic.
 Rows that already exist keep their stored step. Research attaches as
 an ordered list in ``carousel_research_items``. There is no
 ``research_id`` column. Instruction documents live in
 ``carousel_instructions``: the current body and a position, with no
-title and no version. The copy revision fills one document from the
-stored inspiration and rules when either field has text. Those two
-columns stay and still steer the draft.
+title and no version. Drafted slide text comes from those documents.
 
 Skeletons still store a concrete image path. They do not reference
 these rows.
@@ -68,7 +65,7 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     is attached.
     Default stays on Slides. The skeleton stays the one chosen at create.
     ``instructions`` is the current documents, ordered by position.
-    Inspiration and rules stay on this row.
+    Drafted slide text comes from those documents.
     """
 
     __tablename__ = "carousels"
@@ -87,18 +84,6 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(Text, nullable=False)
     slug: Mapped[str] = mapped_column(Text, nullable=False)
-    inspiration: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        default="",
-        server_default="",
-    )
-    rules: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        default="",
-        server_default="",
-    )
     album_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("albums.id", ondelete="SET NULL"),

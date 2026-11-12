@@ -8,7 +8,6 @@ from fastapi import HTTPException
 
 from app.api.v1.schemas import (
     CarouselCreateRequest,
-    CarouselGuidancePatchRequest,
     SlideAcceptTextRequest,
     SlideElementTextWrite,
     SlideWriteRequest,
@@ -17,7 +16,6 @@ from app.api.v1.carousel_text import (
     accept_slide_text,
     generate_source_slide,
     generate_slide_text,
-    patch_source_guidance,
 )
 from app.api.v1.carousel_writes import create_slide
 from app.models.carousel import Carousel, CarouselInstruction, Slide
@@ -62,15 +60,6 @@ class SlideTextDraftTests(unittest.TestCase):
         text_element: SkeletonElement = _title_element(session.skeleton.id)
         session.skeleton.elements = [text_element]
         created = create_source(session)
-        patch_source_guidance(
-            created.id,
-            CarouselGuidancePatchRequest(
-                inspiration="Changed fog",
-                rules="Changed rules",
-            ),
-            session,
-            None,
-        )
         _store_instructions(session, created.id, ["Harbor fog", "Keep it short"])
         harbor = create_slide(
             created.id,
@@ -99,8 +88,6 @@ class SlideTextDraftTests(unittest.TestCase):
             drafted.draft_texts[0].value,
             "Title. Harbor fog\n\nKeep it short",
         )
-        self.assertNotIn("Changed fog", drafted.draft_texts[0].value)
-        self.assertNotIn("Changed rules", drafted.draft_texts[0].value)
         self.assertEqual(drafted.name, "Harbor")
         self.assertEqual(live_slides(list(carousel.slides)), [])
         self.assertFalse(slide_counts_as_live(stored_slide))
@@ -124,8 +111,6 @@ class SlideTextDraftTests(unittest.TestCase):
         self.assertEqual(accepted.text_status, SlideTextStatus.LIVE)
         self.assertEqual(accepted.draft_texts, [])
         self.assertEqual(accepted.texts[0].value, "Title. Harbor fog\n\nKeep it short")
-        self.assertEqual(carousel.inspiration, "Changed fog")
-        self.assertEqual(carousel.rules, "Changed rules")
         self.assertEqual(len(live_slides(list(carousel.slides))), 1)
 
     def test_generating_a_slide_leaves_the_image_empty(self) -> None:
@@ -135,12 +120,6 @@ class SlideTextDraftTests(unittest.TestCase):
         text_element: SkeletonElement = _title_element(session.skeleton.id)
         session.skeleton.elements = [text_element]
         created = create_source(session)
-        patch_source_guidance(
-            created.id,
-            CarouselGuidancePatchRequest(inspiration="Not the document", rules="Ignored"),
-            session,
-            None,
-        )
         _store_instructions(session, created.id, ["Phase four harbor"])
         drafted = generate_source_slide(created.id, session, None)
 
@@ -149,7 +128,6 @@ class SlideTextDraftTests(unittest.TestCase):
         self.assertEqual(drafted.images, [])
         self.assertEqual(drafted.texts[0].value, "")
         self.assertEqual(drafted.draft_texts[0].value, "Title. Phase four harbor")
-        self.assertNotIn("Not the document", drafted.draft_texts[0].value)
         self.assertEqual(len(session.get(Carousel, created.id).slides), 1)
         stored_source: Carousel | None = session.get(Carousel, created.id)
 
@@ -307,23 +285,14 @@ class SlideTextDraftTests(unittest.TestCase):
         self.assertEqual(len(drafted.images), 0)
         self.assertEqual(drafted.text_status, SlideTextStatus.DRAFT)
 
-    def test_a_guidance_patch_does_not_change_the_next_draft(self) -> None:
-        """The copied document is the draft. Changing the columns does not."""
+    def test_the_copied_document_is_the_draft(self) -> None:
+        """Generate text uses the stored document and leaves the live text."""
 
         session: _MemoryCarouselSession = _MemoryCarouselSession()
         text_element: SkeletonElement = _title_element(session.skeleton.id)
         session.skeleton.elements = [text_element]
         created = create_source(session)
         _store_instructions(session, created.id, ["Copied quay notes"])
-        patch_source_guidance(
-            created.id,
-            CarouselGuidancePatchRequest(
-                inspiration="A later column",
-                rules="Another column",
-            ),
-            session,
-            None,
-        )
         harbor = create_slide(
             created.id,
             SlideWriteRequest(
@@ -346,9 +315,6 @@ class SlideTextDraftTests(unittest.TestCase):
         self.assertEqual(drafted.name, "Harbor")
         self.assertEqual(drafted.texts[0].value, "Fog on the water")
         self.assertEqual(drafted.draft_texts[0].value, "Title. Copied quay notes")
-        self.assertNotIn("A later column", drafted.draft_texts[0].value)
-        self.assertEqual(carousel.inspiration, "A later column")
-        self.assertEqual(carousel.rules, "Another column")
         self.assertEqual(len(carousel.slides), 1)
 
     def _restore(self, name: str, previous: str | None) -> None:

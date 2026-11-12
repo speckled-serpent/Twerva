@@ -58,7 +58,6 @@ import type {
   CarouselResearchAttachRequest,
   CarouselResearchOrderRequest,
   CarouselCreateRequest,
-  CarouselGuidancePatchRequest,
   TextGenerationStatusResponse,
   SlideAcceptTextRequest,
   SourceItemCreateRequest,
@@ -498,18 +497,6 @@ export async function fetchTextGenerationStatus(): Promise<TextGenerationStatusR
   return requestJson<TextGenerationStatusResponse>(
     "GET",
     "/api/v1/carousels/text-generation",
-  );
-}
-
-export async function patchCarouselGuidance(
-  sourceId: string,
-  guidanceRequest: CarouselGuidancePatchRequest,
-): Promise<CarouselReadResponse> {
-
-  return requestJson<CarouselReadResponse>(
-    "PATCH",
-    `/api/v1/carousels/${sourceId}/guidance`,
-    guidanceRequest,
   );
 }
 

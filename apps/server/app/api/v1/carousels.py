@@ -172,8 +172,7 @@ def serialize_carousel(
     Returns:
         The detail response. ``editor_step`` is the stored open step.
         ``steps`` is derived from the skeleton, the album, and the slides.
-        ``instructions`` follows position. ``inspiration`` and ``rules``
-        stay on the response.
+        ``instructions`` follows position.
     """
 
     slide_responses: list[SlideReadResponse] = [
@@ -202,8 +201,6 @@ def serialize_carousel(
         album_id=carousel.album_id,
         generation_number=carousel.generation_number,
         editor_step=carousel.editor_step,
-        inspiration=carousel.inspiration or "",
-        rules=carousel.rules or "",
         live_slide_count=len(live_slides(list(carousel.slides))),
         created_at=carousel.created_at,
         updated_at=carousel.updated_at,

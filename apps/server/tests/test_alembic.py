@@ -36,6 +36,9 @@ CAROUSEL_STEPS_REVISION_ID: str = "carousel_steps"
 CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID: str = "carousel_editor_step_content"
 CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID: str = "carousel_editor_step_instructions"
 CAROUSEL_INSTRUCTIONS_REVISION_ID: str = "carousel_instructions"
+CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID: str = (
+    "carousel_instructions_drop_guidance"
+)
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -73,6 +76,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID}.py",
                 f"{CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID}.py",
                 f"{CAROUSEL_INSTRUCTIONS_REVISION_ID}.py",
+                f"{CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID}.py",
                 f"{CAROUSEL_STEPS_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
@@ -954,6 +958,37 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("WHERE editor_step = :instructions_step", revision_source)
         self.assertIn('op.create_check_constraint(\n        "editor_step",', revision_source)
         self.assertNotIn("op.drop_column(", revision_source)
+
+    def test_drop_guidance_follows_the_instructions_step(self) -> None:
+        """The two columns go. Downgrade adds them back empty."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID,
+        )
+        self.assertEqual(len(CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID), 35)
+        self.assertLessEqual(len(CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID), 64)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID,
+        )
+        self.assertIn('op.drop_column("carousels", "inspiration")', revision_source)
+        self.assertIn('op.drop_column("carousels", "rules")', revision_source)
+        self.assertIn('sa.Column("inspiration"', revision_source)
+        self.assertIn('sa.Column("rules"', revision_source)
+        self.assertIn('server_default=""', revision_source)
+        self.assertIn("nullable=False", revision_source)
+        self.assertNotIn("INSERT INTO", revision_source)
+        self.assertNotIn("op.drop_table(", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

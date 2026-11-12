@@ -310,7 +310,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
         self.assertEqual(exclusion_tables, 0)
 
     def test_existing_units_stay_live_and_downgrade_drops_drafts(self) -> None:
-        """Inspiration defaults empty. Existing units stay live. Downgrade drops both."""
+        """Head has no inspiration column. Existing units stay live. Downgrade drops the old one."""
 
         self._upgrade("head")
         source_id: str = "abababab-abab-4aba-8aba-abababababab"
@@ -348,9 +348,16 @@ class SourceThemeMigrationTests(unittest.TestCase):
                 ),
                 {"unit_id": unit_id, "source_id": source_id},
             )
-            inspiration: str = str(
+            inspiration_columns_at_head: int = int(
                 connection.execute(
-                    text("SELECT inspiration FROM carousels WHERE slug = 'guidance'"),
+                    text(
+                        """
+                        SELECT COUNT(*)
+                        FROM information_schema.columns
+                        WHERE table_name = 'carousels'
+                          AND column_name = 'inspiration'
+                        """
+                    ),
                 ).scalar_one(),
             )
             text_status: str = str(
@@ -359,7 +366,7 @@ class SourceThemeMigrationTests(unittest.TestCase):
                 ).scalar_one(),
             )
 
-        self.assertEqual(inspiration, "")
+        self.assertEqual(inspiration_columns_at_head, 0)
         self.assertEqual(text_status, "live")
         self._downgrade("unit_exclusions")
 

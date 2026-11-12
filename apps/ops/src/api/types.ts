@@ -627,8 +627,6 @@ export interface CarouselReadResponse {
   slug: string;
   generation_number: number;
   editor_step: number;
-  inspiration: string;
-  rules: string;
   live_slide_count: number;
   created_at: string;
   updated_at: string;
@@ -717,11 +715,6 @@ export interface ResearchCreateRequest {
 export interface ResearchPatchRequest {
   title: string;
   body: string;
-}
-
-export interface CarouselGuidancePatchRequest {
-  inspiration: string;
-  rules: string;
 }
 
 export interface TextGenerationStatusResponse {

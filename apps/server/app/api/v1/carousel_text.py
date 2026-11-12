@@ -1,9 +1,7 @@
 """Instruction documents and drafted slide text.
 
 Generate writes a draft from the instruction documents, joined in
-position order and passed as inspiration with empty rules. The
-inspiration and rules columns stay, and guidance PATCH still writes
-them. Generate slide and Generate text ignore those columns. Accept
+position order and passed as inspiration with empty rules. Accept
 copies the draft onto the live text. Images are not part of this path.
 """
 
@@ -20,8 +18,6 @@ from app.api.v1.lookups import (
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
-    CarouselGuidancePatchRequest,
-    CarouselReadResponse,
     SlideAcceptTextRequest,
     SlideReadResponse,
 )
@@ -56,21 +52,11 @@ from app.carousels.slide_skeleton import skeleton_text_elements
 
 NO_TEXT_ELEMENTS_DETAIL: str = "This skeleton has no text elements to draft."
 ACCEPT_WITHOUT_DRAFT_DETAIL: str = "This slide has no draft to accept."
-GUIDANCE_TOO_LONG_DETAIL: str = (
-    "Inspiration and rules must be 8000 characters or fewer."
-)
-MAX_GUIDANCE_LENGTH: int = 8000
 
 
 def register_source_text_routes(carousels_router: APIRouter) -> None:
-    """Attach guidance, generate, and accept routes."""
+    """Attach generate and accept routes."""
 
-    carousels_router.add_api_route(
-        "/{carousel_id}/guidance",
-        patch_source_guidance,
-        methods=["PATCH"],
-        response_model=CarouselReadResponse,
-    )
     carousels_router.add_api_route(
         "/{carousel_id}/slides/generate",
         generate_source_slide,
@@ -90,45 +76,6 @@ def register_source_text_routes(carousels_router: APIRouter) -> None:
         methods=["POST"],
         response_model=SlideReadResponse,
     )
-
-
-def patch_source_guidance(
-    carousel_id: uuid.UUID,
-    guidance_request: CarouselGuidancePatchRequest,
-    our_database_session: Session = Depends(get_our_database_session),
-    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
-) -> CarouselReadResponse:
-    """Save inspiration and rules. A too-long value writes nothing."""
-
-    _ = current_ops_operator
-    found_source: Carousel = fetch_carousel_by_id_or_raise(
-        carousel_id,
-        our_database_session,
-    )
-    inspiration: str = guidance_request.inspiration
-    rules: str = guidance_request.rules
-
-    if len(inspiration) > MAX_GUIDANCE_LENGTH or len(rules) > MAX_GUIDANCE_LENGTH:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=GUIDANCE_TOO_LONG_DETAIL,
-        )
-
-    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
-        found_source.skeleton_id,
-        our_database_session,
-    )
-    found_source.inspiration = inspiration
-    found_source.rules = rules
-    commit_database_session_or_raise_conflict(
-        our_database_session,
-        conflict_detail="Inspiration could not be saved.",
-    )
-    our_database_session.refresh(found_source)
-
-    from app.api.v1.carousels import serialize_carousel
-
-    return serialize_carousel(found_source, found_skeleton)
 
 
 def generate_source_slide(
@@ -291,8 +238,8 @@ def _draft_or_http(
     """Draft text for every skeleton text element. A failure writes nothing.
 
     Instruction documents are loaded in position order. Blank bodies
-    are dropped, and the rest are one inspiration string. Rules are
-    empty. The inspiration and rules columns are not read.
+    are dropped, and the rest are one inspiration string. Rules passed
+    to the provider are empty.
     """
 
     prompts: list[TextElementPrompt] = _text_prompts(skeleton)
