@@ -314,7 +314,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
 ### Step shell
 
-- [ ] **5.5 Open the Instructions step**
+- [x] **5.5 Open the Instructions step**
 
   Enable step 1 in `OPENABLE_EDITOR_STEPS`. `carouselStepAccessibleName` and `carouselStepTitle` stop treating Instructions as a closed later phase. Remove `INSTRUCTIONS_CLOSED_DETAIL`. An available Instructions control is unmarked. A done one uses the existing done style (`--ops-success` through `is-done`). The current step stays `--ops-primary`. Update `apps/ops/carouselSteps.test.ts`.
 

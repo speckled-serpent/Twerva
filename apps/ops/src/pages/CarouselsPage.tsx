@@ -31,6 +31,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { CarouselBasicStep } from "./CarouselBasicStep";
 import { CarouselContentStep } from "./CarouselContentStep";
+import { CarouselInstructionsStep } from "./CarouselInstructionsStep";
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import type { AlbumEditorActions } from "./AlbumImagesEditor";
 import { CarouselGeneration, CarouselStepBar } from "./CarouselStepBar";
@@ -42,6 +43,7 @@ import {
 import {
   CAROUSEL_STEP_BASIC,
   CAROUSEL_STEP_CONTENT,
+  CAROUSEL_STEP_INSTRUCTIONS,
   CAROUSEL_STEP_SLIDES,
   carouselStepByIndex,
   displayedEditorStep,
@@ -639,6 +641,8 @@ function AlbumView({
   const [pendingSlideDelete, setPendingSlideDelete] = useState<SlideReadResponse | null>(null);
   const albumEditorActionsRef: { current: AlbumEditorActions | null } = useRef(null);
   const showsBasic: boolean = carousel !== null && displayStep === CAROUSEL_STEP_BASIC;
+  const showsInstructions: boolean = carousel !== null
+    && displayStep === CAROUSEL_STEP_INSTRUCTIONS;
   const showsContent: boolean = carousel !== null && displayStep === CAROUSEL_STEP_CONTENT;
   const showsSlides: boolean = carousel !== null && displayStep === CAROUSEL_STEP_SLIDES;
 
@@ -729,6 +733,7 @@ function AlbumView({
   };
 
   // Leaving Basic flushes the label. Leaving Content flushes album image edits.
+  // Instructions is read-only in this step, so it has nothing to flush.
   const handleStep = (editorStep: number): void => {
     void leaveAfterAutosave(
       flushOpenEdits,
@@ -805,6 +810,9 @@ function AlbumView({
                 void autosave.retry();
               }}
             />
+          ) : null}
+          {showsInstructions && carousel !== null ? (
+            <CarouselInstructionsStep carousel={carousel} />
           ) : null}
           {showsContent ? (
             <CarouselContentStep

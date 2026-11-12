@@ -1,6 +1,6 @@
 import type { CarouselStepState, CarouselStepsResponse } from "../api/types";
 
-/** Stored and displayed step numbers. Instructions and Final are never stored. */
+/** Stored and displayed step numbers. Final is never stored. */
 export const CAROUSEL_STEP_BASIC: number = 0;
 export const CAROUSEL_STEP_INSTRUCTIONS: number = 1;
 export const CAROUSEL_STEP_CONTENT: number = 2;
@@ -30,11 +30,13 @@ export const CAROUSEL_STEPS: readonly CarouselStepDefinition[] = [
 /**
  * Steps the operator can open in this phase.
  *
- * Basic is the label and the locked skeleton. Content chooses an album.
- * Slides is the editor. Instructions and Final stay closed.
+ * Basic is the label and the locked skeleton. Instructions shows the
+ * documents. Content chooses an album. Slides is the editor. Final
+ * stays closed.
  */
 export const OPENABLE_EDITOR_STEPS: readonly number[] = [
   CAROUSEL_STEP_BASIC,
+  CAROUSEL_STEP_INSTRUCTIONS,
   CAROUSEL_STEP_CONTENT,
   CAROUSEL_STEP_SLIDES,
 ];
@@ -81,16 +83,6 @@ export function carouselStepLabel(step: CarouselStepDefinition): string {
 }
 
 /**
- * Why Instructions stays closed.
- *
- * Phase 5 stores versioned Markdown and runs it through the provider.
- * This phase keeps the control locked and leaves inspiration and rules
- * in their columns.
- */
-export const INSTRUCTIONS_CLOSED_DETAIL: string =
-  "Versioned Markdown instructions are a later phase. Phase 5 replaces the hidden inspiration and rules form.";
-
-/**
  * Why Slides stays closed.
  *
  * The album rule fails when the skeleton needs a picture and no album
@@ -104,7 +96,7 @@ export const SLIDES_ALBUM_REQUIRED_DETAIL: string =
  *
  * Phase 7 assembles the slides. This phase keeps the control locked.
  * It does not call the template generate route and it does not write
- * campaign-run rows. `editor_step` still stores only 0, 2, or 3.
+ * campaign-run rows. Final is not stored.
  */
 export const FINAL_CLOSED_DETAIL: string =
   "Final assembly is a later phase.";
@@ -112,12 +104,10 @@ export const FINAL_CLOSED_DETAIL: string =
 /**
  * Accessible name, including locked or done when that is the derived state.
  *
- * Instructions stays closed for an admin and a reader. Its name says
- * versioned Markdown instructions are a later phase, and that phase 5
- * replaces the hidden inspiration and rules form. Final stays closed
- * for an admin and a reader. Its name says final assembly is a later
- * phase. Locked Slides says to attach an album on Content first.
- * Available Slides stays unmarked. Done Slides says done.
+ * An available step stays unmarked. A done step says done. Final stays
+ * closed for an admin and a reader. Its name says final assembly is a
+ * later phase. Locked Slides says to attach an album on Content first.
+ * Available Instructions stays unmarked. Done Instructions says done.
  *
  * @param step - A stepper step
  * @param stepState - Derived state from `steps`
@@ -129,10 +119,6 @@ export function carouselStepAccessibleName(
 ): string {
 
   const label: string = carouselStepLabel(step);
-
-  if (step.index === CAROUSEL_STEP_INSTRUCTIONS) {
-    return `${label}, locked. ${INSTRUCTIONS_CLOSED_DETAIL}`;
-  }
 
   if (step.index === CAROUSEL_STEP_FINAL) {
     return `${label}, locked. ${FINAL_CLOSED_DETAIL}`;
@@ -156,9 +142,9 @@ export function carouselStepAccessibleName(
 /**
  * Tooltip for a closed step that names why it stays shut.
  *
- * Instructions and Final always show their later-phase sentence, for
- * an admin and a reader. Locked Slides names the album rule. An open
- * step has no tooltip. The title is the accessible name.
+ * Final always shows its later-phase sentence, for an admin and a
+ * reader. Locked Slides names the album rule. An open step, including
+ * Instructions, has no tooltip. The title is the accessible name.
  *
  * @param step - A stepper step
  * @param stepState - Derived state from `steps`
@@ -169,8 +155,7 @@ export function carouselStepTitle(
   stepState: CarouselStepState,
 ): string | undefined {
 
-  const closedForLaterPhase: boolean = step.index === CAROUSEL_STEP_INSTRUCTIONS
-    || step.index === CAROUSEL_STEP_FINAL;
+  const closedForLaterPhase: boolean = step.index === CAROUSEL_STEP_FINAL;
   const slidesNeedAlbum: boolean = step.index === CAROUSEL_STEP_SLIDES
     && stepState === "locked";
 
@@ -218,8 +203,8 @@ export function stepStateFor(
 /**
  * Whether this phase lets the operator open the step.
  *
- * Basic, Content, and Slides open when they are available or done. A
- * locked step stays closed. Instructions and Final stay closed.
+ * Basic, Instructions, Content, and Slides open when they are available
+ * or done. A locked step stays closed. Final stays closed.
  *
  * @param step - The step control
  * @param stepState - Derived state for that step

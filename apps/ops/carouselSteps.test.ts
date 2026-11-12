@@ -6,6 +6,7 @@ import {
   CAROUSEL_STEP_BASIC,
   CAROUSEL_STEP_CONTENT,
   CAROUSEL_STEP_FINAL,
+  CAROUSEL_STEP_INSTRUCTIONS,
   CAROUSEL_STEP_SLIDES,
   canOpenCarouselStep,
   carouselStepAccessibleName,
@@ -17,7 +18,6 @@ import {
   displayedEditorStep,
   FINAL_CLOSED_DETAIL,
   generationLabel,
-  INSTRUCTIONS_CLOSED_DETAIL,
   OPENABLE_EDITOR_STEPS,
   openStepSentence,
   shellEditorStep,
@@ -70,19 +70,36 @@ assert.deepEqual(
 assert.equal(openStepSentence(CAROUSEL_STEP_SLIDES), "This carousel opens on Slides.");
 assert.equal(openStepSentence(0), "This carousel opens on Basic.");
 assert.equal(openStepSentence(CAROUSEL_STEP_CONTENT), "This carousel opens on Content.");
-const instructionsName: string = carouselStepAccessibleName(stepAt(1), "locked");
+assert.equal(openStepSentence(CAROUSEL_STEP_INSTRUCTIONS), "This carousel opens on Instructions.");
+const instructionsAvailableName: string = carouselStepAccessibleName(
+  stepAt(CAROUSEL_STEP_INSTRUCTIONS),
+  "available",
+);
+const instructionsDoneName: string = carouselStepAccessibleName(
+  stepAt(CAROUSEL_STEP_INSTRUCTIONS),
+  "done",
+);
+const instructionsLockedName: string = carouselStepAccessibleName(
+  stepAt(CAROUSEL_STEP_INSTRUCTIONS),
+  "locked",
+);
+assert.equal(instructionsAvailableName, "1 Instructions");
+assert.equal(instructionsDoneName, "1 Instructions, done");
+assert.equal(instructionsLockedName, "1 Instructions, locked");
+assert.doesNotMatch(instructionsAvailableName, /later phase/);
+assert.doesNotMatch(instructionsDoneName, /later phase/);
+assert.doesNotMatch(instructionsLockedName, /later phase/);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "available"), undefined);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "done"), undefined);
+assert.equal(carouselStepTitle(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "locked"), undefined);
 assert.equal(
-  instructionsName,
-  `1 Instructions, locked. ${INSTRUCTIONS_CLOSED_DETAIL}`,
+  carouselStepClassName("available", true),
+  "carousel-step is-current",
 );
-assert.match(instructionsName, /Versioned Markdown instructions are a later phase/);
-assert.match(
-  instructionsName,
-  /Phase 5 replaces the hidden inspiration and rules form/,
-);
-assert.equal(carouselStepAccessibleName(stepAt(1), "available"), instructionsName);
-assert.equal(carouselStepAccessibleName(stepAt(1), "done"), instructionsName);
-assert.equal(carouselStepTitle(stepAt(1), "locked"), instructionsName);
+assert.equal(carouselStepClassName("done", false).includes("is-done"), true);
+assert.equal(carouselStepClassName("done", false).includes("is-current"), false);
+assert.equal(carouselStepClassName("done", true).includes("is-current"), true);
+assert.equal(carouselStepClassName("done", true).includes("is-done"), true);
 assert.equal(FINAL_CLOSED_DETAIL, "Final assembly is a later phase.");
 const finalName: string = carouselStepAccessibleName(stepAt(CAROUSEL_STEP_FINAL), "locked");
 assert.equal(
@@ -124,6 +141,14 @@ assert.equal(shellEditorStep(CAROUSEL_STEP_SLIDES, availableSlides), CAROUSEL_ST
 assert.equal(shellEditorStep(CAROUSEL_STEP_SLIDES, doneSlides), CAROUSEL_STEP_SLIDES);
 assert.equal(shellEditorStep(CAROUSEL_STEP_BASIC, lockedSlides), CAROUSEL_STEP_BASIC);
 assert.equal(shellEditorStep(CAROUSEL_STEP_CONTENT, lockedSlides), CAROUSEL_STEP_CONTENT);
+assert.equal(
+  shellEditorStep(CAROUSEL_STEP_INSTRUCTIONS, doneSlides),
+  CAROUSEL_STEP_INSTRUCTIONS,
+);
+assert.equal(
+  shellEditorStep(CAROUSEL_STEP_INSTRUCTIONS, availableSlides),
+  CAROUSEL_STEP_INSTRUCTIONS,
+);
 
 assert.equal(stepStateFor(doneSlides, stepAt(3)), "done");
 assert.equal(canOpenCarouselStep(stepAt(3), doneSlides.slides), true);
@@ -141,6 +166,7 @@ assert.equal(carouselStepAccessibleName(stepAt(CAROUSEL_STEP_CONTENT), "done"), 
 const closedStates: CarouselStepState[] = ["locked", "available", "done"];
 const openableSteps: number[] = [
   CAROUSEL_STEP_BASIC,
+  CAROUSEL_STEP_INSTRUCTIONS,
   CAROUSEL_STEP_CONTENT,
   CAROUSEL_STEP_SLIDES,
 ];
@@ -185,10 +211,36 @@ assert.equal(displayedEditorStep(3, CAROUSEL_STEP_CONTENT, false), CAROUSEL_STEP
 assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 0, true), false);
 assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 3, true), false);
 assert.equal(stepClickStoresEditorStep(stepAt(1), "locked", 0, false), false);
-assert.equal(canOpenCarouselStep(stepAt(1), "locked"), false);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "locked"), false);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "available"), true);
+assert.equal(canOpenCarouselStep(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "done"), true);
+assert.equal(
+  stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "available", 3, true),
+  true,
+);
+assert.equal(
+  stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "available", 3, false),
+  false,
+);
+assert.equal(
+  stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "done", 1, true),
+  false,
+);
+assert.equal(
+  stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_INSTRUCTIONS), "done", 3, true),
+  true,
+);
+assert.equal(displayedEditorStep(CAROUSEL_STEP_INSTRUCTIONS, null, true), CAROUSEL_STEP_INSTRUCTIONS);
+assert.equal(displayedEditorStep(CAROUSEL_STEP_SLIDES, CAROUSEL_STEP_INSTRUCTIONS, false), CAROUSEL_STEP_INSTRUCTIONS);
+assert.equal(displayedEditorStep(CAROUSEL_STEP_SLIDES, CAROUSEL_STEP_INSTRUCTIONS, true), CAROUSEL_STEP_SLIDES);
 assert.deepEqual(
   [...OPENABLE_EDITOR_STEPS],
-  [CAROUSEL_STEP_BASIC, CAROUSEL_STEP_CONTENT, CAROUSEL_STEP_SLIDES],
+  [
+    CAROUSEL_STEP_BASIC,
+    CAROUSEL_STEP_INSTRUCTIONS,
+    CAROUSEL_STEP_CONTENT,
+    CAROUSEL_STEP_SLIDES,
+  ],
 );
 assert.equal(OPENABLE_EDITOR_STEPS.includes(CAROUSEL_STEP_FINAL), false);
 assert.equal(stepClickStoresEditorStep(stepAt(CAROUSEL_STEP_FINAL), "locked", 0, true), false);
