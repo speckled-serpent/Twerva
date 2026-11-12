@@ -395,6 +395,47 @@ export async function patchCarouselInstruction(
   );
 }
 
+/**
+ * Replace the order of the instruction documents. Admin only.
+ *
+ * The id list is every document on the carousel. Bodies stay as stored.
+ *
+ * @param sourceId - Carousel UUID
+ * @param instructionIds - Document ids in the chosen order
+ * @returns The carousel, with instructions in position order
+ */
+export async function replaceCarouselInstructions(
+  sourceId: string,
+  instructionIds: string[],
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "PUT",
+    `/api/v1/carousels/${sourceId}/instructions`,
+    { instruction_ids: instructionIds },
+  );
+}
+
+/**
+ * Delete one instruction document. Admin only.
+ *
+ * The remaining documents close up to positions 0, 1, 2.
+ *
+ * @param sourceId - Carousel UUID
+ * @param instructionId - Document UUID
+ * @returns The carousel, with instructions in position order
+ */
+export async function deleteCarouselInstruction(
+  sourceId: string,
+  instructionId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "DELETE",
+    `/api/v1/carousels/${sourceId}/instructions/${instructionId}`,
+  );
+}
+
 export async function appendCarouselResearch(
   sourceId: string,
   attachRequest: CarouselResearchAttachRequest,

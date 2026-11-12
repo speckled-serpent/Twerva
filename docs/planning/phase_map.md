@@ -359,7 +359,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
   Acceptance: typing into an empty carousel creates one document after the 700ms delay, and a reload shows that text, not the sample. Clearing it stores `""`, the placeholder returns, and Generate text on Slides still uses the inspiration and rules columns. Leaving the step flushes a pending edit. A body the API rejects as too long shows the autosave error and does not drop the previous body.
 
-- [ ] **5.7 Add, remove, and reorder documents**
+- [x] **5.7 Add, remove, and reorder documents**
 
   The step lists documents as Document 1, Document 2, from `position + 1`, in position order. The selected one's body is the editor from task 5.6. Add calls POST with `{body: ""}`, selects the new row, and shows the sample placeholder. Remove calls DELETE. Move up and Move down call PUT with the full id list, the same interaction as `moveAttachedResearch` in `carouselResearch.ts`. There is no drag library.
 
