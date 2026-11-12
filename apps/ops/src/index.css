@@ -1077,6 +1077,21 @@ th {
   list-style: none;
 }
 
+.instruction-body {
+  width: 100%;
+  min-height: 16rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.instruction-preview h1,
+.instruction-preview h2,
+.instruction-preview h3,
+.instruction-preview p,
+.instruction-preview ul {
+  margin: 0 0 0.75rem;
+}
+
 .instruction-source {
   margin: 0;
   padding: 0.75rem 0.85rem;

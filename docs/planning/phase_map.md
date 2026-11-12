@@ -347,7 +347,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
 ### Editor
 
-- [ ] **5.6 Edit a document with a preview, the sample placeholder, and autosave**
+- [x] **5.6 Edit a document with a preview, the sample placeholder, and autosave**
 
   Replace the read-only body with a textarea and a preview. The textarea's placeholder is `INSTRUCTION_SAMPLE_TEMPLATE` from task 5.5. The value stays `""` until the operator types. The preview is `InstructionMarkdownPreview`, fed by `renderInstructionMarkdown` in `apps/ops/src/pages/instructionMarkdown.ts`. That function escapes HTML and renders ATX headings (`#`, `##`, `###`), paragraphs, unordered lists, and `**strong**` / `*emphasis*`. Those are the marks in the sample. When the draft is empty, the preview renders the sample and says "Sample. Not saved." When the draft has text, the preview renders the draft.
 

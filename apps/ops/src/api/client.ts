@@ -352,6 +352,49 @@ export async function clearCarouselAlbum(
  * @param attachRequest - Existing research item id
  * @returns The carousel, with research in position order
  */
+/**
+ * Append one instruction document. Admin only.
+ *
+ * A missing body is stored as an empty string by the server when the
+ * field is omitted. The first typed draft sends the textarea value.
+ *
+ * @param sourceId - Carousel UUID
+ * @param body - The document text
+ * @returns The carousel, with instructions in position order
+ */
+export async function createCarouselInstruction(
+  sourceId: string,
+  body: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${sourceId}/instructions`,
+    { body },
+  );
+}
+
+/**
+ * Replace one instruction document's body. Admin only.
+ *
+ * @param sourceId - Carousel UUID
+ * @param instructionId - Document UUID
+ * @param body - The replacement text, including `""`
+ * @returns The carousel, with instructions in position order
+ */
+export async function patchCarouselInstruction(
+  sourceId: string,
+  instructionId: string,
+  body: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "PATCH",
+    `/api/v1/carousels/${sourceId}/instructions/${instructionId}`,
+    { body },
+  );
+}
+
 export async function appendCarouselResearch(
   sourceId: string,
   attachRequest: CarouselResearchAttachRequest,
