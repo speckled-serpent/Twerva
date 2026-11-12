@@ -244,19 +244,18 @@ None. Settled with Mu:
 
 **Migration.** Copy each carousel's existing inspiration and rules into one markdown document on that carousel. A carousel with neither gets no copied text, so its editor shows the sample template and Generate stays disabled. Drop the two columns after the copy.
 
-**Open questions.** Settled for this phase:
+**Settled for this phase:**
 
 - Generate does not return a revised document. The written text is the instructions.
 - Review applies to slides in phase 6, not to the instructions.
 - There is no version history in v1, just the current text.
-
-One question remains. When a carousel has several documents, are they sent as one prompt in a fixed order (the lean) or one at a time?
+- When a carousel has several documents, they are sent together as one prompt in a fixed order.
 
 ## 6. AI slide generation
 
-**Goal.** Pressing Generate, the button under the instructions from phase 5, sends the carousel's instruction documents together with the attached album and research to the provider, and writes slide names, text per named text element, and image choices from the album. Hand entry stays.
+**Goal.** Pressing Generate, the button under the instructions from phase 5, sends the carousel's instruction documents together as one prompt in a fixed order, with the attached album and research, to the provider, and writes slide names, text per named text element, and image choices from the album. Hand entry stays.
 
-**Scope.** A slide stays a name, an optional image, and one text per named text element. Pressing Generate sends the carousel's instruction documents together with the attached album and research to the provider, and writes slide names, text per named text element, and image choices from the album. A person reviews the text before it is live. Images are chosen from the album. They are not drawn. A slide left unreviewed stays off Final, as a draft unit stays off a run today.
+**Scope.** A slide stays a name, an optional image, and one text per named text element. Pressing Generate sends the carousel's instruction documents together as one prompt in a fixed order, with the attached album and research, to the provider, and writes slide names, text per named text element, and image choices from the album. A person reviews the text before it is live. Images are chosen from the album. They are not drawn. A slide left unreviewed stays off Final, as a draft unit stays off a run today.
 
 **Migration.** Keep the draft and live text gate. Do not mark old draft text live.
 
