@@ -1,6 +1,6 @@
 # Twerva — Phase map
 
-*Last updated: 2026-10-17*  
+*Last updated: 2026-11-12*  
 *Status: What's left to implement, after the redesign agreed with Mu. Strategy: `docs/prompts/project.md`. Product design: `docs/prompts/product.md`.*
 
 This list replaces the previous one. A Skeleton is the structure of a carousel: the background and the named elements. A Carousel is what an operator builds, in steps. A Slide is one frame of content inside it. Albums and Research are shared libraries. A generation is a snapshot of one carousel. The campaign is the timeline of posts.
@@ -238,19 +238,25 @@ None. Settled with Mu:
 
 ## 5. Instructions
 
-**Goal.** Step 1 is versioned markdown the model will follow.
+**Goal.** Step 1 is the carousel's instructions, written in markdown, that the model follows when it fills slides.
 
-**Scope.** One or more markdown documents per carousel, stored in the database, edited with a preview. Thin v1 is the editor, Generate, and review, on the server. Generate uses the provider that already exists: OpenAI when `OPENAI_API_KEY` is set, off otherwise, with `TEXT_GENERATION_PROVIDER` left swappable. This phase does not write slide rows. Per-slide generate from inspiration and rules keeps working until the next phase.
+**Scope.** One or more markdown documents per carousel, stored in the database, edited with a preview. A new or empty document starts from a sample markdown template, the placeholder text shown in the field, so the operator sees what to write. Only the current text is stored. There is no version history in v1. The Generate button sits below the instructions editor. It is disabled until there is real instruction text. The sample does not count. This phase places the button and the rule for when it is enabled. What pressing it does is phase 6. Per-slide generate from inspiration and rules keeps working until phase 6 replaces it. This phase does not write slide rows.
 
-**Migration.** Copy inspiration and rules into one markdown document, version 1, on that carousel. An empty carousel gets an empty first version so the editor has a document. Drop the two columns after the copy.
+**Migration.** Copy each carousel's existing inspiration and rules into one markdown document on that carousel. A carousel with neither gets no copied text, so its editor shows the sample template and Generate stays disabled. Drop the two columns after the copy.
 
-**Open questions.** What does Generate return before it can write slides: a revised document, or a proposed slide list the next phase saves? Does review accept a version, or only edit the text? When a carousel has several documents, do they run as one prompt or one at a time?
+**Open questions.** Settled for this phase:
+
+- Generate does not return a revised document. The written text is the instructions.
+- Review applies to slides in phase 6, not to the instructions.
+- There is no version history in v1, just the current text.
+
+One question remains. When a carousel has several documents, are they sent as one prompt in a fixed order (the lean) or one at a time?
 
 ## 6. AI slide generation
 
-**Goal.** Fill slides from the instructions, the album, and research. Hand entry stays.
+**Goal.** Pressing Generate, the button under the instructions from phase 5, sends the carousel's instruction documents together with the attached album and research to the provider, and writes slide names, text per named text element, and image choices from the album. Hand entry stays.
 
-**Scope.** A slide stays a name, an optional image, and one text per named text element. Generate writes those fields from the current instruction version, the attached album, and research, through the same provider. A person reviews the text before it is live. Images are chosen from the album. They are not drawn. A slide left unreviewed stays off Final, as a draft unit stays off a run today.
+**Scope.** A slide stays a name, an optional image, and one text per named text element. Pressing Generate sends the carousel's instruction documents together with the attached album and research to the provider, and writes slide names, text per named text element, and image choices from the album. A person reviews the text before it is live. Images are chosen from the album. They are not drawn. A slide left unreviewed stays off Final, as a draft unit stays off a run today.
 
 **Migration.** Keep the draft and live text gate. Do not mark old draft text live.
 
