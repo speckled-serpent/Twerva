@@ -395,7 +395,7 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 
 ### Tests
 
-- [ ] **5.11 Run the full server and ops suites**
+- [x] **5.11 Run the full server and ops suites**
 
   From `apps/server`, `python -m unittest discover -s tests`. From `apps/ops`, `node --test *.test.ts`. This PR adds no product behavior. It fixes failures that this phase's tasks left, and it does not start a new feature. Migration tests that skip because Postgres is down stay skipped, the same way `test_carousel_steps_migration.py` skips. A skip is not a failure. The phase is done when both suites pass aside from those skips.
 
