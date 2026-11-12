@@ -18,14 +18,18 @@ stable id and a name. ``slide_element_texts`` stores one value per skeleton
 text element. ``slide_exclusions`` stores the other slide ids a slide
 cannot be shown with. ``slides.text_status`` is ``live`` or ``draft``.
 A draft is generated text that is not live until a person accepts it.
-``carousels.inspiration`` and ``carousels.rules`` steer that draft.
+``carousel_instructions`` stores the current instruction documents:
+a body and a position, with no title and no version. The draft comes
+from those documents.
 ``album_images`` holds the files. A slide points at most one of them.
 A carousel may point at the album those images came from.
 ``research_items`` is one text document: a title, a slug, and a body.
 A carousel attaches an ordered list of those documents through
 ``carousel_research_items``. There is no ``research_id`` column.
 ``carousels.generation_number`` starts at 1. ``carousels.editor_step``
-remembers Basic, Content, or Slides. New carousels open on Basic.
+remembers Basic, Instructions, Content, or Slides. New carousels open
+on Basic. Instructions can be stored after
+``carousel_editor_step_instructions``.
 A picture carousel with no album opens on Content after
 ``carousel_editor_step_content``. Default stays on Slides.
 A campaign stores the skeleton
@@ -56,6 +60,7 @@ from app.models.campaign import (
 from app.models.cluster import Cluster, cluster_source_items
 from app.models.carousel import (
     Carousel,
+    CarouselInstruction,
     CarouselResearchItem,
     Slide,
     SlideElementText,
@@ -147,6 +152,7 @@ __all__ = [
     "CampaignType",
     "Cluster",
     "Carousel",
+    "CarouselInstruction",
     "CarouselResearchItem",
     "RESOURCE_FILE_MEDIA_TYPE_ENUM",
     "ResourceFileMediaType",

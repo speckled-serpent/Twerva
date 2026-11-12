@@ -138,8 +138,11 @@ class CarouselReadApiTests(unittest.TestCase):
         self.assertEqual(response.generation_number, 1)
         self.assertEqual(response.editor_step, 3)
         self.assertEqual(response.research, [])
+        self.assertEqual(response.instructions, [])
+        self.assertNotIn("inspiration", response.model_dump())
+        self.assertNotIn("rules", response.model_dump())
         self.assertEqual(response.steps.basic, CarouselStepState.DONE)
-        self.assertEqual(response.steps.instructions, CarouselStepState.LOCKED)
+        self.assertEqual(response.steps.instructions, CarouselStepState.AVAILABLE)
         self.assertEqual(response.steps.content, CarouselStepState.DONE)
         self.assertEqual(response.steps.slides, CarouselStepState.DONE)
         self.assertEqual(response.steps.final, CarouselStepState.LOCKED)
@@ -183,6 +186,8 @@ class CarouselReadApiTests(unittest.TestCase):
         self.assertEqual(list_items[0].slide_count, 6)
         self.assertFalse(hasattr(list_items[0], "steps"))
         self.assertFalse(hasattr(list_items[0], "research"))
+        self.assertFalse(hasattr(list_items[0], "instructions"))
+        self.assertNotIn("instructions", list_items[0].model_dump())
         self.assertIsNone(statement.whereclause)
         self.assertIsNone(carousels_list_statement().whereclause)
 
@@ -256,6 +261,14 @@ class CarouselReadApiTests(unittest.TestCase):
         )
         self.assertNotIn("/carousels/resource", methods_by_path)
         self.assertNotIn("/carousels/{carousel_id}/resource", methods_by_path)
+        self.assertEqual(
+            methods_by_path["/carousels/{carousel_id}/instructions"],
+            {"POST", "PUT"},
+        )
+        self.assertEqual(
+            methods_by_path["/carousels/{carousel_id}/instructions/{instruction_id}"],
+            {"PATCH", "DELETE"},
+        )
 
     def test_list_echoes_stored_generation_and_editor_step(self) -> None:
         """The list returns the stored numbers. It does not derive them."""
@@ -346,6 +359,7 @@ def _default_source_from_catalog() -> Carousel:
 
     carousel.slides = slides
     carousel.research_links = []
+    carousel.instructions = []
 
     return carousel
 

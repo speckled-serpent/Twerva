@@ -26,12 +26,16 @@ from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.carousel import (
-    CAROUSEL_EDITOR_STEP_CHECK_SQL,
     CAROUSEL_EDITOR_STEP_DEFAULT,
     CAROUSEL_GENERATION_CHECK_SQL,
     CAROUSEL_GENERATION_NUMBER_DEFAULT,
     CAROUSEL_RESEARCH_POSITION_CHECK_SQL,
 )
+
+
+# Frozen for this revision. ``carousel_editor_step_instructions`` replaces
+# the check so step 1 can be stored.
+CAROUSEL_EDITOR_STEP_CHECK_SQL: str = "editor_step IN (0, 2, 3)"
 
 
 revision: str = "carousel_steps"

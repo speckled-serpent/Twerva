@@ -8,7 +8,6 @@ from fastapi import HTTPException
 
 from app.api.v1.schemas import (
     CarouselCreateRequest,
-    CarouselGuidancePatchRequest,
     SlideAcceptTextRequest,
     SlideElementTextWrite,
     SlideWriteRequest,
@@ -17,14 +16,15 @@ from app.api.v1.carousel_text import (
     accept_slide_text,
     generate_source_slide,
     generate_slide_text,
-    patch_source_guidance,
 )
 from app.api.v1.carousel_writes import create_slide
-from app.models.carousel import Carousel, Slide
+from app.models.carousel import Carousel, CarouselInstruction, Slide
 from app.models.skeleton_element import SkeletonElement
 from app.models.enums import BackgroundKind, SlideTextStatus
 from app.settings import clear_settings_cache
+from app.carousels.instructions import instruction_prompt_text
 from app.carousels.text_generation import (
+    DRAFTED_SLIDE_NAME,
     GENERATE_DISABLED_DETAIL,
     FakeTextGenerationProvider,
     TextElementPrompt,
@@ -60,15 +60,7 @@ class SlideTextDraftTests(unittest.TestCase):
         text_element: SkeletonElement = _title_element(session.skeleton.id)
         session.skeleton.elements = [text_element]
         created = create_source(session)
-        patch_source_guidance(
-            created.id,
-            CarouselGuidancePatchRequest(
-                inspiration="Harbor fog",
-                rules="Keep it short",
-            ),
-            session,
-            None,
-        )
+        _store_instructions(session, created.id, ["Harbor fog", "Keep it short"])
         harbor = create_slide(
             created.id,
             SlideWriteRequest(
@@ -94,7 +86,7 @@ class SlideTextDraftTests(unittest.TestCase):
         self.assertEqual(drafted.texts[0].value, "Fog on the water")
         self.assertEqual(
             drafted.draft_texts[0].value,
-            "Title. Harbor fog. Keep it short",
+            "Title. Harbor fog\n\nKeep it short",
         )
         self.assertEqual(drafted.name, "Harbor")
         self.assertEqual(live_slides(list(carousel.slides)), [])
@@ -108,7 +100,7 @@ class SlideTextDraftTests(unittest.TestCase):
                 texts=[
                     SlideElementTextWrite(
                         skeleton_element_id=text_element.id,
-                        value="Title. Harbor fog. Keep it short",
+                        value="Title. Harbor fog\n\nKeep it short",
                     ),
                 ],
             ),
@@ -118,7 +110,7 @@ class SlideTextDraftTests(unittest.TestCase):
 
         self.assertEqual(accepted.text_status, SlideTextStatus.LIVE)
         self.assertEqual(accepted.draft_texts, [])
-        self.assertEqual(accepted.texts[0].value, "Title. Harbor fog. Keep it short")
+        self.assertEqual(accepted.texts[0].value, "Title. Harbor fog\n\nKeep it short")
         self.assertEqual(len(live_slides(list(carousel.slides))), 1)
 
     def test_generating_a_slide_leaves_the_image_empty(self) -> None:
@@ -128,12 +120,7 @@ class SlideTextDraftTests(unittest.TestCase):
         text_element: SkeletonElement = _title_element(session.skeleton.id)
         session.skeleton.elements = [text_element]
         created = create_source(session)
-        patch_source_guidance(
-            created.id,
-            CarouselGuidancePatchRequest(inspiration="Phase four harbor", rules=""),
-            session,
-            None,
-        )
+        _store_instructions(session, created.id, ["Phase four harbor"])
         drafted = generate_source_slide(created.id, session, None)
 
         self.assertEqual(drafted.name, "Phase four harbor")
@@ -141,6 +128,7 @@ class SlideTextDraftTests(unittest.TestCase):
         self.assertEqual(drafted.images, [])
         self.assertEqual(drafted.texts[0].value, "")
         self.assertEqual(drafted.draft_texts[0].value, "Title. Phase four harbor")
+        self.assertEqual(len(session.get(Carousel, created.id).slides), 1)
         stored_source: Carousel | None = session.get(Carousel, created.id)
 
         assert stored_source is not None
@@ -282,6 +270,53 @@ class SlideTextDraftTests(unittest.TestCase):
         self.assertEqual(session.commit_count, commits_before)
         self.assertEqual(list(carousel.slides), [])
 
+    def test_no_documents_draft_from_two_empty_strings(self) -> None:
+        """A new carousel with no documents drafts the same way two empty columns did."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        text_element: SkeletonElement = _title_element(session.skeleton.id)
+        session.skeleton.elements = [text_element]
+        created = create_source(session)
+        _store_instructions(session, created.id, ["", "  \n"])
+        drafted = generate_source_slide(created.id, session, None)
+
+        self.assertEqual(drafted.name, DRAFTED_SLIDE_NAME)
+        self.assertEqual(drafted.draft_texts[0].value, "Title")
+        self.assertEqual(len(drafted.images), 0)
+        self.assertEqual(drafted.text_status, SlideTextStatus.DRAFT)
+
+    def test_the_copied_document_is_the_draft(self) -> None:
+        """Generate text uses the stored document and leaves the live text."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        text_element: SkeletonElement = _title_element(session.skeleton.id)
+        session.skeleton.elements = [text_element]
+        created = create_source(session)
+        _store_instructions(session, created.id, ["Copied quay notes"])
+        harbor = create_slide(
+            created.id,
+            SlideWriteRequest(
+                name="Harbor",
+                texts=[
+                    SlideElementTextWrite(
+                        skeleton_element_id=text_element.id,
+                        value="Fog on the water",
+                    ),
+                ],
+            ),
+            session,
+            None,
+        )
+        drafted = generate_slide_text(created.id, harbor.id, session, None)
+        carousel: Carousel | None = session.get(Carousel, created.id)
+
+        assert carousel is not None
+
+        self.assertEqual(drafted.name, "Harbor")
+        self.assertEqual(drafted.texts[0].value, "Fog on the water")
+        self.assertEqual(drafted.draft_texts[0].value, "Title. Copied quay notes")
+        self.assertEqual(len(carousel.slides), 1)
+
     def _restore(self, name: str, previous: str | None) -> None:
         """Put one environment variable back."""
 
@@ -312,6 +347,17 @@ class TextGenerationProviderTests(unittest.TestCase):
             "title. Harbor fog. Keep it short",
         )
 
+    def test_instruction_prompt_drops_blank_bodies_and_joins_the_rest(self) -> None:
+        """Position order is kept. A body that strips to empty is left out."""
+
+        self.assertEqual(instruction_prompt_text([]), "")
+        self.assertEqual(instruction_prompt_text(["", "  \n\t"]), "")
+        self.assertEqual(
+            instruction_prompt_text(["Harbor fog", "  ", "Keep it short"]),
+            "Harbor fog\n\nKeep it short",
+        )
+        self.assertEqual(instruction_prompt_text(["  hello  "]), "  hello  ")
+
     def test_openai_payload_maps_each_element(self) -> None:
         """A chat completion JSON object becomes one value per element."""
 
@@ -336,6 +382,32 @@ class TextGenerationProviderTests(unittest.TestCase):
 
         self.assertEqual(drafted.name, "Harbor")
         self.assertEqual(drafted.values_by_element_id[element_id], "Still water")
+
+
+def _store_instructions(
+    session: _MemoryCarouselSession,
+    carousel_id: uuid.UUID,
+    bodies: list[str],
+) -> None:
+    """Attach instruction documents in position order. Columns are not written."""
+
+    carousel: Carousel | None = session.get(Carousel, carousel_id)
+
+    assert carousel is not None
+
+    documents: list[CarouselInstruction] = []
+
+    for position, body in enumerate(bodies):
+        document: CarouselInstruction = CarouselInstruction(
+            id=uuid.uuid4(),
+            carousel_id=carousel.id,
+            position=position,
+            body=body,
+        )
+        document.carousel = carousel
+        documents.append(document)
+
+    carousel.instructions = documents
 
 
 def create_source(session: _MemoryCarouselSession):

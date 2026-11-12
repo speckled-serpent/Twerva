@@ -31,10 +31,11 @@ EDITOR_STEP_SLIDES: int = 3
 EDITOR_STEP_FINAL: int = 4
 STORED_EDITOR_STEPS: frozenset[int] = frozenset({
     EDITOR_STEP_BASIC,
+    EDITOR_STEP_INSTRUCTIONS,
     EDITOR_STEP_CONTENT,
     EDITOR_STEP_SLIDES,
 })
-UNKNOWN_EDITOR_STEP_DETAIL: str = "editor_step must be 0, 2, or 3."
+UNKNOWN_EDITOR_STEP_DETAIL: str = "editor_step must be 0, 1, 2, or 3."
 INSTRUCTIONS_LOCKED_DETAIL: str = "Instructions is locked."
 SLIDES_LOCKED_DETAIL: str = "Attach an album on Content first."
 FINAL_LOCKED_DETAIL: str = "Final is locked."
@@ -75,9 +76,10 @@ class SlideSkeletonFill:
 class CarouselStepStates:
     """The five stepper states for one carousel. None of these are stored.
 
-    ``basic`` is done once the carousel exists. ``instructions`` and
-    ``final`` stay locked until later phases. ``content`` and ``slides``
-    follow the album rule and the slide count.
+    ``basic`` is done once the carousel exists. ``instructions`` is
+    done when a document has text and available otherwise. ``final``
+    stays locked. ``content`` and ``slides`` follow the album rule
+    and the slide count.
     """
 
     basic: CarouselStepState
@@ -110,10 +112,29 @@ def skeleton_requires_image(skeleton: Skeleton) -> bool:
     return False
 
 
+def instruction_bodies_have_text(bodies: list[str]) -> bool:
+    """Return true when any instruction body has text after stripping.
+
+    Args:
+        bodies: Document bodies, in any order. An empty list is false.
+
+    Returns:
+        True when one body strips to a non-empty string.
+    """
+
+    for body in bodies:
+        if body.strip() != "":
+
+            return True
+
+    return False
+
+
 def carousel_step_states(
     skeleton: Skeleton,
     album_id: uuid.UUID | None,
     slide_count: int,
+    has_instruction_text: bool,
 ) -> CarouselStepStates:
     """Return the five derived step states for one carousel.
 
@@ -124,13 +145,17 @@ def carousel_step_states(
     passes and available otherwise. ``slides`` is locked when the rule
     fails, available when it passes and the carousel has fewer than two
     slides, and done at two or more. ``basic`` is done. ``instructions``
-    and ``final`` are locked. Research is optional and does not change
-    any state. This does not read or write ``editor_step``.
+    is done when ``has_instruction_text`` is true and available when it
+    is false. It is not locked. ``final`` is locked. Research is
+    optional and does not change any state. This does not read or write
+    ``editor_step``.
 
     Args:
         skeleton: The carousel's skeleton, with elements loaded.
         album_id: ``carousels.album_id``. Null when no album is attached.
         slide_count: Every slide on the carousel, including drafts.
+        has_instruction_text: True when any instruction body strips to
+            a non-empty string.
 
     Returns:
         The five step states, in stepper order.
@@ -139,6 +164,7 @@ def carousel_step_states(
     album_passes: bool = _album_rule_passes(skeleton, album_id)
     content_state: CarouselStepState = CarouselStepState.AVAILABLE
     slides_state: CarouselStepState = CarouselStepState.LOCKED
+    instructions_state: CarouselStepState = CarouselStepState.AVAILABLE
 
     if album_passes:
         content_state = CarouselStepState.DONE
@@ -147,9 +173,12 @@ def carousel_step_states(
     if album_passes and slide_count >= CAROUSEL_SLIDES_DONE_COUNT:
         slides_state = CarouselStepState.DONE
 
+    if has_instruction_text:
+        instructions_state = CarouselStepState.DONE
+
     step_states: CarouselStepStates = CarouselStepStates(
         basic=CarouselStepState.DONE,
-        instructions=CarouselStepState.LOCKED,
+        instructions=instructions_state,
         content=content_state,
         slides=slides_state,
         final=CarouselStepState.LOCKED,
@@ -164,9 +193,9 @@ def accepted_editor_step(
 ) -> int:
     """Return ``editor_step`` when it may be stored.
 
-    Stored steps are 0 Basic, 2 Content, and 3 Slides. Instructions
-    and Final are locked and are never stored. Slides is refused while
-    its derived state is locked. This does not write the carousel.
+    Stored steps are 0 Basic, 1 Instructions, 2 Content, and 3 Slides.
+    Final is locked and is never stored. Slides is refused while its
+    derived state is locked. This does not write the carousel.
 
     Args:
         editor_step: The requested open step.
@@ -176,7 +205,7 @@ def accepted_editor_step(
         The same step, when it may be written.
 
     Raises:
-        ValueError: The step is locked, or it is not 0, 2, or 3.
+        ValueError: The step is locked, or it is not 0, 1, 2, or 3.
     """
 
     step_state: CarouselStepState | None = _state_for_editor_step(

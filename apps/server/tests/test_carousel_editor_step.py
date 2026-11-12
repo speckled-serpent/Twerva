@@ -33,7 +33,7 @@ from app.carousels.slide_skeleton import (
     CarouselStepStates,
     accepted_editor_step,
 )
-from app.models.carousel import Carousel
+from app.models.carousel import Carousel, CarouselInstruction
 from app.models.enums import (
     BackgroundKind,
     SkeletonElementBand,
@@ -44,19 +44,26 @@ from tests.test_carousel_writes import _MemoryCarouselSession
 
 
 class AcceptedEditorStepTests(unittest.TestCase):
-    """The stored steps are 0, 2, and 3. A locked step is refused."""
+    """The stored steps are 0, 1, 2, and 3. A locked step is refused."""
 
     def test_open_steps_are_returned(self) -> None:
-        """Basic, Content, and an open Slides step may be stored."""
+        """Basic, Instructions, Content, and an open Slides step may be stored."""
 
         states: CarouselStepStates = _states(
             content=CarouselStepState.AVAILABLE,
             slides=CarouselStepState.AVAILABLE,
         )
+        done_instructions: CarouselStepStates = _states(
+            content=CarouselStepState.DONE,
+            slides=CarouselStepState.DONE,
+            instructions=CarouselStepState.DONE,
+        )
 
         self.assertEqual(accepted_editor_step(0, states), 0)
+        self.assertEqual(accepted_editor_step(1, states), 1)
         self.assertEqual(accepted_editor_step(2, states), 2)
         self.assertEqual(accepted_editor_step(3, states), 3)
+        self.assertEqual(accepted_editor_step(1, done_instructions), 1)
 
     def test_done_slides_may_be_stored(self) -> None:
         """A done step can still be opened."""
@@ -69,14 +76,20 @@ class AcceptedEditorStepTests(unittest.TestCase):
         self.assertEqual(accepted_editor_step(3, states), 3)
 
     def test_locked_steps_name_the_refusal(self) -> None:
-        """Instructions, Final, and locked Slides each say why."""
+        """Final and locked Slides say why. A locked Instructions state does too."""
 
         states: CarouselStepStates = _states(
             content=CarouselStepState.AVAILABLE,
             slides=CarouselStepState.LOCKED,
         )
+        locked_instructions: CarouselStepStates = _states(
+            content=CarouselStepState.AVAILABLE,
+            slides=CarouselStepState.AVAILABLE,
+            instructions=CarouselStepState.LOCKED,
+        )
 
-        self.assertEqual(_refusal(1, states), INSTRUCTIONS_LOCKED_DETAIL)
+        self.assertEqual(accepted_editor_step(1, states), 1)
+        self.assertEqual(_refusal(1, locked_instructions), INSTRUCTIONS_LOCKED_DETAIL)
         self.assertEqual(_refusal(4, states), FINAL_LOCKED_DETAIL)
         self.assertEqual(SLIDES_LOCKED_DETAIL, "Attach an album on Content first.")
         self.assertEqual(_refusal(3, states), SLIDES_LOCKED_DETAIL)
@@ -89,6 +102,10 @@ class AcceptedEditorStepTests(unittest.TestCase):
             slides=CarouselStepState.DONE,
         )
 
+        self.assertEqual(
+            UNKNOWN_EDITOR_STEP_DETAIL,
+            "editor_step must be 0, 1, 2, or 3.",
+        )
         self.assertEqual(_refusal(5, states), UNKNOWN_EDITOR_STEP_DETAIL)
         self.assertEqual(_refusal(-1, states), UNKNOWN_EDITOR_STEP_DETAIL)
 
@@ -297,8 +314,8 @@ class CarouselEditorStepWriteTests(unittest.TestCase):
         self.assertEqual(raised.exception.detail, SLIDES_LOCKED_DETAIL)
         self.assertEqual(loaded.editor_step, 0)
 
-    def test_refusing_instructions_leaves_inspiration_and_rules(self) -> None:
-        """Step 1 does not write. Inspiration and rules read back as stored."""
+    def test_storing_instructions_leaves_the_document(self) -> None:
+        """Step 1 is stored. The document body stays."""
 
         session: _MemoryCarouselSession = _MemoryCarouselSession()
         created: CarouselReadResponse = _create(session, "Harbor notes")
@@ -306,47 +323,56 @@ class CarouselEditorStepWriteTests(unittest.TestCase):
 
         self.assertIsNotNone(stored)
         assert stored is not None
-        stored.inspiration = "Harbor fog"
-        stored.rules = "Keep the caption short"
+        stored.instructions = [_instruction(stored.id, "Harbor fog")]
         before: CarouselReadResponse = get_carousel(created.id, session)
-        commits_before: int = session.commit_count
 
-        with self.assertRaises(HTTPException) as raised:
-            _store_step(session, created.id, 1)
+        loaded: CarouselReadResponse = _store_step(session, created.id, 1)
 
-        loaded: CarouselReadResponse = get_carousel(created.id, session)
+        self.assertEqual(before.instructions[0].body, "Harbor fog")
+        self.assertEqual(loaded.instructions[0].body, "Harbor fog")
+        self.assertEqual(loaded.editor_step, 1)
+        self.assertEqual(loaded.steps.instructions, CarouselStepState.DONE)
+        self.assertEqual(stored.instructions[0].body, "Harbor fog")
 
-        self.assertEqual(raised.exception.status_code, 400)
-        self.assertEqual(raised.exception.detail, INSTRUCTIONS_LOCKED_DETAIL)
-        self.assertEqual(before.inspiration, "Harbor fog")
-        self.assertEqual(before.rules, "Keep the caption short")
-        self.assertEqual(loaded.inspiration, before.inspiration)
-        self.assertEqual(loaded.rules, before.rules)
-        self.assertEqual(loaded.editor_step, created.editor_step)
-        self.assertEqual(stored.inspiration, "Harbor fog")
-        self.assertEqual(stored.rules, "Keep the caption short")
-        self.assertEqual(session.commit_count, commits_before)
+    def test_instructions_can_be_stored_with_or_without_text(self) -> None:
+        """An admin stores step 1 on an empty carousel and on one with text."""
 
-    def test_instructions_and_final_are_refused(self) -> None:
-        """Steps 1 and 4 are 400. The stored step stays."""
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        empty: CarouselReadResponse = _create(session, "Empty notes")
+        written: CarouselReadResponse = _create(session, "Written notes")
+        written_row: Carousel | None = session.get(Carousel, written.id)
+
+        assert written_row is not None
+
+        written_row.instructions = [_instruction(written_row.id, "  \n")]
+        blank: CarouselReadResponse = get_carousel(written.id, session)
+        written_row.instructions = [_instruction(written_row.id, "Keep the quay.")]
+        stored_empty: CarouselReadResponse = _store_step(session, empty.id, 1)
+        stored_written: CarouselReadResponse = _store_step(session, written.id, 1)
+
+        self.assertEqual(blank.steps.instructions, CarouselStepState.AVAILABLE)
+        self.assertEqual(stored_empty.editor_step, 1)
+        self.assertEqual(stored_empty.steps.instructions, CarouselStepState.AVAILABLE)
+        self.assertEqual(stored_written.editor_step, 1)
+        self.assertEqual(stored_written.steps.instructions, CarouselStepState.DONE)
+        self.assertEqual(stored_written.instructions[0].body, "Keep the quay.")
+
+    def test_final_stays_refused_after_instructions_is_stored(self) -> None:
+        """Step 1 is stored. Step 4 is 400 and the stored step stays."""
 
         session: _MemoryCarouselSession = _MemoryCarouselSession()
         created: CarouselReadResponse = _create(session, "Closed steps")
-        _store_step(session, created.id, 0)
-
-        with self.assertRaises(HTTPException) as instructions:
-            _store_step(session, created.id, 1)
+        stored_instructions: CarouselReadResponse = _store_step(session, created.id, 1)
 
         with self.assertRaises(HTTPException) as final:
             _store_step(session, created.id, 4)
 
         loaded: CarouselReadResponse = get_carousel(created.id, session)
 
-        self.assertEqual(instructions.exception.status_code, 400)
-        self.assertEqual(instructions.exception.detail, INSTRUCTIONS_LOCKED_DETAIL)
+        self.assertEqual(stored_instructions.editor_step, 1)
         self.assertEqual(final.exception.status_code, 400)
         self.assertEqual(final.exception.detail, FINAL_LOCKED_DETAIL)
-        self.assertEqual(loaded.editor_step, 0)
+        self.assertEqual(loaded.editor_step, 1)
 
     def test_a_step_outside_the_stepper_leaves_the_stored_step(self) -> None:
         """A value other than 0 through 4 is 400 and writes nothing."""
@@ -419,18 +445,32 @@ class CarouselEditorStepWriteTests(unittest.TestCase):
 def _states(
     content: CarouselStepState,
     slides: CarouselStepState,
+    instructions: CarouselStepState = CarouselStepState.AVAILABLE,
 ) -> CarouselStepStates:
-    """Build the five states. Instructions and Final stay locked."""
+    """Build the five states. Final stays locked."""
 
     states: CarouselStepStates = CarouselStepStates(
         basic=CarouselStepState.DONE,
-        instructions=CarouselStepState.LOCKED,
+        instructions=instructions,
         content=content,
         slides=slides,
         final=CarouselStepState.LOCKED,
     )
 
     return states
+
+
+def _instruction(carousel_id: uuid.UUID, body: str) -> CarouselInstruction:
+    """One document at position 0."""
+
+    document: CarouselInstruction = CarouselInstruction(
+        id=uuid.uuid4(),
+        carousel_id=carousel_id,
+        position=0,
+        body=body,
+    )
+
+    return document
 
 
 def _refusal(editor_step: int, states: CarouselStepStates) -> str:

@@ -30,7 +30,7 @@ from app.api.v1.carousel_writes import (
 )
 from app.api.v1.carousels import get_carousel
 from app.models.album import Album, AlbumImage
-from app.models.carousel import Carousel, CarouselResearchItem, Slide
+from app.models.carousel import Carousel, CarouselInstruction, CarouselResearchItem, Slide
 from app.models.research_item import ResearchItem
 from app.models.enums import (
     AdvertisementType,
@@ -106,6 +106,12 @@ class _MemoryCarouselSession:
 
         if isinstance(row, CarouselResearchItem):
             self._remove_research_link(row)
+
+        if isinstance(row, Carousel):
+            self._drop_carousel(row)
+
+        if isinstance(row, CarouselInstruction):
+            self._remove_instruction(row)
 
     def flush(self) -> None:
         return
@@ -227,6 +233,34 @@ class _MemoryCarouselSession:
         ]
 
         return matching_links
+
+    def _drop_carousel(self, carousel: Carousel) -> None:
+        """Cascade-delete instruction documents, matching the foreign key."""
+
+        for document in list(carousel.instructions):
+
+            if document not in self.deleted:
+                self.deleted.append(document)
+
+        carousel.instructions = []
+        self.carousels = [
+            stored for stored in self.carousels if stored.id != carousel.id
+        ]
+
+    def _remove_instruction(self, document: CarouselInstruction) -> None:
+        """Drop a document that is still hanging on its carousel."""
+
+        carousel: Carousel | None = self._find_source(document.carousel_id)
+
+        if carousel is None:
+
+            return
+
+        carousel.instructions = [
+            stored
+            for stored in list(carousel.instructions)
+            if stored.id != document.id
+        ]
 
     def _remove_research_link(self, link: CarouselResearchItem) -> None:
         carousel: Carousel | None = self._find_source(link.carousel_id)

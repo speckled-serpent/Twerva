@@ -52,11 +52,13 @@ export interface CarouselStepBarProps {
  * The open step uses the teal primary. A done step uses the success color.
  * A locked step uses the existing disabled control. Available stays
  * unmarked. Slides follows `steps.slides`: locked, it stays disabled and
- * its name says to attach an album on Content first. Instructions stays
- * disabled, and its name says versioned Markdown is a later phase.
- * Final stays disabled, and its name says final assembly is a later
- * phase. That name is also the tooltip. A reader can open a step to
- * look. That click does not write. Final does not navigate. While
+ * its name says to attach an album on Content first. Instructions opens
+ * when it is available or done. An available Instructions control is
+ * unmarked. A done one uses the success color. The current step stays
+ * the primary color. Final stays disabled, and its name says final
+ * assembly is a later phase. That name is also the tooltip. A reader
+ * can open a step to look. That click does not write. Final does not
+ * navigate. While
  * Slides is open, one hint names the global slide-count default. That
  * hint is absent on the other steps and while Slides is locked.
  *

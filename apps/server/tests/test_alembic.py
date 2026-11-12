@@ -34,6 +34,11 @@ ALBUMS_FROM_SLIDES_REVISION_ID: str = "albums_from_slides"
 RESEARCH_ITEMS_REVISION_ID: str = "research_items"
 CAROUSEL_STEPS_REVISION_ID: str = "carousel_steps"
 CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID: str = "carousel_editor_step_content"
+CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID: str = "carousel_editor_step_instructions"
+CAROUSEL_INSTRUCTIONS_REVISION_ID: str = "carousel_instructions"
+CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID: str = (
+    "carousel_instructions_drop_guidance"
+)
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -69,6 +74,9 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py",
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID}.py",
+                f"{CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID}.py",
+                f"{CAROUSEL_INSTRUCTIONS_REVISION_ID}.py",
+                f"{CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID}.py",
                 f"{CAROUSEL_STEPS_REVISION_ID}.py",
                 f"{OPS_USERS_ROLE_REVISION_ID}.py",
                 f"{OPS_USERS_REVISION_ID}.py",
@@ -841,6 +849,7 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn('op.create_table(\n        "carousel_research_items"', revision_source)
         self.assertIn("CAROUSEL_GENERATION_CHECK_SQL", revision_source)
         self.assertIn("CAROUSEL_EDITOR_STEP_CHECK_SQL", revision_source)
+        self.assertIn("editor_step IN (0, 2, 3)", revision_source)
         self.assertIn("CAROUSEL_RESEARCH_POSITION_CHECK_SQL", revision_source)
         self.assertNotIn("ck_carousels_ck_", revision_source)
         self.assertNotIn("ck_carousel_research_items_ck_", revision_source)
@@ -878,6 +887,108 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertNotIn("op.create_check_constraint(", revision_source)
         self.assertNotIn("research_items", revision_source)
         self.assertIn("SET editor_step = :slides_step", revision_source)
+
+    def test_carousel_instructions_follow_editor_step_content(self) -> None:
+        """Instruction documents follow the content step. Guidance columns stay."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_INSTRUCTIONS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), CAROUSEL_INSTRUCTIONS_REVISION_ID)
+        self.assertLessEqual(len(str(assigned_values.get("revision"))), 32)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "carousel_instructions"', revision_source)
+        self.assertIn(
+            'op.create_check_constraint(\n        "position",',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_check_constraint(\n        "body",',
+            revision_source,
+        )
+        self.assertIn("CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL", revision_source)
+        self.assertIn("CAROUSEL_INSTRUCTION_BODY_CHECK_SQL", revision_source)
+        self.assertIn("INSERT INTO carousel_instructions", revision_source)
+        self.assertIn("btrim(inspiration) <> ''", revision_source)
+        self.assertIn("btrim(rules) <> ''", revision_source)
+        self.assertIn("'## Inspiration'", revision_source)
+        self.assertIn("'## Rules'", revision_source)
+        self.assertIn("chr(10)", revision_source)
+        self.assertNotIn('sa.Column(\n            "title"', revision_source)
+        self.assertNotIn('sa.Column(\n            "version"', revision_source)
+        self.assertNotIn("op.drop_column(", revision_source)
+        self.assertNotIn("UPDATE carousels", revision_source)
+        self.assertNotIn("ck_carousel_instructions_ck_", revision_source)
+        self.assertIn('op.drop_table("carousel_instructions")', revision_source)
+
+    def test_editor_step_instructions_follow_instruction_documents(self) -> None:
+        """Step 1 becomes storable. The revision id needs a wider version column."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID,
+        )
+        self.assertEqual(len(CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID), 33)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_INSTRUCTIONS_REVISION_ID,
+        )
+        self.assertIn("CAROUSEL_EDITOR_STEP_CHECK_SQL", revision_source)
+        self.assertIn("editor_step IN (0, 2, 3)", revision_source)
+        self.assertIn("ALTER COLUMN version_num TYPE VARCHAR(64)", revision_source)
+        self.assertIn("SET editor_step = :basic_step", revision_source)
+        self.assertIn("WHERE editor_step = :instructions_step", revision_source)
+        self.assertIn('op.create_check_constraint(\n        "editor_step",', revision_source)
+        self.assertNotIn("op.drop_column(", revision_source)
+
+    def test_drop_guidance_follows_the_instructions_step(self) -> None:
+        """The two columns go. Downgrade adds them back empty."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            assigned_values.get("revision"),
+            CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID,
+        )
+        self.assertEqual(len(CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID), 35)
+        self.assertLessEqual(len(CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID), 64)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID,
+        )
+        self.assertIn('op.drop_column("carousels", "inspiration")', revision_source)
+        self.assertIn('op.drop_column("carousels", "rules")', revision_source)
+        self.assertIn('sa.Column("inspiration"', revision_source)
+        self.assertIn('sa.Column("rules"', revision_source)
+        self.assertIn('server_default=""', revision_source)
+        self.assertIn("nullable=False", revision_source)
+        self.assertNotIn("INSERT INTO", revision_source)
+        self.assertNotIn("op.drop_table(", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

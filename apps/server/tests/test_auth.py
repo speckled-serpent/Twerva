@@ -849,6 +849,37 @@ class ReaderRbacHttpTests(unittest.TestCase):
         self.assertEqual(remove_research_response.status_code, 403)
         self.assertIn("read-only", remove_research_response.json()["detail"].lower())
 
+        create_instruction_response = self.test_client.post(
+            f"/api/v1/carousels/{uuid.uuid4()}/instructions",
+            json={"body": "Blocked"},
+        )
+
+        self.assertEqual(create_instruction_response.status_code, 403)
+        self.assertIn("read-only", create_instruction_response.json()["detail"].lower())
+
+        reorder_instruction_response = self.test_client.put(
+            f"/api/v1/carousels/{uuid.uuid4()}/instructions",
+            json={"instruction_ids": [str(uuid.uuid4())]},
+        )
+
+        self.assertEqual(reorder_instruction_response.status_code, 403)
+        self.assertIn("read-only", reorder_instruction_response.json()["detail"].lower())
+
+        patch_instruction_response = self.test_client.patch(
+            f"/api/v1/carousels/{uuid.uuid4()}/instructions/{uuid.uuid4()}",
+            json={"body": "Blocked"},
+        )
+
+        self.assertEqual(patch_instruction_response.status_code, 403)
+        self.assertIn("read-only", patch_instruction_response.json()["detail"].lower())
+
+        remove_instruction_response = self.test_client.delete(
+            f"/api/v1/carousels/{uuid.uuid4()}/instructions/{uuid.uuid4()}",
+        )
+
+        self.assertEqual(remove_instruction_response.status_code, 403)
+        self.assertIn("read-only", remove_instruction_response.json()["detail"].lower())
+
         create_research_response = self.test_client.post(
             "/api/v1/research",
             json={"title": "Blocked notes"},

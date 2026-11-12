@@ -1003,12 +1003,25 @@ class CarouselResearchReadResponse(BaseModel):
     position: int
 
 
+class CarouselInstructionReadResponse(BaseModel):
+    """One instruction document on a carousel, in position order.
+
+    ``id`` is the document row. ``position`` starts at zero. ``body`` is
+    the current text, including an empty string.
+    """
+
+    id: uuid.UUID
+    position: int
+    body: str
+
+
 class CarouselStepsResponse(BaseModel):
     """Derived step state. Not stored on the carousel.
 
-    ``basic`` is done. ``instructions`` and ``final`` are locked.
-    ``content`` and ``slides`` follow the album rule and the slide count.
-    Research does not change these states.
+    ``basic`` is done. ``instructions`` is done when a document has text
+    and available otherwise. ``final`` is locked. ``content`` and
+    ``slides`` follow the album rule and the slide count. Research
+    does not change these states.
     """
 
     basic: CarouselStepState
@@ -1038,11 +1051,12 @@ class CarouselListItemResponse(BaseModel):
 
 
 class CarouselReadResponse(BaseModel):
-    """One carousel, its research, derived step state, and slides.
+    """One carousel, its research, instruction documents, and slides.
 
     ``editor_step`` is the stored open step. ``steps`` is derived and
     does not change that stored value. ``research`` is the attached
-    documents in position order.
+    research in position order. ``instructions`` is one entry per
+    document, in position order.
     """
 
     id: uuid.UUID
@@ -1052,23 +1066,13 @@ class CarouselReadResponse(BaseModel):
     album_id: uuid.UUID | None = None
     generation_number: int
     editor_step: int
-    inspiration: str
-    rules: str
     live_slide_count: int
     created_at: datetime
     updated_at: datetime
     research: list[CarouselResearchReadResponse]
+    instructions: list[CarouselInstructionReadResponse]
     steps: CarouselStepsResponse
     slides: list[SlideReadResponse]
-
-
-class CarouselGuidancePatchRequest(BaseModel):
-    """Inspiration and rules for drafted slide text."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    inspiration: str = ""
-    rules: str = ""
 
 
 class TextGenerationStatusResponse(BaseModel):
@@ -1101,8 +1105,8 @@ class CarouselPatchRequest(BaseModel):
 class CarouselStepPatchRequest(BaseModel):
     """JSON body for `PATCH /api/v1/carousels/{carousel_id}/step`.
 
-    Stored values are 0 Basic, 2 Content, and 3 Slides. The handler
-    refuses a locked step. The rename route stays
+    Stored values are 0 Basic, 1 Instructions, 2 Content, and 3 Slides.
+    The handler refuses a locked step. The rename route stays
     `PATCH /carousels/{carousel_id}`.
     """
 
@@ -1156,6 +1160,41 @@ class CarouselResearchOrderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     research_item_ids: list[uuid.UUID]
+
+
+class CarouselInstructionCreateRequest(BaseModel):
+    """JSON body for `POST /api/v1/carousels/{carousel_id}/instructions`.
+
+    A missing ``body`` stores an empty string. The document is appended.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = ""
+
+
+class CarouselInstructionPatchRequest(BaseModel):
+    """JSON body for `PATCH .../instructions/{instruction_id}`.
+
+    ``body`` replaces the stored text. A missing body stores an empty string.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = ""
+
+
+class CarouselInstructionOrderRequest(BaseModel):
+    """JSON body for `PUT /api/v1/carousels/{carousel_id}/instructions`.
+
+    ``instruction_ids`` is every document on this carousel, in the new
+    order. The same id twice is rejected. Omitting the field does not
+    change the order.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    instruction_ids: list[uuid.UUID]
 
 
 class SlideElementTextWrite(BaseModel):
