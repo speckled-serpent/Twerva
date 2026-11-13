@@ -9,6 +9,9 @@ import type {
   CarouselTemplateReadResponse,
   BrandReadResponse,
   CampaignCreateRequest,
+  CampaignPostCreateRequest,
+  CampaignPostRead,
+  CampaignPostRescheduleRequest,
   CampaignReadResponse,
   SkeletonCreateRequest,
   SkeletonElementCreateRequest,
@@ -226,6 +229,61 @@ export async function createCampaign(
 export async function runCampaign(campaignId: string): Promise<CampaignReadResponse> {
 
   return requestJson<CampaignReadResponse>("POST", `/api/v1/campaigns/${campaignId}/run`);
+}
+
+export async function placeCampaignPost(
+  campaignId: string,
+  campaignPostCreateRequest: CampaignPostCreateRequest,
+): Promise<CampaignPostRead> {
+
+  return requestJson<CampaignPostRead>(
+    "POST",
+    `/api/v1/campaigns/${campaignId}/posts`,
+    campaignPostCreateRequest,
+  );
+}
+
+export async function rescheduleCampaignPost(
+  campaignId: string,
+  postId: string,
+  campaignPostRescheduleRequest: CampaignPostRescheduleRequest,
+): Promise<CampaignPostRead> {
+
+  return requestJson<CampaignPostRead>(
+    "PATCH",
+    `/api/v1/campaigns/${campaignId}/posts/${postId}`,
+    campaignPostRescheduleRequest,
+  );
+}
+
+export async function removeCampaignPost(campaignId: string, postId: string): Promise<void> {
+
+  return requestJson<void>(
+    "DELETE",
+    `/api/v1/campaigns/${campaignId}/posts/${postId}`,
+  );
+}
+
+export async function publishCampaignPost(
+  campaignId: string,
+  postId: string,
+): Promise<CampaignPostRead> {
+
+  return requestJson<CampaignPostRead>(
+    "POST",
+    `/api/v1/campaigns/${campaignId}/posts/${postId}/publish`,
+  );
+}
+
+export async function createCampaignPostStubMetrics(
+  campaignId: string,
+  postId: string,
+): Promise<MetricSnapshotReadResponse> {
+
+  return requestJson<MetricSnapshotReadResponse>(
+    "POST",
+    `/api/v1/campaigns/${campaignId}/posts/${postId}/metrics/stub`,
+  );
 }
 
 export async function listCarousels(): Promise<CarouselListItemResponse[]> {

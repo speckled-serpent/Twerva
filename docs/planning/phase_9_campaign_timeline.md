@@ -111,7 +111,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Page
 
-- [ ] **9.8 Show the timeline on the campaign**
+- [x] **9.8 Show the timeline on the campaign**
 
   Render `CampaignTimeline` from `CampaignDetailView` under the definition list. Keep `#run-campaign`, the lifecycle buttons, and `#campaign-carousels`. The section heading is Posts. The empty copy, when `posts` is empty, is `No posts yet. Add an assembled carousel from this campaign.` The hashtag line already on the detail stays the hashtag. The section does not append it to a caption.
 

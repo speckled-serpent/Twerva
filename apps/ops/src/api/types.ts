@@ -167,7 +167,8 @@ export interface PostJobReadResponse {
 
 export interface MetricSnapshotReadResponse {
   id: string;
-  post_job_id: string;
+  post_job_id: string | null;
+  campaign_post_id: string | null;
   captured_at: string;
   views: number | null;
   likes: number | null;
@@ -271,6 +272,54 @@ export interface CampaignAccountReadResponse {
   handle: string;
 }
 
+export interface CampaignPostResultsRead {
+  captured_at: string;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+}
+
+export interface CampaignPostFrameRead {
+  id: string;
+  position: number;
+  blocked: boolean;
+  block_reason: string | null;
+  block_detail: string | null;
+}
+
+export interface CampaignPostRead {
+  id: string;
+  campaign_id: string;
+  carousel_id: string;
+  generation_number: number;
+  assembled_carousel_id: string;
+  account_id: string;
+  platform: Platform;
+  handle: string;
+  status: string;
+  scheduled_for: string;
+  published_at: string | null;
+  platform_post_id: string | null;
+  platform_post_url: string | null;
+  last_error: string | null;
+  caption: string | null;
+  cta_url: string | null;
+  blocked: boolean;
+  frames: CampaignPostFrameRead[];
+  results: CampaignPostResultsRead | null;
+}
+
+export interface CampaignPostCreateRequest {
+  assembled_carousel_id: string;
+  account_id: string;
+  scheduled_for: string;
+}
+
+export interface CampaignPostRescheduleRequest {
+  scheduled_for: string;
+}
+
 export interface CampaignReadResponse {
   id: string;
   name: string;
@@ -289,6 +338,7 @@ export interface CampaignReadResponse {
   accounts: CampaignAccountReadResponse[];
   interests: CampaignInterestReadResponse[];
   carousels: CampaignCarouselRead[];
+  posts: CampaignPostRead[];
   created_at: string;
   updated_at: string;
   created_by: string | null;

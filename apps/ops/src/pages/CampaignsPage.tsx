@@ -19,6 +19,7 @@ import type {
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import { CampaignTimeline } from "./CampaignTimeline";
 import {
   CampaignStatusBadge,
   campaignLifecycleActionLabel,
@@ -215,6 +216,7 @@ export function CampaignsPage({
         }}
         onLifecycleAction={handleLifecycleAction}
         onRun={handleRun}
+        onCampaignReplaced={setSelectedCampaign}
       />
     );
   }
@@ -337,6 +339,7 @@ interface CampaignDetailViewProps {
   onBack: () => void;
   onLifecycleAction: (lifecycleAction: CampaignLifecycleAction) => Promise<void>;
   onRun: () => Promise<void>;
+  onCampaignReplaced: (campaign: CampaignReadResponse) => void;
 }
 
 function CampaignDetailView({
@@ -349,6 +352,7 @@ function CampaignDetailView({
   onBack,
   onLifecycleAction,
   onRun,
+  onCampaignReplaced,
 }: CampaignDetailViewProps): ReactElement {
 
   const allowedActions: CampaignLifecycleAction[] =
@@ -421,6 +425,12 @@ function CampaignDetailView({
               {selectedCampaign.created_by === null ? "—" : selectedCampaign.created_by}
             </dd>
           </dl>
+
+          <CampaignTimeline
+            campaign={selectedCampaign}
+            canWrite={canWrite}
+            onCampaignReplaced={onCampaignReplaced}
+          />
 
           {canWrite && (selectedCampaign.skeleton_id === null || selectedCampaign.carousel_id === null) ? (
             <p className="field-hint">
