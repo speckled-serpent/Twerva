@@ -14,6 +14,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.albums.linking import next_album_image_position
 from app.api.v1.carousel_writes import IMAGE_MEDIA_TYPES, _discard_stored_files, _reject_when_paths_in_use
 from app.api.v1.persist import commit_database_session_or_raise_conflict
+from app.carousels.generations import (
+    carousel_ids_for_album,
+    refresh_generation_snapshots,
+)
 from app.api.v1.schemas import (
     AlbumCreateRequest,
     AlbumImageReadResponse,
@@ -157,6 +161,10 @@ def patch_album(
         found_image.license_note = license_note
         found_image.alt_text = alt_text
 
+    refresh_generation_snapshots(
+        carousel_ids_for_album(found_album.id, our_database_session),
+        our_database_session,
+    )
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Album could not be saved.",
@@ -181,7 +189,12 @@ def delete_album(
     stored_files: list[tuple[str, str | None]] = [
         (image.relative_path, image.thumbnail_path) for image in list(found_album.images)
     ]
+    linked_carousel_ids: list[uuid.UUID] = carousel_ids_for_album(
+        found_album.id,
+        our_database_session,
+    )
     our_database_session.delete(found_album)
+    refresh_generation_snapshots(linked_carousel_ids, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Album could not be deleted.",
@@ -291,7 +304,12 @@ def delete_album_image(
     stored_files: list[tuple[str, str | None]] = [
         (found_image.relative_path, found_image.thumbnail_path),
     ]
+    linked_carousel_ids: list[uuid.UUID] = carousel_ids_for_album(
+        album_id,
+        our_database_session,
+    )
     our_database_session.delete(found_image)
+    refresh_generation_snapshots(linked_carousel_ids, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Image could not be deleted.",
@@ -555,6 +573,10 @@ def _store_album_image(
         )
         found_album.images.append(created_image)
         our_database_session.add(created_image)
+        refresh_generation_snapshots(
+            carousel_ids_for_album(found_album.id, our_database_session),
+            our_database_session,
+        )
         commit_database_session_or_raise_conflict(
             our_database_session,
             conflict_detail="Image could not be saved.",

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import os
+import tempfile
 import unittest
 import uuid
 from pathlib import Path
@@ -13,11 +15,14 @@ os.environ.setdefault("TWERVA_ENV", "test")
 from alembic import command
 from alembic.config import Config
 from fastapi import HTTPException
+from PIL import Image
 from sqlalchemy import create_engine, func, select, text
+from starlette.datastructures import UploadFile
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.api.v1.albums import patch_album, upload_album_image
 from app.api.v1.carousel_text import (
     accept_slide_draft_batch,
     discard_slide_draft_batch,
@@ -39,16 +44,21 @@ from app.api.v1.carousel_writes import (
     put_carousel_instructions,
     put_carousel_research,
 )
+from app.api.v1.research import delete_research, patch_research
 from app.api.v1.skeleton_elements import create_skeleton_element
+from app.carousels.image_store import LocalAlbumImageStore
 from app.api.v1.schemas import (
     CarouselAlbumAttachRequest,
     CarouselAlbumCreateRequest,
+    AlbumImageWrite,
+    AlbumPatchRequest,
     CarouselCreateRequest,
     CarouselInstructionCreateRequest,
     CarouselInstructionOrderRequest,
     CarouselInstructionPatchRequest,
     CarouselResearchAttachRequest,
     CarouselResearchOrderRequest,
+    ResearchPatchRequest,
     SkeletonElementCreateRequest,
     SlideElementTextWrite,
     SlideWriteRequest,
@@ -62,7 +72,9 @@ from app.models.carousel import (
     INSTRUCTION_BODY_MAX_CHARACTERS,
     Carousel,
     CarouselGeneration,
+    CarouselGenerationImage,
     CarouselGenerationInstruction,
+    CarouselGenerationResearch,
     CarouselGenerationSlide,
     CarouselGenerationSlideText,
     CarouselInstruction,
@@ -510,6 +522,299 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
                 os.environ["TEXT_GENERATION_PROVIDER"] = previous_provider
 
             clear_settings_cache()
+
+    def test_shared_album_and_research_refresh_generation_one_only(self) -> None:
+        """An album or research edit updates generation 1 and leaves generation 2."""
+
+        with Session(self.database_engine) as session:
+            element: SkeletonElement = self._text_element(session)
+            created = create_carousel(
+                CarouselCreateRequest(name="Shared", skeleton_id=element.skeleton_id),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            album: Album = Album(
+                id=new_row_id(),
+                name="Harbor photos",
+                slug=f"shared-photos-{uuid.uuid4().hex[:8]}",
+            )
+            session.add(album)
+            session.commit()
+            put_carousel_album(
+                created.id,
+                CarouselAlbumAttachRequest(album_id=album.id),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+            with tempfile.TemporaryDirectory() as storage_directory:
+                store: LocalAlbumImageStore = LocalAlbumImageStore(Path(storage_directory))
+
+                with patch(
+                    "app.api.v1.albums.configured_album_image_store",
+                    return_value=store,
+                ):
+                    first = upload_album_image(
+                        album.id,
+                        _upload("one.jpg"),
+                        SlideImageLicense.CC0,
+                        "bench",
+                        "One",
+                        "",
+                        session,  # type: ignore[arg-type]
+                        None,
+                    )
+                    second = upload_album_image(
+                        album.id,
+                        _upload("two.jpg"),
+                        SlideImageLicense.CC0,
+                        "bench",
+                        "Two",
+                        "",
+                        session,  # type: ignore[arg-type]
+                        None,
+                    )
+
+                self.assertEqual(
+                    self._snapshot_image_ids(session, created.id, 1),
+                    [first.id, second.id],
+                )
+                older: CarouselGeneration = self._generation_with_image_and_research(
+                    session,
+                    created.id,
+                    first.id,
+                )
+                session.commit()
+
+                with patch(
+                    "app.api.v1.albums.configured_album_image_store",
+                    return_value=store,
+                ):
+                    third = upload_album_image(
+                        album.id,
+                        _upload("three.jpg"),
+                        SlideImageLicense.CC0,
+                        "bench",
+                        "Three",
+                        "",
+                        session,  # type: ignore[arg-type]
+                        None,
+                    )
+
+                self.assertEqual(
+                    self._snapshot_image_ids(session, created.id, 1),
+                    [first.id, second.id, third.id],
+                )
+                self.assertEqual(self._generation_image_ids(session, older.id), [first.id])
+                patch_album(
+                    album.id,
+                    AlbumPatchRequest(
+                        name="Harbor photos",
+                        images=[
+                            _image_write(third.id),
+                            _image_write(first.id),
+                            _image_write(second.id),
+                        ],
+                    ),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self.assertEqual(
+                    self._snapshot_image_ids(session, created.id, 1),
+                    [third.id, first.id, second.id],
+                )
+                self.assertEqual(self._generation_image_ids(session, older.id), [first.id])
+                research: ResearchItem = ResearchItem(
+                    id=new_row_id(),
+                    title=FIRST_RESEARCH_TITLE,
+                    slug=f"shared-tides-{uuid.uuid4().hex[:8]}",
+                    body=FIRST_RESEARCH_BODY,
+                )
+                session.add(research)
+                session.commit()
+                post_carousel_research(
+                    created.id,
+                    CarouselResearchAttachRequest(research_item_id=research.id),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._copy_research_onto_generation(session, older.id, research)
+                session.commit()
+                patch_research(
+                    research.id,
+                    ResearchPatchRequest(title=FIRST_RESEARCH_TITLE, body="The water is warm."),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self.assertEqual(
+                    self._snapshot_research_bodies(session, created.id, 1),
+                    ["The water is warm."],
+                )
+                self.assertEqual(
+                    self._generation_research(session, older.id),
+                    (FIRST_RESEARCH_TITLE, FIRST_RESEARCH_BODY, research.id),
+                )
+                delete_research(
+                    research.id,
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                session.expire_all()
+
+                self.assertEqual(self._snapshot_research_bodies(session, created.id, 1), [])
+                self.assertEqual(
+                    self._generation_research(session, older.id),
+                    (FIRST_RESEARCH_TITLE, FIRST_RESEARCH_BODY, None),
+                )
+                self.assertEqual(self._generation_number(session, created.id), 1)
+
+    def _generation_with_image_and_research(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        album_image_id: uuid.UUID,
+    ) -> CarouselGeneration:
+        """Insert generation 2 with one image the later upload must not change."""
+
+        carousel: Carousel | None = session.get(Carousel, carousel_id)
+        assert carousel is not None
+        generation: CarouselGeneration = CarouselGeneration(
+            id=new_row_id(),
+            carousel_id=carousel.id,
+            generation_number=2,
+            album_id=carousel.album_id,
+        )
+        generation.images = [
+            CarouselGenerationImage(
+                id=new_row_id(),
+                generation_id=generation.id,
+                position=0,
+                album_image_id=album_image_id,
+            ),
+        ]
+        carousel.generations.append(generation)
+        session.add(generation)
+        session.flush()
+
+        return generation
+
+    def _copy_research_onto_generation(
+        self,
+        session: Session,
+        generation_id: uuid.UUID,
+        research: ResearchItem,
+    ) -> None:
+        """Store the original research text on generation 2."""
+
+        generation: CarouselGeneration | None = session.get(CarouselGeneration, generation_id)
+        assert generation is not None
+        generation.research_items.append(
+            CarouselGenerationResearch(
+                id=new_row_id(),
+                generation_id=generation.id,
+                position=0,
+                research_item_id=research.id,
+                title=research.title,
+                body=research.body,
+            ),
+        )
+        session.flush()
+
+    def _snapshot_image_ids(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        generation_number: int,
+    ) -> list[uuid.UUID | None]:
+        """Return copied image ids for one generation, in position order."""
+
+        generation: CarouselGeneration = self._generation_by_number(
+            session,
+            carousel_id,
+            generation_number,
+        )
+        image_ids: list[uuid.UUID | None] = [
+            image.album_image_id
+            for image in sorted(list(generation.images), key=_position)
+        ]
+
+        return image_ids
+
+    def _generation_image_ids(
+        self,
+        session: Session,
+        generation_id: uuid.UUID,
+    ) -> list[uuid.UUID | None]:
+        """Return one generation's copied image ids."""
+
+        generation: CarouselGeneration | None = session.get(CarouselGeneration, generation_id)
+        assert generation is not None
+        image_ids: list[uuid.UUID | None] = [
+            image.album_image_id
+            for image in sorted(list(generation.images), key=_position)
+        ]
+
+        return image_ids
+
+    def _snapshot_research_bodies(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        generation_number: int,
+    ) -> list[str]:
+        """Return copied research bodies for one generation."""
+
+        generation: CarouselGeneration = self._generation_by_number(
+            session,
+            carousel_id,
+            generation_number,
+        )
+        bodies: list[str] = [
+            research.body
+            for research in sorted(list(generation.research_items), key=_position)
+        ]
+
+        return bodies
+
+    def _generation_research(
+        self,
+        session: Session,
+        generation_id: uuid.UUID,
+    ) -> tuple[str, str, uuid.UUID | None]:
+        """Return the one copied research title, body, and library id."""
+
+        generation: CarouselGeneration | None = session.get(CarouselGeneration, generation_id)
+        assert generation is not None
+        session.refresh(generation)
+        copied: list[CarouselGenerationResearch] = list(generation.research_items)
+
+        self.assertEqual(len(copied), 1)
+        research_row: tuple[str, str, uuid.UUID | None] = (
+            copied[0].title,
+            copied[0].body,
+            copied[0].research_item_id,
+        )
+
+        return research_row
+
+    def _generation_by_number(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        generation_number: int,
+    ) -> CarouselGeneration:
+        """Return one numbered snapshot on a carousel."""
+
+        carousel: Carousel | None = session.get(Carousel, carousel_id)
+        assert carousel is not None
+
+        for generation in list(carousel.generations):
+
+            if generation.generation_number == generation_number:
+
+                return generation
+
+        self.fail(f"generation {generation_number} is missing")
 
     def _assert_snapshot_slides(
         self,
@@ -1048,6 +1353,38 @@ def _album_image(album_id: uuid.UUID, position: int, relative_path: str) -> Albu
     )
 
     return image
+
+
+def _upload(filename: str) -> UploadFile:
+    """Return an upload of a tiny JPEG."""
+
+    upload: UploadFile = UploadFile(file=io.BytesIO(_jpeg_bytes()), filename=filename)
+
+    return upload
+
+
+def _jpeg_bytes() -> bytes:
+    """Return a tiny JPEG the intake checks accept."""
+
+    buffer: io.BytesIO = io.BytesIO()
+    image: Image.Image = Image.new("RGB", (8, 8), (20, 80, 140))
+    image.save(buffer, format="JPEG")
+
+    return buffer.getvalue()
+
+
+def _image_write(image_id: uuid.UUID) -> AlbumImageWrite:
+    """Return the license fields patch_album requires for one image."""
+
+    image_write: AlbumImageWrite = AlbumImageWrite(
+        id=image_id,
+        license=SlideImageLicense.CC0,
+        source="bench",
+        license_note="",
+        alt_text=None,
+    )
+
+    return image_write
 
 
 def _slide_write(

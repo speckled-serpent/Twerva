@@ -19,6 +19,7 @@ from app.models.album import AlbumImage
 from app.models.carousel import (
     Carousel,
     CarouselGeneration,
+    CarouselResearchItem,
     CarouselGenerationImage,
     CarouselGenerationInstruction,
     CarouselGenerationResearch,
@@ -148,12 +149,84 @@ def refresh_generation_snapshots_for_skeleton(
         replace_current_generation_snapshot(carousel_id_row[0], our_database_session)
 
 
+def carousel_ids_for_album(
+    album_id: uuid.UUID,
+    our_database_session: Session,
+) -> list[uuid.UUID]:
+    """Return carousels that currently point at this album.
+
+    Call this before deleting the album. The foreign key then clears
+    ``album_id``, so a later query would find no rows.
+
+    Args:
+        album_id: The album that is about to change.
+        our_database_session: Open session.
+
+    Returns:
+        Carousel ids, with no duplicates.
+    """
+
+    carousel_ids: list[uuid.UUID] = list(
+        our_database_session.scalars(
+            select(Carousel.id).where(Carousel.album_id == album_id),
+        ).all(),
+    )
+
+    return carousel_ids
+
+
+def carousel_ids_for_research(
+    research_item_id: uuid.UUID,
+    our_database_session: Session,
+) -> list[uuid.UUID]:
+    """Return carousels that currently link this research document.
+
+    Call this before deleting the document. The link rows go with it.
+
+    Args:
+        research_item_id: The library document that is about to change.
+        our_database_session: Open session.
+
+    Returns:
+        Carousel ids, with no duplicates.
+    """
+
+    carousel_ids: list[uuid.UUID] = list(
+        our_database_session.scalars(
+            select(Carousel.id)
+            .join(
+                CarouselResearchItem,
+                CarouselResearchItem.carousel_id == Carousel.id,
+            )
+            .where(CarouselResearchItem.research_item_id == research_item_id),
+        ).all(),
+    )
+
+    return carousel_ids
+
+
+def refresh_generation_snapshots(
+    carousel_ids: list[uuid.UUID],
+    our_database_session: Session,
+) -> None:
+    """Refresh each carousel's current generation. Other numbers stay.
+
+    Args:
+        carousel_ids: Carousels whose working rows changed.
+        our_database_session: Open session. This function flushes and
+            does not commit.
+    """
+
+    for carousel_id in carousel_ids:
+        replace_current_generation_snapshot(carousel_id, our_database_session)
+
+
 def _expire_working_rows(carousel: Carousel, our_database_session: Session) -> None:
     """Drop cached working rows so the copy reads the flushed write."""
 
     our_database_session.expire(
         carousel,
-        ["slides", "instructions", "research_links", "album"],
+        ["album_id", "slides", "instructions", "research_links", "album"],
     )
 
     for slide in list(carousel.slides):
