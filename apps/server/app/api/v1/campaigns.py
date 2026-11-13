@@ -45,11 +45,13 @@ from app.campaigns.slug import (
 from app.db import get_our_database_session
 from app.models import (
     Account,
+    AssembledCarousel,
     Campaign,
     CampaignAccount,
     CampaignCarousel,
     CampaignCarouselSlide,
     CampaignInterest,
+    CampaignPost,
     CampaignStatus,
     CampaignType,
     Carousel,
@@ -381,6 +383,13 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
     carousel_responses: list[CampaignCarouselRead] = [
         _serialize_carousel(carousel) for carousel in list(campaign.carousels)
     ]
+    ordered_posts: list[CampaignPost] = sorted(
+        list(campaign.posts),
+        key=lambda post: (post.scheduled_for, str(post.id)),
+    )
+    post_responses: list[CampaignPostRead] = [
+        serialize_campaign_post(post) for post in ordered_posts
+    ]
     campaign_read_response: CampaignReadResponse = CampaignReadResponse(
         id=campaign.id,
         name=campaign.name,
@@ -399,6 +408,7 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
         accounts=account_responses,
         interests=interest_responses,
         carousels=carousel_responses,
+        posts=post_responses,
         created_at=campaign.created_at,
         updated_at=campaign.updated_at,
         created_by=campaign.created_by,
@@ -526,6 +536,14 @@ def _campaign_read_options() -> tuple[object, ...]:
         selectinload(Campaign.carousels)
         .selectinload(CampaignCarousel.slides)
         .selectinload(CampaignCarouselSlide.slide),
+        selectinload(Campaign.posts).selectinload(CampaignPost.account),
+        selectinload(Campaign.posts).selectinload(CampaignPost.metric_snapshots),
+        selectinload(Campaign.posts)
+        .selectinload(CampaignPost.assembled_carousel)
+        .selectinload(AssembledCarousel.frames),
+        selectinload(Campaign.posts)
+        .selectinload(CampaignPost.assembled_carousel)
+        .selectinload(AssembledCarousel.assembly),
     )
 
     return read_options
@@ -757,7 +775,11 @@ def _optional_stripped_text(raw_value: str | None) -> str | None:
     return stripped_value
 
 
-from app.api.v1.campaign_posts import register_campaign_post_routes
+from app.api.v1.campaign_posts import (
+    register_campaign_post_routes,
+    serialize_campaign_post,
+)
+from app.api.v1.schemas import CampaignPostRead
 
 
 register_campaign_post_routes(campaigns_router)

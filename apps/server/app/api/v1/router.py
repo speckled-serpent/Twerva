@@ -14,6 +14,7 @@ from app.api.v1.research import research_router
 from app.api.v1.artifacts import artifacts_router
 from app.api.v1.authentication import authentication_router
 from app.api.v1.brands import brands_router
+from app.api.v1.campaign_posts import posts_router
 from app.api.v1.campaigns import campaigns_router
 from app.api.v1.clusters import clusters_router
 from app.api.v1.generate import generate_router
@@ -42,6 +43,7 @@ protected_api_v1_router.include_router(carousels_router)
 protected_api_v1_router.include_router(albums_router)
 protected_api_v1_router.include_router(research_router)
 protected_api_v1_router.include_router(campaigns_router)
+protected_api_v1_router.include_router(posts_router)
 protected_api_v1_router.include_router(skeletons_router)
 protected_api_v1_router.include_router(spotmu_router)
 protected_api_v1_router.include_router(clusters_router)

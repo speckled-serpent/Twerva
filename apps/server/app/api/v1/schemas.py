@@ -161,6 +161,23 @@ class CampaignPostRead(BaseModel):
     results: CampaignPostResultsRead | None = None
 
 
+class TimelinePostRead(BaseModel):
+    """One row on the cross-campaign timeline."""
+
+    origin: Literal["campaign_post", "post_job"]
+    id: uuid.UUID
+    status: str
+    scheduled_for: datetime | None
+    published_at: datetime | None
+    campaign_id: uuid.UUID | None
+    campaign_name: str | None
+    account_id: uuid.UUID
+    platform: Platform
+    handle: str
+    caption: str | None
+    results: CampaignPostResultsRead | None
+
+
 class CampaignReadResponse(BaseModel):
     """Serialized Campaign plus join counts and snapshots."""
 
@@ -183,6 +200,7 @@ class CampaignReadResponse(BaseModel):
     accounts: list[CampaignAccountReadResponse] = Field(default_factory=list)
     interests: list[CampaignInterestReadResponse] = Field(default_factory=list)
     carousels: list[CampaignCarouselRead] = Field(default_factory=list)
+    posts: list[CampaignPostRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None

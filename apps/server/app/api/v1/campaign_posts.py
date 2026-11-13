@@ -17,10 +17,16 @@ from app.api.v1.schemas import (
     CampaignPostResultsRead,
     MetricSnapshotReadResponse,
     PostJobMetricsCreateRequest,
+    TimelinePostRead,
 )
-from app.auth.dependencies import require_admin_ops_operator
+from app.auth.dependencies import (
+    require_admin_ops_operator,
+    require_authenticated_ops_operator,
+)
 from app.campaigns.posts import (
     assembly_for_post,
+    latest_snapshot_results,
+    list_timeline_posts,
     ordered_frames,
     place_campaign_post,
     publish_campaign_post,
@@ -34,13 +40,28 @@ from app.metrics.service import (
     append_campaign_post_stub_metric,
 )
 from app.models.campaign import CAMPAIGN_POST_POSTED_STATUS, Campaign, CampaignPost
-from app.models.metric_snapshot import MetricSnapshot
 from app.models.carousel import AssembledCarouselFrame, CarouselAssembly
+from app.models.metric_snapshot import MetricSnapshot
 from app.models.ops_user import OpsUser
 from app.schedule.errors import CadenceCapExceededError
 
 
 RECORD_RESULTS_AFTER_POST_DETAIL: str = "Record results after the post is up."
+
+posts_router: APIRouter = APIRouter(prefix="/posts", tags=["posts"])
+
+
+@posts_router.get("", response_model=list[TimelinePostRead])
+def list_posts(
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
+) -> list[TimelinePostRead]:
+    """Return every campaign post and post job. Readers can call this."""
+
+    _ = current_ops_operator
+    timeline_rows: list[TimelinePostRead] = list_timeline_posts(our_database_session)
+
+    return timeline_rows
 
 
 def register_campaign_post_routes(campaigns_router: APIRouter) -> None:
@@ -397,21 +418,8 @@ def serialize_campaign_post(post: CampaignPost) -> CampaignPostRead:
 def _latest_campaign_post_results(post: CampaignPost) -> CampaignPostResultsRead | None:
     """Return the snapshot with the greatest captured_at, or null."""
 
-    snapshots: list[MetricSnapshot] = list(post.metric_snapshots)
-
-    if len(snapshots) == 0:
-        return None
-
-    latest_snapshot: MetricSnapshot = max(
-        snapshots,
-        key=lambda snapshot: snapshot.captured_at,
-    )
-    results: CampaignPostResultsRead = CampaignPostResultsRead(
-        captured_at=latest_snapshot.captured_at,
-        views=latest_snapshot.views,
-        likes=latest_snapshot.likes,
-        comments=latest_snapshot.comments,
-        shares=latest_snapshot.shares,
+    results: CampaignPostResultsRead | None = latest_snapshot_results(
+        list(post.metric_snapshots),
     )
 
     return results

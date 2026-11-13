@@ -10,7 +10,9 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.api.v1.schemas import CampaignPostResultsRead, TimelinePostRead
 from app.models.account import Account
+from app.models.artifact import Artifact
 from app.models.campaign import (
     CAMPAIGN_POST_FAILED_STATUS,
     CAMPAIGN_POST_POSTED_STATUS,
@@ -20,6 +22,9 @@ from app.models.campaign import (
     CampaignPost,
 )
 from app.models.carousel import AssembledCarousel, AssembledCarouselFrame, CarouselAssembly
+from app.models.enums import PostJobStatus
+from app.models.metric_snapshot import MetricSnapshot
+from app.models.post_job import PostJob
 from app.publish.errors import PublishMediaMissingError
 from app.publish.factory import get_publish_adapter
 from app.publish.media import resolve_asset_reference_path
@@ -456,6 +461,142 @@ def ordered_frames(
     )
 
     return ordered
+
+
+POST_JOB_TIMELINE_STATUS: dict[PostJobStatus, str] = {
+    PostJobStatus.SCHEDULED: CAMPAIGN_POST_UPCOMING_STATUS,
+    PostJobStatus.PUBLISHING: CAMPAIGN_POST_UPCOMING_STATUS,
+    PostJobStatus.PUBLISHED: CAMPAIGN_POST_POSTED_STATUS,
+    PostJobStatus.MEASURED: CAMPAIGN_POST_POSTED_STATUS,
+    PostJobStatus.FAILED: CAMPAIGN_POST_FAILED_STATUS,
+}
+
+
+def list_timeline_posts(our_database_session: Session) -> list[TimelinePostRead]:
+    """Return campaign posts and post jobs, soonest scheduled time first.
+
+    A post job with no time sorts after every timed row. Artifacts that
+    were never given a post job are left out. Post jobs are not copied.
+
+    Args:
+        our_database_session: Open SQLAlchemy session.
+
+    Returns:
+        Timeline rows in ``scheduled_for`` order, then id.
+    """
+
+    campaign_posts: list[CampaignPost] = list(
+        our_database_session.scalars(
+            select(CampaignPost).options(
+                selectinload(CampaignPost.account),
+                selectinload(CampaignPost.campaign),
+                selectinload(CampaignPost.metric_snapshots),
+                selectinload(CampaignPost.assembled_carousel),
+            ),
+        ).all(),
+    )
+    post_jobs: list[PostJob] = list(
+        our_database_session.scalars(
+            select(PostJob).options(
+                selectinload(PostJob.account),
+                selectinload(PostJob.artifact),
+                selectinload(PostJob.metric_snapshots),
+            ),
+        ).all(),
+    )
+    timeline_rows: list[TimelinePostRead] = [
+        _timeline_row_from_campaign_post(post) for post in campaign_posts
+    ]
+    timeline_rows.extend(
+        _timeline_row_from_post_job(post_job) for post_job in post_jobs
+    )
+    timeline_rows.sort(key=_timeline_sort_key)
+
+    return timeline_rows
+
+
+def latest_snapshot_results(
+    snapshots: list[MetricSnapshot],
+) -> CampaignPostResultsRead | None:
+    """Return the snapshot with the greatest captured_at, or null."""
+
+    if len(snapshots) == 0:
+        return None
+
+    latest_snapshot: MetricSnapshot = max(
+        snapshots,
+        key=lambda snapshot: snapshot.captured_at,
+    )
+    results: CampaignPostResultsRead = CampaignPostResultsRead(
+        captured_at=latest_snapshot.captured_at,
+        views=latest_snapshot.views,
+        likes=latest_snapshot.likes,
+        comments=latest_snapshot.comments,
+        shares=latest_snapshot.shares,
+    )
+
+    return results
+
+
+def _timeline_row_from_campaign_post(post: CampaignPost) -> TimelinePostRead:
+    """Map one campaign post onto the cross-campaign list."""
+
+    timeline_row: TimelinePostRead = TimelinePostRead(
+        origin="campaign_post",
+        id=post.id,
+        status=post.status,
+        scheduled_for=post.scheduled_for,
+        published_at=post.published_at,
+        campaign_id=post.campaign_id,
+        campaign_name=post.campaign.name,
+        account_id=post.account_id,
+        platform=post.account.platform,
+        handle=post.account.handle,
+        caption=post.assembled_carousel.caption,
+        results=latest_snapshot_results(list(post.metric_snapshots)),
+    )
+
+    return timeline_row
+
+
+def _timeline_row_from_post_job(post_job: PostJob) -> TimelinePostRead:
+    """Map one post job onto the cross-campaign list."""
+
+    artifact: Artifact = post_job.artifact
+    timeline_status: str = POST_JOB_TIMELINE_STATUS[post_job.status]
+    timeline_row: TimelinePostRead = TimelinePostRead(
+        origin="post_job",
+        id=post_job.id,
+        status=timeline_status,
+        scheduled_for=post_job.scheduled_for,
+        published_at=post_job.published_at,
+        campaign_id=None,
+        campaign_name=None,
+        account_id=post_job.account_id,
+        platform=post_job.account.platform,
+        handle=post_job.account.handle,
+        caption=artifact.caption,
+        results=latest_snapshot_results(list(post_job.metric_snapshots)),
+    )
+
+    return timeline_row
+
+
+def _timeline_sort_key(row: TimelinePostRead) -> tuple[int, datetime, str]:
+    """Sort timed rows first, then by time, then by id."""
+
+    if row.scheduled_for is None:
+        sort_key: tuple[int, datetime, str] = (
+            1,
+            datetime.max.replace(tzinfo=timezone.utc),
+            str(row.id),
+        )
+
+        return sort_key
+
+    sort_key = (0, row.scheduled_for, str(row.id))
+
+    return sort_key
 
 
 def assembly_for_post(post: CampaignPost) -> CarouselAssembly:

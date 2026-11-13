@@ -91,7 +91,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Read model
 
-- [ ] **9.6 Return the campaign timeline and one cross-campaign list**
+- [x] **9.6 Return the campaign timeline and one cross-campaign list**
 
   `CampaignReadResponse` gains `posts`, defaulting to an empty list so the constructor in `test_api_schemas.py` still builds. `serialize_campaign` fills it in `scheduled_for` order, then `id`. Each entry is `CampaignPostRead`, including `results` from task 9.5. The list route and the detail route share this schema, the way they already share `carousels`. Load posts with `selectinload` in `_campaign_read_options`. `carousels` stays the run assembly from `campaign_carousels`.
 

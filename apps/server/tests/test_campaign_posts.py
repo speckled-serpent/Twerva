@@ -34,7 +34,9 @@ from app.api.v1.campaign_posts import (
 )
 from app.api.v1.campaigns import (
     create_campaign,
+    get_campaign_by_id,
     pause_campaign_by_id,
+    run_campaign,
     start_campaign_by_id,
 )
 from app.api.v1.carousel_writes import create_carousel
@@ -58,6 +60,7 @@ from app.api.v1.schemas import (
 )
 from app.api.v1.skeletons import create_skeleton
 from app.auth.passwords import hash_plain_password
+from app.campaigns.posts import list_timeline_posts
 from app.campaigns.posts import (
     ASSEMBLED_CAROUSEL_NOT_FOUND_DETAIL,
     CAMPAIGN_POST_ACCOUNT_DETAIL,
@@ -884,6 +887,138 @@ class CampaignPostPlacementTests(unittest.TestCase):
         self.assertEqual(stored_snapshot.post_job_id, created_job.id)
         self.assertIsNone(stored_snapshot.campaign_post_id)
 
+    def test_campaign_detail_lists_posts_in_time_order(self) -> None:
+        """The detail lists upcoming then posted, and run leaves that list."""
+
+        campaign_id: uuid.UUID = _campaign_on_world_carousel(self.session)
+        empty_detail = get_campaign_by_id(campaign_id, self.session)
+        self.assertEqual(empty_detail.posts, [])
+        run_carousels = list(empty_detail.carousels)
+
+        early_post = _place_at(
+            self.session,
+            campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+            SCHEDULED_FOR,
+        )
+        late_post = _place_at(
+            self.session,
+            campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+            SCHEDULED_FOR + timedelta(days=1),
+        )
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            _write_frame_file(self.session, late_post.frames[0].id, Path(storage.name))
+            _publish(self.session, campaign_id, late_post.id)
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+        detail = get_campaign_by_id(campaign_id, self.session)
+        ran = run_campaign(campaign_id, self.session, None)
+
+        self.assertEqual([post.id for post in detail.posts], [early_post.id, late_post.id])
+        self.assertEqual(detail.posts[0].status, "upcoming")
+        self.assertEqual(detail.posts[1].status, "posted")
+        self.assertEqual(detail.carousels, run_carousels)
+        self.assertEqual(ran.carousels, run_carousels)
+        self.assertEqual([post.id for post in ran.posts], [early_post.id, late_post.id])
+
+    def test_cross_campaign_list_translates_post_jobs(self) -> None:
+        """Post jobs use the timeline labels. Artifacts without a job stay off it."""
+
+        suffix: str = uuid.uuid4().hex[:8]
+        campaign_id: uuid.UUID = _campaign_on_world_carousel(self.session)
+        campaign = get_campaign_by_id(campaign_id, self.session)
+        placed = _place(
+            self.session,
+            campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+        )
+        draft_artifact = create_artifact(
+            ArtifactCreateRequest(
+                brand_id=self.world.brand_id,
+                status=ArtifactStatus.DRAFT,
+                caption=f"draft-only-{suffix}",
+            ),
+            self.session,
+        )
+        approved_artifact = create_artifact(
+            ArtifactCreateRequest(
+                brand_id=self.world.brand_id,
+                status=ArtifactStatus.APPROVED,
+                caption=f"approved-only-{suffix}",
+            ),
+            self.session,
+        )
+        scheduled_job = _timeline_post_job(
+            self.session,
+            self.world,
+            PostJobStatus.SCHEDULED,
+            SCHEDULED_FOR,
+        )
+        published_job = _timeline_post_job(
+            self.session,
+            self.world,
+            PostJobStatus.PUBLISHED,
+            SCHEDULED_FOR + timedelta(hours=1),
+        )
+        measured_job = _timeline_post_job(
+            self.session,
+            self.world,
+            PostJobStatus.MEASURED,
+            SCHEDULED_FOR + timedelta(hours=2),
+        )
+        failed_job = _timeline_post_job(
+            self.session,
+            self.world,
+            PostJobStatus.FAILED,
+            SCHEDULED_FOR + timedelta(hours=3),
+        )
+        untimed_job = _timeline_post_job(
+            self.session,
+            self.world,
+            PostJobStatus.SCHEDULED,
+            None,
+        )
+        rows = list_timeline_posts(self.session)
+        by_id = {row.id: row for row in rows}
+        captions: set[str | None] = {row.caption for row in rows}
+        timed_index: int = next(
+            index for index, row in enumerate(rows) if row.id == scheduled_job.id
+        )
+        untimed_index: int = next(
+            index for index, row in enumerate(rows) if row.id == untimed_job.id
+        )
+
+        self.assertEqual(by_id[placed.id].origin, "campaign_post")
+        self.assertEqual(by_id[placed.id].campaign_name, campaign.name)
+        self.assertEqual(by_id[placed.id].status, "upcoming")
+        self.assertEqual(by_id[scheduled_job.id].origin, "post_job")
+        self.assertEqual(by_id[scheduled_job.id].status, "upcoming")
+        self.assertIsNone(by_id[scheduled_job.id].campaign_name)
+        self.assertIsNone(by_id[scheduled_job.id].campaign_id)
+        self.assertEqual(by_id[published_job.id].status, "posted")
+        self.assertEqual(by_id[measured_job.id].status, "posted")
+        self.assertEqual(by_id[failed_job.id].status, "failed")
+        self.assertNotIn(draft_artifact.caption, captions)
+        self.assertNotIn(approved_artifact.caption, captions)
+        self.assertLess(timed_index, untimed_index)
+
 
 class _RaisingPublishAdapter:
     """Test double whose media publish always fails."""
@@ -926,6 +1061,7 @@ class CampaignPostRouteTests(unittest.TestCase):
                 "/api/v1/campaigns/{campaign_id}/posts/{post_id}/publish"
             ],
         )
+        self.assertIn("get", methods_by_path["/api/v1/posts"])
 
     def test_a_reader_is_rejected(self) -> None:
         """A reader cannot place a post."""
@@ -1047,6 +1183,41 @@ class CampaignPostRouteTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200)
         self.assertEqual(response.status_code, 403)
         self.assertIn("read-only", response.json()["detail"].lower())
+
+    def test_a_reader_can_get_the_timeline(self) -> None:
+        """A reader can open the cross-campaign list."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        client: TestClient = _reader_client()
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": READER_PASSWORD},
+        )
+
+        try:
+            response = client.get("/api/v1/posts")
+        finally:
+            client.close()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [])
 
 
 def _place(
@@ -1190,6 +1361,59 @@ def _fresh_assembled(session: Session, caption: str) -> uuid.UUID:
     )
 
     return assembled_id
+
+
+def _campaign_on_world_carousel(session: Session) -> uuid.UUID:
+    """Create a campaign bound to the seeded carousel and open account."""
+
+    stored_campaign: Campaign | None = session.get(
+        Campaign,
+        CampaignPostPlacementTests.world.campaign_id,
+    )
+
+    if stored_campaign is None or stored_campaign.skeleton_id is None:
+        raise AssertionError("Seeded campaign was not stored.")
+
+    if stored_campaign.carousel_id is None:
+        raise AssertionError("Seeded campaign has no carousel.")
+
+    suffix: str = uuid.uuid4().hex[:8]
+    created_campaign = create_campaign(
+        CampaignCreateRequest(
+            name=f"Timeline {suffix}",
+            campaign_type=CampaignType.SPOTMU,
+            skeleton_id=stored_campaign.skeleton_id,
+            carousel_id=stored_campaign.carousel_id,
+            platforms=[Platform.INSTAGRAM],
+            account_ids=[CampaignPostPlacementTests.world.open_account_id],
+            interests=[],
+        ),
+        session,
+        None,
+    )
+
+    return created_campaign.id
+
+
+def _timeline_post_job(
+    session: Session,
+    world: _TimelineWorld,
+    status: PostJobStatus,
+    scheduled_for: datetime | None,
+):
+    """Store one post job for the cross-campaign list."""
+
+    created_job = create_post_job(
+        PostJobCreateRequest(
+            artifact_id=_artifact_id(session, world.brand_id),
+            account_id=world.open_account_id,
+            status=status,
+            scheduled_for=scheduled_for,
+        ),
+        session,
+    )
+
+    return created_job
 
 
 def _second_campaign(session: Session, account_id: uuid.UUID) -> uuid.UUID:
