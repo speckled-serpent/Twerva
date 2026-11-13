@@ -28,6 +28,7 @@ from app.carousels.collection_prompt import (
 from app.carousels.editing import new_row_id
 from app.carousels.instructions import instruction_prompt_text
 from app.carousels.slide_skeleton import (
+    IMAGE_REQUIRED_DETAIL,
     skeleton_requires_image,
     skeleton_text_elements,
 )
@@ -44,6 +45,7 @@ from app.models.carousel import (
     CarouselResearchItem,
     Slide,
     SlideDraftBatch,
+    SlideElementText,
 )
 from app.models.enums import SlideTextStatus
 from app.models.skeleton import Skeleton
@@ -57,7 +59,10 @@ PENDING_BATCH_DETAIL: str = (
     "Accept or discard the generated set before generating another."
 )
 PENDING_BATCH_STATUS: str = "pending"
+ACCEPTED_BATCH_STATUS: str = "accepted"
 NO_TEXT_ELEMENTS_DETAIL: str = "This skeleton has no text elements to draft."
+EMPTY_BATCH_DETAIL: str = "This set has no slides to accept."
+BATCH_NOT_FOUND_DETAIL: str = "Slide draft batch not found."
 
 
 def write_generated_slide_collection(
@@ -132,6 +137,108 @@ def write_generated_slide_collection(
         our_database_session.rollback()
 
         raise
+
+
+def accept_generated_slide_collection(
+    our_database_session: Session,
+    carousel: Carousel,
+    skeleton: Skeleton,
+    batch_id: uuid.UUID,
+) -> None:
+    """Make one pending set live. Other slides stay as they are.
+
+    Args:
+        our_database_session: Open session. One commit stores the accept.
+        carousel: The carousel that owns the batch, with slides loaded.
+        skeleton: That carousel's skeleton.
+        batch_id: The pending set to accept.
+
+    Raises:
+        HTTPException: The batch is not a pending set on this carousel,
+            the set has no slides, or a picture slide has no image.
+    """
+
+    batch: SlideDraftBatch = _pending_batch_or_raise(carousel, batch_id)
+    batch_slides: list[Slide] = _slides_in_batch(carousel, batch.id)
+
+    if len(batch_slides) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=EMPTY_BATCH_DETAIL,
+        )
+
+    if skeleton_requires_image(skeleton):
+
+        for slide in batch_slides:
+
+            if slide.album_image_id is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=IMAGE_REQUIRED_DETAIL,
+                )
+
+    for slide in batch_slides:
+        _accept_slide_text(slide)
+
+    batch.status = ACCEPTED_BATCH_STATUS
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Slides could not be saved.",
+    )
+
+
+def _pending_batch_or_raise(carousel: Carousel, batch_id: uuid.UUID) -> SlideDraftBatch:
+    """Return the pending set on this carousel, or raise HTTP 404."""
+
+    for batch in list(carousel.draft_batches):
+
+        if (
+            batch.id == batch_id
+            and batch.carousel_id == carousel.id
+            and batch.status == PENDING_BATCH_STATUS
+        ):
+
+            return batch
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=BATCH_NOT_FOUND_DETAIL,
+    )
+
+
+def _slides_in_batch(carousel: Carousel, batch_id: uuid.UUID) -> list[Slide]:
+    """Return the slides stored on this generated set."""
+
+    batch_slides: list[Slide] = [
+        slide
+        for slide in list(carousel.slides)
+        if slide.draft_batch_id == batch_id
+    ]
+
+    return batch_slides
+
+
+def _accept_slide_text(slide: Slide) -> None:
+    """Copy draft copy onto the live value and mark the slide live."""
+
+    for element_text in list(slide.element_texts):
+        copied_value: str = _copied_draft_value(element_text)
+        element_text.value = copied_value
+        element_text.draft_value = None
+
+    slide.text_status = SlideTextStatus.LIVE
+
+
+def _copied_draft_value(element_text: SlideElementText) -> str:
+    """Return the draft string, or an empty string when none was stored."""
+
+    if element_text.draft_value is None:
+
+        return ""
+
+    copied_value: str = element_text.draft_value
+
+    return copied_value
 
 
 def _reject_when_not_ready(

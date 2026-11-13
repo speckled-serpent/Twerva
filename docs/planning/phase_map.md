@@ -502,7 +502,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `apps/server/tests/test_slide_collection.py`, with `TEXT_GENERATION_PROVIDER=fake`: a carousel with two instruction documents, two research items, and two album images gets the patched count of slides, named `Drafted slide 1` onward, each text element containing the joined instructions, `draft_value` set, `value` `""`, `text_status` `draft`, and image ids round-robin. The detail includes the pending batch. A second POST is 409 and the slide count stays. A carousel with an older draft slide (null `draft_batch_id`) keeps that slide draft. Default, with no instruction text, is 400 and still has six live slides. A picture carousel with no album is 400. A reader is rejected. Provider off is 409 and writes nothing.
 
-- [ ] **6.6 Accept the whole set**
+- [x] **6.6 Accept the whole set**
 
   `POST /api/v1/carousels/{carousel_id}/slide-draft-batches/{batch_id}/accept`, admin only, empty body, response `serialize_carousel`. The batch must be `pending` and belong to this carousel. Otherwise 404. The helper loads the slides whose `draft_batch_id` is this batch. Zero such slides is 400, detail `This set has no slides to accept.` The batch stays `pending`. A picture skeleton whose batch slide has a null `album_image_id` is 400, `IMAGE_REQUIRED_DETAIL`, and no slide in the set changes status.
 

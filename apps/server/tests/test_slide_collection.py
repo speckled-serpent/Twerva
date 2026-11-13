@@ -13,23 +13,29 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.api.v1.carousel_text import generate_slide_collection
-from app.api.v1.carousel_writes import create_carousel
+from app.api.v1.carousel_text import (
+    accept_slide_draft_batch,
+    generate_slide_collection,
+)
+from app.api.v1.carousel_writes import create_carousel, create_slide
 from app.api.v1.carousels import get_carousel
 from app.api.v1.router import api_v1_router
 from app.api.v1.schemas import (
     CarouselCreateRequest,
     CarouselReadResponse,
+    SlideElementTextWrite,
     SlideReadResponse,
+    SlideWriteRequest,
 )
 from app.auth.passwords import hash_plain_password
 from app.carousels.slide_collection import (
     EMPTY_ALBUM_DETAIL,
+    EMPTY_BATCH_DETAIL,
     NO_ALBUM_DETAIL,
     NO_INSTRUCTION_TEXT_DETAIL,
     PENDING_BATCH_DETAIL,
 )
-from app.carousels.slide_skeleton import CarouselStepState
+from app.carousels.slide_skeleton import IMAGE_REQUIRED_DETAIL, CarouselStepState
 from app.carousels.slide_text_review import slide_counts_as_live
 from app.carousels.text_generation import (
     GENERATE_DISABLED_DETAIL,
@@ -44,6 +50,7 @@ from app.models.carousel import (
     CarouselInstruction,
     CarouselResearchItem,
     Slide,
+    SlideDraftBatch,
     SlideElementText,
 )
 from app.models.enums import (
@@ -328,6 +335,231 @@ class SlideCollectionRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("read-only", response.json()["detail"].lower())
 
+    def test_accept_makes_the_set_live_and_leaves_other_slides(self) -> None:
+        """Three drafted slides go live. An older draft and a hand slide stay."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        text_element = _title_element(session.skeleton.id)
+        session.skeleton.elements = [text_element]
+        created: CarouselReadResponse = create_carousel(
+            CarouselCreateRequest(name="Accept set", skeleton_id=session.skeleton.id),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        carousel: Carousel | None = session.get(Carousel, created.id)  # type: ignore[assignment]
+        assert carousel is not None
+        _attach_instructions(carousel, ["Harbor fog", "Keep it short"])
+        hand: SlideReadResponse = create_slide(
+            created.id,
+            SlideWriteRequest(
+                name="Hand",
+                texts=[
+                    SlideElementTextWrite(
+                        skeleton_element_id=text_element.id,
+                        value="Kept live",
+                    ),
+                ],
+            ),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        _attach_older_draft(session, carousel, text_element.id, position=1)
+        generation_number: int = carousel.generation_number
+
+        with patch(
+            "app.carousels.slide_collection.slide_count_or_global_default",
+            return_value=3,
+        ):
+            drafted: CarouselReadResponse = generate_slide_collection(
+                created.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        assert drafted.pending_slide_draft_batch is not None
+        batch_id: uuid.UUID = drafted.pending_slide_draft_batch.id
+        accepted: CarouselReadResponse = accept_slide_draft_batch(
+            created.id,
+            batch_id,
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        generated: list[SlideReadResponse] = [
+            slide for slide in accepted.slides if slide.name.startswith("Drafted slide ")
+        ]
+        earlier = next(slide for slide in accepted.slides if slide.name == "Earlier")
+        kept = next(slide for slide in accepted.slides if slide.id == hand.id)
+        expected_value: str = "Title. Harbor fog\n\nKeep it short"
+        stored_generated: dict[str, Slide] = {
+            slide.name: slide
+            for slide in carousel.slides
+            if slide.name.startswith("Drafted slide ")
+        }
+
+        self.assertEqual(len(generated), 3)
+        self.assertIsNone(accepted.pending_slide_draft_batch)
+        self.assertEqual(accepted.generation_number, generation_number)
+        self.assertEqual(accepted.live_slide_count, 4)
+        self.assertEqual(earlier.text_status, SlideTextStatus.DRAFT)
+        self.assertIsNone(earlier.draft_batch_id)
+        self.assertEqual(earlier.texts[0].value, "Live leftover")
+        self.assertEqual(earlier.draft_texts[0].value, "OLD DRAFT")
+        self.assertEqual(kept.text_status, SlideTextStatus.LIVE)
+        self.assertEqual(kept.texts[0].value, "Kept live")
+        self.assertEqual(kept.draft_texts, [])
+        self.assertIsNone(kept.draft_batch_id)
+
+        for index, slide in enumerate(generated):
+            self.assertEqual(slide.name, f"Drafted slide {index + 1}")
+            self.assertEqual(slide.text_status, SlideTextStatus.LIVE)
+            self.assertEqual(slide.texts[0].value, expected_value)
+            self.assertEqual(slide.draft_texts, [])
+            self.assertEqual(slide.draft_batch_id, batch_id)
+            self.assertEqual(slide.excluded_slide_ids, [])
+            self.assertIsNone(stored_generated[slide.name].element_texts[0].draft_value)
+            self.assertIsNone(stored_generated[slide.name].album_image_id)
+            self.assertEqual(stored_generated[slide.name].name, slide.name)
+
+        self.assertEqual(carousel.draft_batches[0].status, "accepted")
+
+        with self.assertRaises(HTTPException) as refused:
+            accept_slide_draft_batch(
+                created.id,
+                batch_id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        reloaded: CarouselReadResponse = get_carousel(
+            created.id,
+            session,  # type: ignore[arg-type]
+        )
+        reloaded_earlier = next(slide for slide in reloaded.slides if slide.name == "Earlier")
+        reloaded_hand = next(slide for slide in reloaded.slides if slide.id == hand.id)
+
+        self.assertEqual(refused.exception.status_code, 404)
+        self.assertEqual(reloaded_earlier.text_status, SlideTextStatus.DRAFT)
+        self.assertEqual(reloaded_earlier.texts[0].value, "Live leftover")
+        self.assertEqual(reloaded_earlier.draft_texts[0].value, "OLD DRAFT")
+        self.assertEqual(reloaded_hand.texts[0].value, "Kept live")
+        self.assertIsNone(reloaded.pending_slide_draft_batch)
+
+    def test_accept_refuses_an_empty_set_and_a_picture_slide_without_an_image(self) -> None:
+        """No slides stays pending. A picture slide without an image stays draft."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        text_element = _title_element(session.skeleton.id)
+        session.skeleton.elements = [text_element]
+        created: CarouselReadResponse = create_carousel(
+            CarouselCreateRequest(name="Empty set", skeleton_id=session.skeleton.id),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        carousel: Carousel | None = session.get(Carousel, created.id)  # type: ignore[assignment]
+        assert carousel is not None
+        empty_batch_id: uuid.UUID = uuid.uuid4()
+        empty_batch: SlideDraftBatch = SlideDraftBatch(
+            id=empty_batch_id,
+            carousel_id=carousel.id,
+            status="pending",
+            slide_count=3,
+        )
+        empty_batch.carousel = carousel
+
+        with self.assertRaises(HTTPException) as empty:
+            accept_slide_draft_batch(
+                created.id,
+                empty_batch_id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        self.assertEqual(empty.exception.status_code, 400)
+        self.assertEqual(empty.exception.detail, EMPTY_BATCH_DETAIL)
+        self.assertEqual(empty_batch.status, "pending")
+
+        session.skeleton.background_kind = BackgroundKind.PICTURE
+        picture_batch_id: uuid.UUID = uuid.uuid4()
+        picture_batch: SlideDraftBatch = SlideDraftBatch(
+            id=picture_batch_id,
+            carousel_id=carousel.id,
+            status="pending",
+            slide_count=1,
+        )
+        picture_batch.carousel = carousel
+        picture_slide: Slide = Slide(
+            id=uuid.uuid4(),
+            carousel_id=carousel.id,
+            position=0,
+            name="No image",
+            text_status=SlideTextStatus.DRAFT,
+            draft_batch_id=picture_batch_id,
+        )
+        picture_slide.draft_batch = picture_batch
+        picture_slide.element_texts = [
+            SlideElementText(
+                id=uuid.uuid4(),
+                slide_id=picture_slide.id,
+                skeleton_element_id=text_element.id,
+                value="",
+                draft_value="Still draft",
+            ),
+        ]
+        picture_slide.exclusions = []
+        session.add(picture_slide)
+
+        with self.assertRaises(HTTPException) as missing_image:
+            accept_slide_draft_batch(
+                created.id,
+                picture_batch_id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        self.assertEqual(missing_image.exception.status_code, 400)
+        self.assertEqual(missing_image.exception.detail, IMAGE_REQUIRED_DETAIL)
+        self.assertEqual(picture_slide.text_status, SlideTextStatus.DRAFT)
+        self.assertEqual(picture_slide.element_texts[0].value, "")
+        self.assertEqual(picture_slide.element_texts[0].draft_value, "Still draft")
+        self.assertEqual(picture_batch.status, "pending")
+
+    def test_a_reader_cannot_accept_a_set(self) -> None:
+        """A reader cannot accept a generated set."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        client: TestClient = _reader_client()
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": READER_PASSWORD},
+        )
+
+        try:
+            response = client.post(
+                f"/api/v1/carousels/{uuid.uuid4()}/slide-draft-batches/{uuid.uuid4()}/accept",
+            )
+        finally:
+            client.close()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("read-only", response.json()["detail"].lower())
+
     def _restore(self, name: str, previous: str | None) -> None:
         """Put one environment variable back."""
 
@@ -430,13 +662,14 @@ def _attach_older_draft(
     session: _MemoryCarouselSession,
     carousel: Carousel,
     skeleton_element_id: uuid.UUID,
+    position: int = 0,
 ) -> None:
     """Add one draft slide that is not part of a generated set."""
 
     slide: Slide = Slide(
         id=uuid.uuid4(),
         carousel_id=carousel.id,
-        position=0,
+        position=position,
         name="Earlier",
         text_status=SlideTextStatus.DRAFT,
     )
