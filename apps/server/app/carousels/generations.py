@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import fetch_carousel_by_id_or_raise
+from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.carousels.editing import new_row_id
 from app.models.album import AlbumImage
 from app.models.carousel import (
@@ -31,6 +32,9 @@ from app.models.carousel import (
     Slide,
     SlideExclusion,
 )
+
+
+DUPLICATE_GENERATION_CONFLICT_DETAIL: str = "Generation could not be duplicated."
 
 
 def ensure_current_generation(
@@ -219,6 +223,45 @@ def refresh_generation_snapshots(
 
     for carousel_id in carousel_ids:
         replace_current_generation_snapshot(carousel_id, our_database_session)
+
+
+def duplicate_carousel_generation(
+    carousel_id: uuid.UUID,
+    our_database_session: Session,
+) -> Carousel:
+    """Freeze this generation, then copy the working rows onto the next one.
+
+    The current snapshot is rewritten first. ``generation_number`` then
+    increases by one, and that new number is copied from the same working
+    rows. One commit stores both writes. Assemblies and their PNG files
+    stay. Working slides, instructions, research links, album images, and
+    draft batches stay. Name, slug, skeleton, and editor step stay.
+
+    Args:
+        carousel_id: The carousel to duplicate.
+        our_database_session: Open session. This function commits it.
+
+    Returns:
+        The carousel at the new generation number.
+
+    Raises:
+        HTTPException: No carousel has this id, or the write conflicts.
+    """
+
+    replace_current_generation_snapshot(carousel_id, our_database_session)
+    carousel: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    carousel.generation_number = carousel.generation_number + 1
+    replace_current_generation_snapshot(carousel_id, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        DUPLICATE_GENERATION_CONFLICT_DETAIL,
+    )
+    our_database_session.refresh(carousel)
+
+    return carousel
 
 
 def _expire_working_rows(carousel: Carousel, our_database_session: Session) -> None:

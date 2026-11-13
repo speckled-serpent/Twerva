@@ -1,4 +1,7 @@
-"""Read one generation snapshot. Readers may call this."""
+"""Read one generation snapshot, and duplicate the current generation.
+
+Readers may read a snapshot. Only an admin may duplicate.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql import Select
 
-from app.api.v1.lookups import fetch_carousel_by_id_or_raise
+from app.api.v1.lookups import (
+    fetch_carousel_by_id_or_raise,
+    fetch_skeleton_by_id_or_raise,
+)
 from app.api.v1.schemas import (
     CarouselGenerationImageReadResponse,
     CarouselGenerationInstructionReadResponse,
@@ -17,10 +23,16 @@ from app.api.v1.schemas import (
     CarouselGenerationResearchReadResponse,
     CarouselGenerationSlideReadResponse,
     CarouselGenerationSlideTextReadResponse,
+    CarouselReadResponse,
 )
-from app.auth.dependencies import require_authenticated_ops_operator
+from app.auth.dependencies import (
+    require_admin_ops_operator,
+    require_authenticated_ops_operator,
+)
+from app.carousels.generations import duplicate_carousel_generation
 from app.db import get_our_database_session
 from app.models.carousel import (
+    Carousel,
     CarouselGeneration,
     CarouselGenerationImage,
     CarouselGenerationInstruction,
@@ -29,24 +41,59 @@ from app.models.carousel import (
     CarouselGenerationSlideText,
 )
 from app.models.ops_user import OpsUser
+from app.models.skeleton import Skeleton
 
 
 GENERATION_NOT_FOUND_DETAIL: str = "Generation not found."
 
 
 def register_carousel_generation_routes(carousels_router: APIRouter) -> None:
-    """Attach the generation snapshot route.
+    """Attach the generation snapshot and duplicate routes.
 
     Args:
         carousels_router: The carousel router these paths extend.
     """
 
     carousels_router.add_api_route(
+        "/{carousel_id}/generations",
+        duplicate_carousel,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
         "/{carousel_id}/generations/{generation_number}",
         get_carousel_generation,
         methods=["GET"],
         response_model=CarouselGenerationReadResponse,
     )
+
+
+def duplicate_carousel(
+    carousel_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Start the next generation and return the carousel detail.
+
+    Readers cannot call this. The body is empty. The route does not
+    draw a frame and does not copy a PNG.
+    """
+
+    _ = current_ops_operator
+    carousel: Carousel = duplicate_carousel_generation(
+        carousel_id,
+        our_database_session,
+    )
+    skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        carousel.skeleton_id,
+        our_database_session,
+    )
+
+    from app.api.v1.carousels import serialize_carousel
+
+    detail: CarouselReadResponse = serialize_carousel(carousel, skeleton)
+
+    return detail
 
 
 def get_carousel_generation(

@@ -71,6 +71,7 @@ from app.api.v1.schemas import (
 )
 from app.api.v1.router import api_v1_router
 from app.auth.passwords import hash_plain_password
+from app.carousels.default_carousel import default_album_carousel_id
 from app.carousels.editing import new_row_id
 from app.db import get_our_database_session
 from app.carousels.generations import replace_current_generation_snapshot
@@ -80,6 +81,7 @@ from app.models.campaign import CampaignCarousel
 from app.models.carousel import (
     INSTRUCTION_BODY_MAX_CHARACTERS,
     Carousel,
+    CarouselAssembly,
     CarouselGeneration,
     CarouselGenerationImage,
     CarouselGenerationInstruction,
@@ -94,6 +96,7 @@ from app.models.carousel import (
     SlideExclusion,
 )
 from app.models.ops_user import OpsUser
+from app.models.post_job import PostJob
 from app.models.enums import (
     OpsUserRole,
     AdvertisementType,
@@ -817,6 +820,216 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
 
             clear_settings_cache()
 
+    def test_duplicate_starts_the_next_generation(self) -> None:
+        """Duplicate freezes generation 1 and copies the working rows onto the next number."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            with Session(self.database_engine) as session:
+                element: SkeletonElement = self._text_element(session)
+                created = create_carousel(
+                    CarouselCreateRequest(name="Harbor", skeleton_id=element.skeleton_id),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                first = create_slide(
+                    created.id,
+                    _slide_write(element.id, "Quay", "Reviewed line"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                create_slide(
+                    created.id,
+                    _slide_write(element.id, "Dock", "Beside"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                assembled = assemble_carousel(
+                    created.id,
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                batch: SlideDraftBatch = SlideDraftBatch(
+                    id=new_row_id(),
+                    carousel_id=created.id,
+                    status="pending",
+                    slide_count=2,
+                )
+                session.add(batch)
+                session.commit()
+                stored: Carousel | None = session.get(Carousel, created.id)
+                assert stored is not None
+                assert assembled.assembly is not None
+                slide_ids: set[uuid.UUID] = {slide.id for slide in list(stored.slides)}
+                copied_at_call: list[SlideCopy] = self._working_slide_copies(session, created.id)
+                before_counts: tuple[int, int, int] = self._publish_counts(session)
+                before_files: int = _stored_file_count(storage.name)
+                admin: OpsUser = OpsUser(
+                    id=new_row_id(),
+                    username="generation-admin",
+                    password_hash=hash_plain_password("correct-horse-battery"),
+                    role=OpsUserRole.ADMIN,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+                reader: OpsUser = OpsUser(
+                    id=new_row_id(),
+                    username="generation-reader",
+                    password_hash=hash_plain_password("correct-horse-battery"),
+                    role=OpsUserRole.READER,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+                session.add(admin)
+                session.add(reader)
+                session.commit()
+                admin_client: TestClient = _reader_client(session)
+                reader_client: TestClient = _reader_client(session)
+                admin_login = admin_client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "generation-admin",
+                        "password": "correct-horse-battery",
+                    },
+                )
+                reader_login = reader_client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "generation-reader",
+                        "password": "correct-horse-battery",
+                    },
+                )
+                duplicated = admin_client.post(f"/api/v1/carousels/{created.id}/generations")
+                duplicated_body = duplicated.json()
+
+                self.assertEqual(admin_login.status_code, 200)
+                self.assertEqual(reader_login.status_code, 200)
+                self.assertEqual(duplicated.status_code, 200)
+                self.assertEqual(duplicated_body["generation_number"], 2)
+                self.assertIsNone(duplicated_body["assembly"])
+                self.assertEqual(duplicated_body["steps"]["final"], "available")
+                self.assertEqual(duplicated_body["name"], stored.name)
+                self.assertEqual(duplicated_body["slug"], stored.slug)
+                self.assertEqual(duplicated_body["skeleton_id"], str(stored.skeleton_id))
+                self.assertEqual(duplicated_body["editor_step"], stored.editor_step)
+                self.assertEqual(
+                    [item["generation_number"] for item in duplicated_body["generations"]],
+                    [1, 2],
+                )
+                self.assertTrue(duplicated_body["generations"][0]["has_assembly"])
+                self.assertFalse(duplicated_body["generations"][1]["has_assembly"])
+                self.assertEqual(
+                    duplicated_body["pending_slide_draft_batch"]["id"],
+                    str(batch.id),
+                )
+                self.assertEqual(
+                    duplicated_body["pending_slide_draft_batch"]["status"],
+                    "pending",
+                )
+                self.assertEqual(
+                    {item["id"] for item in duplicated_body["slides"]},
+                    {str(slide_id) for slide_id in slide_ids},
+                )
+                self.assertEqual(self._copied_slides(session, created.id, 1), copied_at_call)
+                self.assertEqual(self._copied_slides(session, created.id, 2), copied_at_call)
+                self.assertEqual(self._assembly_ids(session, created.id), [assembled.assembly.id])
+                self.assertEqual(self._batch_statuses(session, created.id), ["pending"])
+                self.assertEqual(self._working_slide_ids(session, created.id), slide_ids)
+                self.assertEqual(_stored_file_count(storage.name), before_files)
+                patch_slide(
+                    created.id,
+                    first.id,
+                    _slide_write(element.id, "Pier", "New line"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                patched: list[SlideCopy] = self._copied_slides(session, created.id, 2)
+                kept: list[SlideCopy] = self._copied_slides(session, created.id, 1)
+
+                self.assertEqual(kept, copied_at_call)
+                self.assertEqual(patched[0][1], "Pier")
+                self.assertEqual(patched[0][3][0][1], "New line")
+                rejected = reader_client.post(f"/api/v1/carousels/{created.id}/generations")
+
+                self.assertEqual(rejected.status_code, 403)
+                self.assertEqual(self._generation_number(session, created.id), 2)
+                second = admin_client.post(f"/api/v1/carousels/{created.id}/generations")
+
+                self.assertEqual(second.status_code, 200)
+                self.assertEqual(second.json()["generation_number"], 3)
+                self.assertEqual(
+                    [item["generation_number"] for item in second.json()["generations"]],
+                    [1, 2, 3],
+                )
+                self.assertEqual(self._copied_slides(session, created.id, 1), copied_at_call)
+                self.assertEqual(self._publish_counts(session), before_counts)
+                empty = create_carousel(
+                    CarouselCreateRequest(name="Empty", skeleton_id=element.skeleton_id),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                empty_duplicated = admin_client.post(
+                    f"/api/v1/carousels/{empty.id}/generations",
+                )
+
+                self.assertEqual(empty_duplicated.status_code, 200)
+                self.assertEqual(empty_duplicated.json()["generation_number"], 2)
+                self.assertIsNone(empty_duplicated.json()["assembly"])
+                self.assertEqual(empty_duplicated.json()["steps"]["final"], "locked")
+                self.assertEqual(empty_duplicated.json()["slides"], [])
+                default_carousel: Carousel | None = session.get(
+                    Carousel,
+                    default_album_carousel_id(),
+                )
+                assert default_carousel is not None
+                default_skeleton_id: uuid.UUID = default_carousel.skeleton_id
+                default_slide_ids: set[uuid.UUID] = {
+                    slide.id for slide in list(default_carousel.slides)
+                }
+                default_duplicated = admin_client.post(
+                    f"/api/v1/carousels/{default_carousel.id}/generations",
+                )
+
+                self.assertEqual(default_duplicated.status_code, 200)
+                self.assertEqual(default_duplicated.json()["generation_number"], 2)
+                self.assertEqual(
+                    default_duplicated.json()["skeleton_id"],
+                    str(default_skeleton_id),
+                )
+                self.assertEqual(default_duplicated.json()["steps"]["final"], "available")
+                self.assertEqual(
+                    {item["id"] for item in default_duplicated.json()["slides"]},
+                    {str(slide_id) for slide_id in default_slide_ids},
+                )
+                self.assertEqual(self._publish_counts(session), before_counts)
+        finally:
+            storage.cleanup()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
     def _generation_with_image_and_research(
         self,
         session: Session,
@@ -1410,6 +1623,86 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
 
         self.fail("current generation is missing")
 
+    def _working_slide_copies(self, session: Session, carousel_id: uuid.UUID) -> list[SlideCopy]:
+        """Return the working slides in the shape a snapshot copy uses."""
+
+        carousel: Carousel | None = session.get(Carousel, carousel_id)
+        assert carousel is not None
+        copies: list[SlideCopy] = []
+
+        for slide in sorted(list(carousel.slides), key=_position):
+            texts: tuple[SlideTextCopy, ...] = tuple(
+                sorted(
+                    (
+                        (
+                            element_text.skeleton_element_id,
+                            element_text.value,
+                            element_text.draft_value,
+                        )
+                        for element_text in list(slide.element_texts)
+                    ),
+                    key=_text_identity,
+                ),
+            )
+            copies.append((slide.id, slide.name, slide.text_status, texts))
+
+        return copies
+
+    def _copied_slides(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        generation_number: int,
+    ) -> list[SlideCopy]:
+        """Return one snapshot's slides in the same shape as the working rows."""
+
+        generation: CarouselGeneration = self._generation_by_number(
+            session,
+            carousel_id,
+            generation_number,
+        )
+        copies: list[SlideCopy] = []
+
+        for slide in sorted(list(generation.slides), key=_position):
+            texts: tuple[SlideTextCopy, ...] = tuple(
+                sorted(
+                    (
+                        (
+                            copied_text.skeleton_element_id,
+                            copied_text.value,
+                            copied_text.draft_value,
+                        )
+                        for copied_text in list(slide.texts)
+                    ),
+                    key=_text_identity,
+                ),
+            )
+            copies.append((slide.source_slide_id, slide.name, slide.text_status, texts))
+
+        return copies
+
+    def _assembly_ids(self, session: Session, carousel_id: uuid.UUID) -> list[uuid.UUID]:
+        """Return the assembly ids stored for one carousel."""
+
+        assemblies: list[CarouselAssembly] = list(
+            session.scalars(
+                select(CarouselAssembly).where(CarouselAssembly.carousel_id == carousel_id),
+            ).all(),
+        )
+        assembly_ids: list[uuid.UUID] = [assembly.id for assembly in assemblies]
+
+        return assembly_ids
+
+    def _publish_counts(self, session: Session) -> tuple[int, int, int]:
+        """Return artifact, campaign-carousel, and post-job counts."""
+
+        artifact_count: int = _table_count(session, Artifact)
+        campaign_count: int = _table_count(session, CampaignCarousel)
+        post_job_count: int = _table_count(session, PostJob)
+        counts: tuple[int, int, int] = (artifact_count, campaign_count, post_job_count)
+
+        return counts
+
     def _working_slide_ids(self, session: Session, carousel_id: uuid.UUID) -> set[uuid.UUID]:
         """Return the working slide ids. The snapshot must not delete them."""
 
@@ -1437,6 +1730,10 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
         counts: tuple[int, int, int] = (artifact_count, campaign_count, batch_count)
 
         return counts
+
+
+SlideTextCopy = tuple[uuid.UUID, str, str | None]
+SlideCopy = tuple[uuid.UUID | None, str, SlideTextStatus, tuple[SlideTextCopy, ...]]
 
 
 class CarouselGenerationSlideView:
@@ -1606,6 +1903,27 @@ def _element_text(
     )
 
     return element_text
+
+
+def _text_identity(copied_text: tuple[uuid.UUID, str, str | None]) -> str:
+    """Return the skeleton element id used to order copied texts."""
+
+    identity: str = str(copied_text[0])
+
+    return identity
+
+
+def _stored_file_count(directory: str) -> int:
+    """Return how many files the artifact directory holds."""
+
+    file_count: int = 0
+
+    for path in Path(directory).rglob("*"):
+
+        if path.is_file():
+            file_count = file_count + 1
+
+    return file_count
 
 
 def _position(row: object) -> int:

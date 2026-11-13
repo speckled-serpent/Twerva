@@ -89,7 +89,7 @@ Final already keys `carousel_assemblies` by `(carousel_id, generation_number)`. 
 
   Acceptance, in `test_carousel_generations.py`: the detail lists generation 1 with counts that match the child rows, and `has_assembly` is false before assemble and true after. A reader can GET generation 1 and read the instruction body and the research body. Generation 2 is 404 until it exists. The list route's shape is unchanged. The frame file route still returns the PNG.
 
-- [ ] **8.7 Duplicate the current generation**
+- [x] **8.7 Duplicate the current generation**
 
   `POST /api/v1/carousels/{carousel_id}/generations`, empty body, admin only, same as `assemble_carousel`. The response is `serialize_carousel`. Register it on the router from task 8.6. Add the path to `EXPECTED_API_V1_PATHS`. The helper is `duplicate_carousel_generation` in `app/carousels/generations.py`.
 
