@@ -78,7 +78,7 @@ Publish reads artifact files, not carousel slides. `publish_post_job` resolves `
 
   Acceptance, in `apps/server/tests/test_carousel_assembly.py`: six live slides and a patched cap of 5 store two `draft` carousels, positions 0 and 1, with five frames and one frame, captions equal to the carousel name, and null `cta_url`. Each frame's `asset_ref` is an `assembled/…` PNG. A draft slide on the same carousel is not a frame, and its pending batch stays pending. A second POST keeps the same assembly id, replaces the frames, and leaves one assembly row. One live slide is 400 and stores nothing. An `artifacts` count, a `campaign_carousels` count, and a `post_jobs` count are unchanged. A reader is rejected. Default, with six live slides, assembles when an admin calls it. The detail's `live_slide_count` stays six.
 
-- [ ] **7.5 Serve the frozen frame**
+- [x] **7.5 Serve the frozen frame**
 
   `GET /api/v1/carousels/{carousel_id}/assembly/frames/{frame_id}/file` returns the PNG. Authenticated operators, including a reader, the same way `preview_slide_on_skeleton` allows a reader. A frame that is not on this carousel is 404. Resolve `asset_ref` with `resolve_asset_reference_path`. A missing file is 404. A path that escapes the store is 404 and the file is not opened. The route does not draw again and does not read the album file. Register it on the same assembly router. Add the path to `EXPECTED_API_V1_PATHS`.
 

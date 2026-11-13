@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.carousel_assembly import assemble_carousel
 from app.api.v1.carousel_writes import create_carousel, create_slide
 from app.api.v1.router import api_v1_router
+from app.models.album import AlbumImage
 from app.api.v1.schemas import CarouselCreateRequest, CarouselReadResponse, SlideWriteRequest
 from app.auth.passwords import hash_plain_password
 from app.carousels.final_assembly import TOO_FEW_LIVE_SLIDES_DETAIL
@@ -30,6 +31,7 @@ from app.models.enums import OpsUserRole, SlideTextStatus
 from app.models.ops_user import OpsUser
 from app.models.post_job import PostJob
 from app.settings import clear_settings_cache
+from tests.test_api_routes import _openapi_methods_by_path
 from tests.test_carousel_writes import _MemoryCarouselSession
 from tests.test_carousels import _default_source_from_catalog
 
@@ -282,6 +284,86 @@ class CarouselAssemblyRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("read-only", response.json()["detail"].lower())
 
+    def test_a_reader_can_get_the_frozen_frame(self) -> None:
+        """A reader receives the PNG. The album file route and generate stay."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        carousel: Carousel = _default_source_from_catalog()
+        session.carousels.append(carousel)
+
+        with patch(
+            "app.carousels.final_assembly.slide_count_or_global_default",
+            return_value=8,
+        ):
+            assembled: CarouselReadResponse = assemble_carousel(
+                carousel.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        assert assembled.assembly is not None
+        frame_id: uuid.UUID = assembled.assembly.carousels[0].frames[0].id
+        album_image: AlbumImage | None = carousel.slides[0].album_image
+        assert album_image is not None
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        client: TestClient = _reader_client(session)
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": READER_PASSWORD},
+        )
+        frame_url: str = (
+            f"/api/v1/carousels/{carousel.id}/assembly/frames/{frame_id}/file"
+        )
+        secret_path: Path = Path(self.storage.name).resolve().parent / "twerva-secret-frame.png"
+        secret_path.write_bytes(b"NOT-A-PNG-SECRET")
+
+        try:
+            frame_response = client.get(frame_url)
+            unknown_response = client.get(
+                f"/api/v1/carousels/{carousel.id}/assembly/frames/{uuid.uuid4()}/file",
+            )
+            album_response = client.get(
+                f"/api/v1/albums/{album_image.album_id}/images/{album_image.id}/file",
+            )
+            stored_frame = _frame_by_id(carousel, frame_id)
+            assert stored_frame is not None
+            stored_frame.asset_ref = "assembled/missing-frame.png"
+            missing_response = client.get(frame_url)
+            stored_frame.asset_ref = "../twerva-secret-frame.png"
+            escaped_response = client.get(frame_url)
+        finally:
+            secret_path.unlink(missing_ok=True)
+            client.close()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(frame_response.status_code, 200)
+        self.assertTrue(frame_response.content.startswith(PNG_SIGNATURE))
+        self.assertEqual(unknown_response.status_code, 404)
+        self.assertEqual(album_response.status_code, 200)
+        self.assertTrue(album_response.content.startswith(b"\xff\xd8\xff"))
+        self.assertEqual(missing_response.status_code, 404)
+        self.assertEqual(escaped_response.status_code, 404)
+        self.assertNotIn(b"NOT-A-PNG-SECRET", escaped_response.content)
+        self.assertIn("post", methods_by_path["/api/v1/generate/carousel"])
+
 
 def _add_live_slides(
     session: _MemoryCarouselSession,
@@ -352,13 +434,18 @@ def _foreign_row_count(session: _MemoryCarouselSession) -> int:
 
 
 class _ReaderSession:
-    """Enough of a session to sign in a reader."""
+    """Enough of a session to sign in a reader and read assembled frames."""
 
-    def __init__(self, reader: OpsUser) -> None:
+    def __init__(
+        self,
+        reader: OpsUser,
+        carousel_session: _MemoryCarouselSession | None = None,
+    ) -> None:
         self.ops_users: list[OpsUser] = [reader]
+        self.carousel_session: _MemoryCarouselSession | None = carousel_session
 
     def get(self, model: type[object], row_id: uuid.UUID) -> object | None:
-        """Return the reader by id."""
+        """Return the reader, or a row from the carousel session."""
 
         if model is OpsUser:
 
@@ -368,32 +455,47 @@ class _ReaderSession:
 
                     return stored_user
 
-        return None
+        if self.carousel_session is None:
+
+            return None
+
+        found: object | None = self.carousel_session.get(model, row_id)
+
+        return found
 
     def scalars(self, statement: object) -> object:
-        """Return the reader for a login query."""
+        """Return the reader for a login query, otherwise the carousel rows."""
 
-        username: str | None = None
+        if "ops_users" in str(statement):
+            username: str | None = None
 
-        if hasattr(statement, "compile"):
-            compiled_parameters: dict[str, object] = dict(
-                getattr(statement.compile(), "params", {}) or {},
-            )
+            if hasattr(statement, "compile"):
+                compiled_parameters: dict[str, object] = dict(
+                    getattr(statement.compile(), "params", {}) or {},
+                )
 
-            for parameter_value in compiled_parameters.values():
+                for parameter_value in compiled_parameters.values():
 
-                if isinstance(parameter_value, str):
-                    username = parameter_value
+                    if isinstance(parameter_value, str):
+                        username = parameter_value
 
-                    break
+                        break
 
-        matched: list[OpsUser] = [
-            stored_user
-            for stored_user in self.ops_users
-            if username is None or stored_user.username == username
-        ]
+            matched: list[OpsUser] = [
+                stored_user
+                for stored_user in self.ops_users
+                if username is None or stored_user.username == username
+            ]
 
-        return _Rows(matched)
+            return _Rows(matched)
+
+        if self.carousel_session is None:
+
+            return _Rows([])
+
+        carousel_rows: object = self.carousel_session.scalars(statement)
+
+        return carousel_rows
 
 
 class _Rows:
@@ -415,8 +517,28 @@ class _Rows:
         return self._rows[0]
 
 
-def _reader_client() -> TestClient:
-    """Sign-in client whose only user is a reader."""
+def _frame_by_id(carousel: Carousel, frame_id: uuid.UUID) -> object | None:
+    """Return one stored frame from the in-memory carousel."""
+
+    for assembly in list(carousel.assemblies):
+
+        for assembled in list(assembly.assembled_carousels):
+
+            for frame in list(assembled.frames):
+
+                if frame.id == frame_id:
+
+                    return frame
+
+    return None
+
+
+def _reader_client(carousel_session: _MemoryCarouselSession | None = None) -> TestClient:
+    """Sign-in client whose only user is a reader.
+
+    When a carousel session is passed, its rows are visible to the same
+    request. Login still resolves the reader.
+    """
 
     now: datetime = datetime.now(timezone.utc)
     reader: OpsUser = OpsUser(
@@ -427,7 +549,7 @@ def _reader_client() -> TestClient:
         created_at=now,
         updated_at=now,
     )
-    session: _ReaderSession = _ReaderSession(reader)
+    session: _ReaderSession = _ReaderSession(reader, carousel_session)
     application: FastAPI = FastAPI()
 
     def override_database_session() -> Generator[Session, None, None]:
