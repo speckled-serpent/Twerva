@@ -40,6 +40,7 @@ CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID: str = (
     "carousel_instructions_drop_guidance"
 )
 SLIDE_DRAFT_BATCHES_REVISION_ID: str = "slide_draft_batches"
+CAROUSEL_FINAL_ASSEMBLY_REVISION_ID: str = "carousel_final_assembly"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -76,6 +77,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAMPAIGNS_CREATE_UI_REVISION_ID}.py",
                 f"{CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID}.py",
                 f"{CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID}.py",
+                f"{CAROUSEL_FINAL_ASSEMBLY_REVISION_ID}.py",
                 f"{CAROUSEL_INSTRUCTIONS_REVISION_ID}.py",
                 f"{CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID}.py",
                 f"{CAROUSEL_STEPS_REVISION_ID}.py",
@@ -1030,6 +1032,58 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertNotIn("UPDATE slides", revision_source)
         self.assertNotIn("UPDATE carousels", revision_source)
         self.assertNotIn("ck_slide_draft_batches_ck_", revision_source)
+
+    def test_final_assembly_follows_slide_draft_batches(self) -> None:
+        """The assembly tables follow the batch revision. The id fits the version column."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_FINAL_ASSEMBLY_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+        drop_frames_at: int = revision_source.index(
+            'op.drop_table("assembled_carousel_frames")',
+        )
+        drop_carousels_at: int = revision_source.index(
+            'op.drop_table("assembled_carousels")',
+        )
+        drop_assemblies_at: int = revision_source.index(
+            'op.drop_table("carousel_assemblies")',
+        )
+
+        self.assertEqual(assigned_values.get("revision"), CAROUSEL_FINAL_ASSEMBLY_REVISION_ID)
+        self.assertEqual(len(CAROUSEL_FINAL_ASSEMBLY_REVISION_ID), 23)
+        self.assertLessEqual(len(CAROUSEL_FINAL_ASSEMBLY_REVISION_ID), 64)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            SLIDE_DRAFT_BATCHES_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "carousel_assemblies"', revision_source)
+        self.assertIn('op.create_table(\n        "assembled_carousels"', revision_source)
+        self.assertIn('op.create_table(\n        "assembled_carousel_frames"', revision_source)
+        self.assertIn("CAROUSEL_ASSEMBLY_GENERATION_CHECK_SQL", revision_source)
+        self.assertIn("CAROUSEL_ASSEMBLY_SLIDE_COUNT_CHECK_SQL", revision_source)
+        self.assertIn("ASSEMBLED_CAROUSEL_STATUS_CHECK_SQL", revision_source)
+        self.assertIn("ASSEMBLED_POSITION_CHECK_SQL", revision_source)
+        self.assertIn("ASSEMBLED_FRAME_BLOCK_REASON_CHECK_SQL", revision_source)
+        self.assertIn(
+            "uq_carousel_assemblies_carousel_id_generation_number",
+            revision_source,
+        )
+        self.assertIn('ondelete="SET NULL"', revision_source)
+        self.assertIn('ondelete="CASCADE"', revision_source)
+        self.assertIn("fk_frames_assembled_carousel_id_assembled_carousels", revision_source)
+        self.assertLess(drop_frames_at, drop_carousels_at)
+        self.assertLess(drop_carousels_at, drop_assemblies_at)
+        self.assertNotIn("INSERT INTO", revision_source)
+        self.assertNotIn("UPDATE slides", revision_source)
+        self.assertNotIn("UPDATE carousels", revision_source)
+        self.assertNotIn("UPDATE artifacts", revision_source)
+        self.assertNotIn('op.create_check_constraint(\n        "editor_step"', revision_source)
+        self.assertNotIn("ck_carousel_assemblies_ck_", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

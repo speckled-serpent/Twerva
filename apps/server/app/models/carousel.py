@@ -15,7 +15,10 @@ title and no version. Drafted slide text comes from those documents.
 ``slide_draft_batches`` is the review state for one press of Generate.
 A slide may point at that batch. Deleting the batch does not delete
 the slide. The table is not the phase 8 snapshot, and it is not
-``campaign_carousels``.
+``campaign_carousels``. ``carousel_assemblies`` is one Final assembly
+for a carousel and generation. Its child rows are the reviewed
+carousels and the frozen frames. Deleting a slide or an album image
+clears the frame pointer and leaves the frame.
 
 Skeletons still store a concrete image path. They do not reference
 these rows.
@@ -26,6 +29,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -68,6 +72,14 @@ SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL: str = (
     "status IN ('pending', 'accepted', 'discarded')"
 )
 SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL: str = "slide_count >= 1"
+CAROUSEL_ASSEMBLY_GENERATION_CHECK_SQL: str = "generation_number >= 1"
+CAROUSEL_ASSEMBLY_SLIDE_COUNT_CHECK_SQL: str = "slide_count >= 1"
+ASSEMBLED_CAROUSEL_STATUS_CHECK_SQL: str = "status = 'draft'"
+ASSEMBLED_POSITION_CHECK_SQL: str = "position >= 0"
+ASSEMBLED_FRAME_BLOCK_REASON_CHECK_SQL: str = (
+    "block_reason IS NULL OR block_reason IN "
+    "('overlap', 'missing_asset', 'measure_error')"
+)
 
 
 class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -83,7 +95,8 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     ``instructions`` is the current documents, ordered by position.
     Drafted slide text comes from those documents. ``draft_batches``
     records each press of Generate: pending review, accepted, or
-    discarded. One carousel holds one pending set.
+    discarded. One carousel holds one pending set. ``assemblies`` is
+    the Final assembly for each generation. One generation holds one.
     """
 
     __tablename__ = "carousels"
@@ -145,6 +158,11 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="carousel",
         cascade="all, delete-orphan",
     )
+    assemblies: Mapped[list["CarouselAssembly"]] = relationship(
+        "CarouselAssembly",
+        back_populates="carousel",
+        cascade="all, delete-orphan",
+    )
 
 
 class SlideDraftBatch(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -186,6 +204,161 @@ class SlideDraftBatch(Base, UuidPrimaryKeyMixin, TimestampMixin):
     slides: Mapped[list["Slide"]] = relationship(
         "Slide",
         back_populates="draft_batch",
+    )
+
+
+class CarouselAssembly(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One Final assembly for a carousel and generation.
+
+    ``generation_number`` is the carousel's generation at assemble time.
+    One carousel holds one row per generation, so phase 8 can attach
+    this row without copying frames. ``slide_count`` is the cap drawn
+    for that assemble. Deleting the carousel removes the row. This is
+    not a generation snapshot, and it is not ``campaign_carousels``.
+    """
+
+    __tablename__ = "carousel_assemblies"
+    __table_args__ = (
+        UniqueConstraint(
+            "carousel_id",
+            "generation_number",
+            name="uq_carousel_assemblies_carousel_id_generation_number",
+        ),
+        CheckConstraint(
+            CAROUSEL_ASSEMBLY_GENERATION_CHECK_SQL,
+            name="generation_number",
+        ),
+        CheckConstraint(
+            CAROUSEL_ASSEMBLY_SLIDE_COUNT_CHECK_SQL,
+            name="slide_count",
+        ),
+    )
+
+    carousel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("carousels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    generation_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    slide_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    carousel: Mapped[Carousel] = relationship(
+        "Carousel",
+        back_populates="assemblies",
+    )
+    assembled_carousels: Mapped[list["AssembledCarousel"]] = relationship(
+        "AssembledCarousel",
+        back_populates="assembly",
+        cascade="all, delete-orphan",
+        order_by="AssembledCarousel.position",
+    )
+
+
+class AssembledCarousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One carousel an operator reviews, inside one assembly.
+
+    ``status`` is ``draft``. ``caption`` and ``cta_url`` may be empty.
+    There is no hashtag column. Deleting the assembly removes the row.
+    """
+
+    __tablename__ = "assembled_carousels"
+    __table_args__ = (
+        UniqueConstraint(
+            "assembly_id",
+            "position",
+            name="uq_assembled_carousels_assembly_id_position",
+        ),
+        CheckConstraint(ASSEMBLED_POSITION_CHECK_SQL, name="position"),
+        CheckConstraint(ASSEMBLED_CAROUSEL_STATUS_CHECK_SQL, name="status"),
+    )
+
+    assembly_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("carousel_assemblies.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cta_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    assembly: Mapped[CarouselAssembly] = relationship(
+        "CarouselAssembly",
+        back_populates="assembled_carousels",
+    )
+    frames: Mapped[list["AssembledCarouselFrame"]] = relationship(
+        "AssembledCarouselFrame",
+        back_populates="assembled_carousel",
+        cascade="all, delete-orphan",
+        order_by="AssembledCarouselFrame.position",
+    )
+
+
+class AssembledCarouselFrame(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One frozen frame inside an assembled carousel.
+
+    ``asset_ref`` is the PNG under the artifact store. ``slide_id`` and
+    ``album_image_id`` are the sources used to draw it. Deleting either
+    source clears that pointer and leaves this row. ``blocked`` is true
+    when the skeleton could not draw a shippable frame. ``block_reason``
+    is ``overlap``, ``missing_asset``, or ``measure_error``.
+    """
+
+    __tablename__ = "assembled_carousel_frames"
+    __table_args__ = (
+        UniqueConstraint(
+            "assembled_carousel_id",
+            "position",
+            name="uq_assembled_carousel_frames_assembled_carousel_id_position",
+        ),
+        CheckConstraint(ASSEMBLED_POSITION_CHECK_SQL, name="position"),
+        CheckConstraint(
+            ASSEMBLED_FRAME_BLOCK_REASON_CHECK_SQL,
+            name="block_reason",
+        ),
+    )
+
+    assembled_carousel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "assembled_carousels.id",
+            name="fk_frames_assembled_carousel_id_assembled_carousels",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    slide_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("slides.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    album_image_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("album_images.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    asset_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    blocked: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    block_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    block_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    assembled_carousel: Mapped[AssembledCarousel] = relationship(
+        "AssembledCarousel",
+        back_populates="frames",
+    )
+    slide: Mapped["Slide | None"] = relationship(
+        "Slide",
+        back_populates="assembled_frames",
+    )
+    album_image: Mapped[AlbumImage | None] = relationship(
+        "AlbumImage",
+        foreign_keys=[album_image_id],
     )
 
 
@@ -255,6 +428,10 @@ class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
         foreign_keys="SlideExclusion.slide_id",
         back_populates="slide",
         cascade="all, delete-orphan",
+    )
+    assembled_frames: Mapped[list[AssembledCarouselFrame]] = relationship(
+        "AssembledCarouselFrame",
+        back_populates="slide",
     )
 
     @property

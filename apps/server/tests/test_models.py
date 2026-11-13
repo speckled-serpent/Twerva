@@ -38,6 +38,9 @@ from app.models import (
     SkeletonElementContentKind,
     SkeletonElementTextSource,
     SkeletonStatus,
+    AssembledCarousel as ExportedAssembledCarousel,
+    AssembledCarouselFrame as ExportedAssembledCarouselFrame,
+    CarouselAssembly as ExportedCarouselAssembly,
     SlideDraftBatch as ExportedSlideDraftBatch,
     ResearchItem,
     BackgroundKind,
@@ -52,9 +55,17 @@ from app.models.carousel import (
     CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL,
     CAROUSEL_RESEARCH_POSITION_CHECK_SQL,
     INSTRUCTION_BODY_MAX_CHARACTERS,
+    ASSEMBLED_CAROUSEL_STATUS_CHECK_SQL,
+    ASSEMBLED_FRAME_BLOCK_REASON_CHECK_SQL,
+    ASSEMBLED_POSITION_CHECK_SQL,
+    CAROUSEL_ASSEMBLY_GENERATION_CHECK_SQL,
+    CAROUSEL_ASSEMBLY_SLIDE_COUNT_CHECK_SQL,
     SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL,
     SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL,
+    AssembledCarousel,
+    AssembledCarouselFrame,
     Carousel,
+    CarouselAssembly,
     CarouselInstruction,
     CarouselResearchItem,
     Slide,
@@ -657,6 +668,139 @@ class DomainEnumTests(unittest.TestCase):
         self.assertIn("draft_value", set(SlideElementText.__table__.columns.keys()))
         self.assertTrue(SlideElementText.__table__.c.draft_value.nullable)
         self.assertIn("live", str(Slide.__table__.c.text_status.server_default.arg))
+
+    def test_carousel_assembly_is_one_row_per_generation(self) -> None:
+        """Final assembly is keyed by carousel and generation. A frame can be blocked."""
+
+        assembly_columns: set[str] = set(CarouselAssembly.__table__.columns.keys())
+        carousel_columns: set[str] = set(AssembledCarousel.__table__.columns.keys())
+        frame_columns: set[str] = set(AssembledCarouselFrame.__table__.columns.keys())
+        assembly_checks: dict[str, str] = _check_sql(CarouselAssembly.__table__)
+        carousel_checks: dict[str, str] = _check_sql(AssembledCarousel.__table__)
+        frame_checks: dict[str, str] = _check_sql(AssembledCarouselFrame.__table__)
+        assembly_deletes: dict[str, str | None] = _delete_actions(CarouselAssembly.__table__)
+        carousel_deletes: dict[str, str | None] = _delete_actions(AssembledCarousel.__table__)
+        frame_deletes: dict[str, str | None] = _delete_actions(AssembledCarouselFrame.__table__)
+
+        self.assertEqual(CarouselAssembly.__tablename__, "carousel_assemblies")
+        self.assertEqual(AssembledCarousel.__tablename__, "assembled_carousels")
+        self.assertEqual(AssembledCarouselFrame.__tablename__, "assembled_carousel_frames")
+        self.assertIs(ExportedCarouselAssembly, CarouselAssembly)
+        self.assertIs(ExportedAssembledCarousel, AssembledCarousel)
+        self.assertIs(ExportedAssembledCarouselFrame, AssembledCarouselFrame)
+        self.assertIn("carousel_assemblies", set(Base.metadata.tables.keys()))
+        self.assertEqual(
+            assembly_columns,
+            {
+                "id",
+                "carousel_id",
+                "generation_number",
+                "slide_count",
+                "created_at",
+                "updated_at",
+            },
+        )
+        self.assertEqual(
+            carousel_columns,
+            {
+                "id",
+                "assembly_id",
+                "position",
+                "status",
+                "caption",
+                "cta_url",
+                "created_at",
+                "updated_at",
+            },
+        )
+        self.assertNotIn("hashtags", carousel_columns)
+        self.assertEqual(
+            frame_columns,
+            {
+                "id",
+                "assembled_carousel_id",
+                "position",
+                "slide_id",
+                "album_image_id",
+                "asset_ref",
+                "blocked",
+                "block_reason",
+                "block_detail",
+                "created_at",
+                "updated_at",
+            },
+        )
+        self.assertTrue(AssembledCarousel.__table__.c.caption.nullable)
+        self.assertTrue(AssembledCarousel.__table__.c.cta_url.nullable)
+        self.assertFalse(AssembledCarouselFrame.__table__.c.blocked.nullable)
+        self.assertFalse(AssembledCarouselFrame.__table__.c.asset_ref.nullable)
+        self.assertTrue(AssembledCarouselFrame.__table__.c.slide_id.nullable)
+        self.assertTrue(AssembledCarouselFrame.__table__.c.album_image_id.nullable)
+        self.assertTrue(AssembledCarouselFrame.__table__.c.block_reason.nullable)
+        self.assertEqual(
+            assembly_checks["ck_carousel_assemblies_generation_number"],
+            CAROUSEL_ASSEMBLY_GENERATION_CHECK_SQL,
+        )
+        self.assertEqual(
+            assembly_checks["ck_carousel_assemblies_slide_count"],
+            CAROUSEL_ASSEMBLY_SLIDE_COUNT_CHECK_SQL,
+        )
+        self.assertEqual(
+            carousel_checks["ck_assembled_carousels_status"],
+            ASSEMBLED_CAROUSEL_STATUS_CHECK_SQL,
+        )
+        self.assertEqual(
+            carousel_checks["ck_assembled_carousels_position"],
+            ASSEMBLED_POSITION_CHECK_SQL,
+        )
+        self.assertEqual(
+            frame_checks["ck_assembled_carousel_frames_block_reason"],
+            ASSEMBLED_FRAME_BLOCK_REASON_CHECK_SQL,
+        )
+        self.assertEqual(ASSEMBLED_CAROUSEL_STATUS_CHECK_SQL, "status = 'draft'")
+        self.assertIn(("carousel_id", "generation_number"), _unique_column_tuples(
+            CarouselAssembly.__table__,
+        ))
+        self.assertIn(("assembly_id", "position"), _unique_column_tuples(
+            AssembledCarousel.__table__,
+        ))
+        self.assertIn(
+            ("assembled_carousel_id", "position"),
+            _unique_column_tuples(AssembledCarouselFrame.__table__),
+        )
+        self.assertEqual(assembly_deletes["carousel_id"], "CASCADE")
+        self.assertEqual(carousel_deletes["assembly_id"], "CASCADE")
+        self.assertEqual(frame_deletes["assembled_carousel_id"], "CASCADE")
+        self.assertEqual(frame_deletes["slide_id"], "SET NULL")
+        self.assertEqual(frame_deletes["album_image_id"], "SET NULL")
+        self.assertEqual(Carousel.assemblies.property.back_populates, "carousel")
+        self.assertIs(Carousel.assemblies.property.mapper.class_, CarouselAssembly)
+        self.assertIn("delete-orphan", str(Carousel.assemblies.property.cascade))
+        self.assertNotIn("delete", str(Slide.assembled_frames.property.cascade))
+        self.assertIn("editor_step IN (0, 1, 2, 3)", CAROUSEL_EDITOR_STEP_CHECK_SQL)
+
+
+def _check_sql(table: Table) -> dict[str, str]:
+    """Return check-constraint name to SQL text."""
+
+    check_sql: dict[str, str] = {
+        constraint.name: str(constraint.sqltext)
+        for constraint in table.constraints
+        if isinstance(constraint, CheckConstraint) and constraint.name is not None
+    }
+
+    return check_sql
+
+
+def _delete_actions(table: Table) -> dict[str, str | None]:
+    """Return ON DELETE action by foreign-key column name."""
+
+    delete_actions: dict[str, str | None] = {
+        foreign_key.parent.name: foreign_key.ondelete
+        for foreign_key in table.foreign_keys
+    }
+
+    return delete_actions
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

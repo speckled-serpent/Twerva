@@ -28,7 +28,7 @@ Publish reads artifact files, not carousel slides. `publish_post_job` resolves `
 
 ### Data model
 
-- [ ] **7.1 Add the assembly tables**
+- [x] **7.1 Add the assembly tables**
 
   Alembic revision `carousel_final_assembly`, down-revision `slide_draft_batches`. Three tables. Upgrade inserts no rows and does not update `artifacts`, `campaign_carousels`, slides, or `generation_number`. Downgrade drops them in child-to-parent order and leaves any PNG files on disk.
 
