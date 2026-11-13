@@ -27,6 +27,7 @@ ADMIN_DATABASE_URL: str = "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/pos
 CONTENT_REVISION: str = "carousel_editor_step_content"
 INSTRUCTIONS_REVISION: str = "carousel_instructions"
 DROP_GUIDANCE_REVISION: str = "carousel_instructions_drop_guidance"
+SLIDE_DRAFT_BATCHES_REVISION: str = "slide_draft_batches"
 EDITOR_STEP_INSTRUCTIONS_REVISION: str = "carousel_editor_step_instructions"
 SKELETON_ID: str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01"
 ALBUM_ID: str = "cccccccc-cccc-4ccc-8ccc-cccccccccc01"
@@ -350,7 +351,19 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
         self.assertIn(BOTH_CAROUSEL_ID, self._carousel_ids())
 
     def _assert_generate_still_reads_the_columns(self) -> None:
-        """Generate drafts from the copied document. The columns still read back."""
+        """Generate drafts from the copied document. The columns still read back.
+
+        The current slide model selects ``draft_batch_id``, so the
+        provider call runs after ``slide_draft_batches``. The column
+        check stays at this revision, before that upgrade.
+        """
+
+        guidance_before_generate: CarouselSnapshot = self._carousel_rows()[BOTH_SLUG]
+        documents_before: dict[str, list[InstructionSnapshot]] = self._instruction_rows()
+
+        self.assertEqual(guidance_before_generate[0], BOTH_INSPIRATION)
+        self.assertEqual(guidance_before_generate[1], BOTH_RULES)
+        self._upgrade(SLIDE_DRAFT_BATCHES_REVISION)
 
         previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
         os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
@@ -365,7 +378,6 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
         copied_body: str = _copied_instruction_body(BOTH_INSPIRATION, BOTH_RULES).strip()
         expected_draft: str = f"{TEXT_ELEMENT_NAME}. {copied_body}"
         expected_name: str = " ".join(copied_body.split())[:200]
-        documents_before: dict[str, list[InstructionSnapshot]] = self._instruction_rows()
 
         try:
             created: SlideReadResponse = generate_source_slide(
@@ -389,10 +401,9 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
 
             clear_settings_cache()
 
-        guidance: CarouselSnapshot = self._carousel_rows()[BOTH_SLUG]
-
         self.assertEqual(created.name, expected_name)
         self.assertEqual(created.text_status, SlideTextStatus.DRAFT)
+        self.assertIsNone(created.draft_batch_id)
         self.assertEqual(created.texts[0].value, "")
         self.assertEqual(created.draft_texts[0].value, expected_draft)
         self.assertIn("## Inspiration", created.draft_texts[0].value)
@@ -400,16 +411,20 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
         self.assertIn(BOTH_RULES, created.draft_texts[0].value)
         self.assertEqual(drafted.name, SLIDE_NAME)
         self.assertEqual(drafted.text_status, SlideTextStatus.DRAFT)
+        self.assertIsNone(drafted.draft_batch_id)
         self.assertEqual(drafted.texts[0].value, "")
         self.assertEqual(drafted.draft_texts[0].value, expected_draft)
         self.assertIn("## Inspiration", drafted.draft_texts[0].value)
-        self.assertEqual(guidance[0], BOTH_INSPIRATION)
-        self.assertEqual(guidance[1], BOTH_RULES)
         self.assertEqual(self._instruction_rows(), documents_before)
 
     def _assert_generate_drafts_from_the_copied_document(self) -> None:
-        """Generate text after the drop still drafts from the copied body."""
+        """Generate text after the drop still drafts from the copied body.
 
+        The current slide model selects ``draft_batch_id``, so this
+        continues to ``slide_draft_batches`` before the provider call.
+        """
+
+        self._upgrade(SLIDE_DRAFT_BATCHES_REVISION)
         previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
         os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
         clear_settings_cache()

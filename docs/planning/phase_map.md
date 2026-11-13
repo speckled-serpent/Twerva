@@ -544,7 +544,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Tests
 
-- [ ] **6.11 Run the full server and ops suites**
+- [x] **6.11 Run the full server and ops suites**
 
   From `apps/server`, `python -m unittest discover -s tests`. From `apps/ops`, `node --test *.test.ts`. This PR adds no product behavior. It fixes failures that this phase's tasks left, and it does not start a new feature. Migration tests that skip because Postgres is down stay skipped, the same way `test_carousel_steps_migration.py` skips. A skip is not a failure. The phase is done when both suites pass aside from those skips.
 
