@@ -17,6 +17,7 @@ from app.api.v1.schemas import (
     AssembledCarouselReadResponse,
     AssembledFrameReadResponse,
     CarouselAssemblyReadResponse,
+    CarouselGenerationSummaryResponse,
     CarouselInstructionReadResponse,
     CarouselListItemResponse,
     CarouselReadResponse,
@@ -40,6 +41,7 @@ from app.models.carousel import (
     AssembledCarouselFrame,
     Carousel,
     CarouselAssembly,
+    CarouselGeneration,
     CarouselInstruction,
     CarouselResearchItem,
     Slide,
@@ -75,6 +77,11 @@ def carousels_list_statement() -> Select[tuple[Carousel]]:
             selectinload(Carousel.assemblies)
             .selectinload(CarouselAssembly.assembled_carousels)
             .selectinload(AssembledCarousel.frames),
+            selectinload(Carousel.generations).selectinload(CarouselGeneration.instructions),
+            selectinload(Carousel.generations).selectinload(CarouselGeneration.research_items),
+            selectinload(Carousel.generations).selectinload(CarouselGeneration.images),
+            selectinload(Carousel.generations).selectinload(CarouselGeneration.slides),
+            selectinload(Carousel.generations).selectinload(CarouselGeneration.assembly),
         )
         .order_by(Carousel.name.asc(), Carousel.slug.asc())
     )
@@ -224,9 +231,52 @@ def serialize_carousel(
         slides=slide_responses,
         pending_slide_draft_batch=_pending_slide_draft_batch(carousel),
         assembly=_assembly_response(carousel),
+        generations=_generation_summaries(carousel),
     )
 
     return source_read_response
+
+
+def _generation_summaries(carousel: Carousel) -> list[CarouselGenerationSummaryResponse]:
+    """Return one summary per snapshot, in generation order."""
+
+    summaries: list[CarouselGenerationSummaryResponse] = [
+        _generation_summary(carousel, generation)
+        for generation in sorted(list(carousel.generations), key=_generation_number)
+    ]
+
+    return summaries
+
+
+def _generation_summary(
+    carousel: Carousel,
+    generation: CarouselGeneration,
+) -> CarouselGenerationSummaryResponse:
+    """Return counts for one snapshot. ``has_assembly`` follows the assembly row."""
+
+    has_assembly: bool = any(
+        assembly.generation_id == generation.id for assembly in list(carousel.assemblies)
+    )
+    summary: CarouselGenerationSummaryResponse = CarouselGenerationSummaryResponse(
+        id=generation.id,
+        generation_number=generation.generation_number,
+        album_id=generation.album_id,
+        instruction_count=len(list(generation.instructions)),
+        research_count=len(list(generation.research_items)),
+        image_count=len(list(generation.images)),
+        slide_count=len(list(generation.slides)),
+        has_assembly=has_assembly,
+    )
+
+    return summary
+
+
+def _generation_number(generation: CarouselGeneration) -> int:
+    """Return the stored generation number."""
+
+    generation_number: int = generation.generation_number
+
+    return generation_number
 
 
 def _generation_has_final_assembly(carousel: Carousel) -> bool:
@@ -566,6 +616,7 @@ def serialize_image(image: AlbumImage) -> SlideImageReadResponse:
 
 
 from app.api.v1.carousel_assembly import register_carousel_assembly_routes
+from app.api.v1.carousel_generations import register_carousel_generation_routes
 from app.api.v1.carousel_text import register_source_text_routes
 from app.api.v1.carousel_writes import register_source_write_routes
 
@@ -573,4 +624,5 @@ from app.api.v1.carousel_writes import register_source_write_routes
 register_source_write_routes(carousels_router)
 register_source_preview_routes(carousels_router)
 register_carousel_assembly_routes(carousels_router)
+register_carousel_generation_routes(carousels_router)
 register_source_text_routes(carousels_router)

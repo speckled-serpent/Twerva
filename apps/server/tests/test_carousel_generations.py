@@ -7,6 +7,8 @@ import os
 import tempfile
 import unittest
 import uuid
+from collections.abc import Generator
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,7 +16,8 @@ os.environ.setdefault("TWERVA_ENV", "test")
 
 from alembic import command
 from alembic.config import Config
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from PIL import Image
 from sqlalchemy import create_engine, func, select, text
 from starlette.datastructures import UploadFile
@@ -23,6 +26,9 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.api.v1.albums import patch_album, upload_album_image
+from app.api.v1.carousel_assembly import assemble_carousel
+from app.api.v1.carousel_generations import get_carousel_generation
+from app.api.v1.carousels import get_carousel, list_carousels
 from app.api.v1.carousel_text import (
     accept_slide_draft_batch,
     discard_slide_draft_batch,
@@ -63,7 +69,10 @@ from app.api.v1.schemas import (
     SlideElementTextWrite,
     SlideWriteRequest,
 )
+from app.api.v1.router import api_v1_router
+from app.auth.passwords import hash_plain_password
 from app.carousels.editing import new_row_id
+from app.db import get_our_database_session
 from app.carousels.generations import replace_current_generation_snapshot
 from app.models.album import Album, AlbumImage
 from app.models.artifact import Artifact
@@ -84,7 +93,9 @@ from app.models.carousel import (
     SlideElementText,
     SlideExclusion,
 )
+from app.models.ops_user import OpsUser
 from app.models.enums import (
+    OpsUserRole,
     AdvertisementType,
     BackgroundKind,
     SkeletonElementAlignment,
@@ -667,6 +678,144 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
                     (FIRST_RESEARCH_TITLE, FIRST_RESEARCH_BODY, None),
                 )
                 self.assertEqual(self._generation_number(session, created.id), 1)
+
+    def test_detail_lists_generations_and_a_reader_can_read_one(self) -> None:
+        """The detail summarizes generation 1. A reader can read that snapshot."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            with Session(self.database_engine) as session:
+                element: SkeletonElement = self._text_element(session)
+                created = create_carousel(
+                    CarouselCreateRequest(name="Readable", skeleton_id=element.skeleton_id),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                post_carousel_instruction(
+                    created.id,
+                    CarouselInstructionCreateRequest(body=KEPT_BODY),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                research: ResearchItem = ResearchItem(
+                    id=new_row_id(),
+                    title=FIRST_RESEARCH_TITLE,
+                    slug=f"readable-{uuid.uuid4().hex[:8]}",
+                    body=FIRST_RESEARCH_BODY,
+                )
+                session.add(research)
+                session.commit()
+                post_carousel_research(
+                    created.id,
+                    CarouselResearchAttachRequest(research_item_id=research.id),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                create_slide(
+                    created.id,
+                    _slide_write(element.id, "Quay", "Reviewed line"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                create_slide(
+                    created.id,
+                    _slide_write(element.id, "Dock", "Beside"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                detail = get_carousel(
+                    created.id,
+                    session,  # type: ignore[arg-type]
+                )
+                listed = list_carousels(session)  # type: ignore[arg-type]
+
+                self.assertEqual(len(detail.generations), 1)
+                self.assertEqual(detail.generations[0].generation_number, 1)
+                self.assertEqual(detail.generations[0].instruction_count, 1)
+                self.assertEqual(detail.generations[0].research_count, 1)
+                self.assertEqual(detail.generations[0].image_count, 0)
+                self.assertEqual(detail.generations[0].slide_count, 2)
+                self.assertFalse(detail.generations[0].has_assembly)
+
+                for item in listed:
+                    self.assertNotIn("generations", item.model_dump())
+
+                with self.assertRaises(HTTPException) as missing_generation:
+                    get_carousel_generation(
+                        created.id,
+                        2,
+                        session,  # type: ignore[arg-type]
+                        None,
+                    )
+
+                self.assertEqual(missing_generation.exception.status_code, 404)
+                reader: OpsUser = OpsUser(
+                    id=new_row_id(),
+                    username="generation-reader",
+                    password_hash=hash_plain_password("correct-horse-battery"),
+                    role=OpsUserRole.READER,
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
+                )
+                session.add(reader)
+                session.commit()
+                client: TestClient = _reader_client(session)
+                login = client.post(
+                    "/api/v1/auth/login",
+                    json={
+                        "username": "generation-reader",
+                        "password": "correct-horse-battery",
+                    },
+                )
+                snapshot = client.get(f"/api/v1/carousels/{created.id}/generations/1")
+
+                self.assertEqual(login.status_code, 200)
+                self.assertEqual(snapshot.status_code, 200)
+                self.assertEqual(snapshot.json()["instructions"][0]["body"], KEPT_BODY)
+                self.assertEqual(snapshot.json()["research"][0]["body"], FIRST_RESEARCH_BODY)
+                self.assertNotIn("frames", snapshot.json())
+                assembled = assemble_carousel(
+                    created.id,
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                after = get_carousel(
+                    created.id,
+                    session,  # type: ignore[arg-type]
+                )
+
+                self.assertTrue(after.generations[0].has_assembly)
+                assert assembled.assembly is not None
+                frame_id: uuid.UUID = assembled.assembly.carousels[0].frames[0].id
+                frame = client.get(
+                    f"/api/v1/carousels/{created.id}/assembly/frames/{frame_id}/file",
+                )
+
+                self.assertEqual(frame.status_code, 200)
+                self.assertTrue(frame.content.startswith(b"\x89PNG\r\n\x1a\n"))
+        finally:
+            storage.cleanup()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            os.environ.pop("SESSION_COOKIE_SECURE", None)
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
 
     def _generation_with_image_and_research(
         self,
@@ -1353,6 +1502,21 @@ def _album_image(album_id: uuid.UUID, position: int, relative_path: str) -> Albu
     )
 
     return image
+
+
+def _reader_client(session: Session) -> TestClient:
+    """Sign-in client that reads and writes through the test session."""
+
+    application: FastAPI = FastAPI()
+
+    def override_database_session() -> Generator[Session, None, None]:
+
+        yield session
+
+    application.dependency_overrides[get_our_database_session] = override_database_session
+    application.include_router(api_v1_router)
+
+    return TestClient(application)
 
 
 def _upload(filename: str) -> UploadFile:

@@ -81,7 +81,7 @@ Final already keys `carousel_assemblies` by `(carousel_id, generation_number)`. 
 
 ### API
 
-- [ ] **8.6 Return the snapshot**
+- [x] **8.6 Return the snapshot**
 
   `CarouselReadResponse` gains `generations`, in `generation_number` order: `{id, generation_number, album_id, instruction_count, research_count, image_count, slide_count, has_assembly}`. `has_assembly` is true when a `carousel_assemblies` row points at that generation. The list item stays without `generations`. `assembly` stays the current generation's assembly, from `_assembly_response`. `serialize_carousel` fills the list. Load the generation chain with `selectinload` next to the slide loads in `app/api/v1/carousels.py`.
 
