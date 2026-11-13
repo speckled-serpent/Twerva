@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,24 @@ class PublishAdapter(ABC):
             artifact: Caption, CTA, and slide plan for the job.
             account: Target platform identity (`platform`, `handle`).
             media_paths: Absolute PNG (or other) files from `asset_ref`.
+
+        Returns:
+            Fake or vendor platform post id and permalink URL.
+        """
+
+    @abstractmethod
+    def publish_media(
+        self,
+        post_id: uuid.UUID,
+        account: Account,
+        media_paths: list[Path],
+    ) -> PublishResult:
+        """Publish one campaign post's frame files to the account's platform.
+
+        Args:
+            post_id: Campaign post being published.
+            account: Target platform identity (`platform`, `handle`).
+            media_paths: Absolute frame files, in position order.
 
         Returns:
             Fake or vendor platform post id and permalink URL.

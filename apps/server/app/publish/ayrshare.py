@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 from app.models import Account, Artifact, PostJob
@@ -53,6 +54,32 @@ class AyrsharePublishAdapter(PublishAdapter):
 
         _ = post_job
         _ = artifact
+        _ = account
+        _ = media_paths
+
+        raise AyrshareLivePublishNotWiredError()
+
+    def publish_media(
+        self,
+        post_id: uuid.UUID,
+        account: Account,
+        media_paths: list[Path],
+    ) -> PublishResult:
+        """Refuse live HTTP for a campaign post.
+
+        Args:
+            post_id: Unused. Kept for the adapter contract.
+            account: Unused. Kept for the adapter contract.
+            media_paths: Unused. Kept for the adapter contract.
+
+        Returns:
+            Never returns while live HTTP is unwired.
+
+        Raises:
+            AyrshareLivePublishNotWiredError: Always.
+        """
+
+        _ = post_id
         _ = account
         _ = media_paths
 

@@ -20,6 +20,7 @@ from app.campaigns.posts import (
     assembly_for_post,
     ordered_frames,
     place_campaign_post,
+    publish_campaign_post,
     remove_campaign_post,
     reschedule_campaign_post,
 )
@@ -55,6 +56,12 @@ def register_campaign_post_routes(campaigns_router: APIRouter) -> None:
         remove_campaign_post_by_id,
         methods=["DELETE"],
         status_code=status.HTTP_204_NO_CONTENT,
+    )
+    campaigns_router.add_api_route(
+        "/{campaign_id}/posts/{post_id}/publish",
+        publish_campaign_post_by_id,
+        methods=["POST"],
+        response_model=CampaignPostRead,
     )
 
 
@@ -155,6 +162,37 @@ def remove_campaign_post_by_id(
         our_database_session,
         conflict_detail="Campaign post could not be removed.",
     )
+
+
+def publish_campaign_post_by_id(
+    campaign_id: uuid.UUID,
+    post_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CampaignPostRead:
+    """Publish an upcoming or failed post. Readers cannot call this.
+
+    The body is empty. A failed adapter or a missing file is stored on
+    the post and still returned.
+    """
+
+    _ = current_ops_operator
+    found_campaign: Campaign = fetch_campaign_by_id_or_raise(
+        campaign_id,
+        our_database_session,
+    )
+    published_post: CampaignPost = publish_campaign_post(
+        found_campaign,
+        post_id,
+        our_database_session,
+    )
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Campaign post could not be published.",
+    )
+    campaign_post_read: CampaignPostRead = serialize_campaign_post(published_post)
+
+    return campaign_post_read
 
 
 def serialize_campaign_post(post: CampaignPost) -> CampaignPostRead:

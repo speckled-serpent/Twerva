@@ -35,6 +35,7 @@ from app.models.enums import (
 
 
 CAMPAIGN_POST_UPCOMING_STATUS: str = "upcoming"
+CAMPAIGN_POST_POSTED_STATUS: str = "posted"
 CAMPAIGN_POST_FAILED_STATUS: str = "failed"
 CAMPAIGN_POST_STATUS_CHECK_SQL: str = (
     "status IN ('upcoming', 'posted', 'failed')"

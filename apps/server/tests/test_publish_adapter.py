@@ -110,6 +110,29 @@ class MockPublishAdapterTests(unittest.TestCase):
         self.assertIn("media_path_count=2", joined_log_output)
         self.assertIn(str(FIXED_POST_JOB_ID), joined_log_output)
 
+    def test_publish_media_returns_deterministic_fake_ids(self) -> None:
+        """A campaign post id uses the same mock shape as a post job."""
+
+        mock_publish_adapter: MockPublishAdapter = MockPublishAdapter()
+        media_paths: list[Path] = [Path("/tmp/frame.png")]
+
+        with self.assertLogs(MOCK_PUBLISH_LOGGER_NAME, level="INFO") as log_context:
+            publish_result: PublishResult = mock_publish_adapter.publish_media(
+                FIXED_POST_JOB_ID,
+                _instagram_account(),
+                media_paths,
+            )
+
+        self.assertEqual(
+            publish_result.platform_post_id,
+            f"mock-instagram-{FIXED_POST_JOB_ID}",
+        )
+        self.assertEqual(
+            publish_result.platform_post_url,
+            f"https://example.invalid/instagram/p/{FIXED_POST_JOB_ID}",
+        )
+        self.assertIn("media_path_count=1", "\n".join(log_context.output))
+
 
 class PublishAdapterFactoryTests(unittest.TestCase):
     """1.6b-iii: mock works without keys; ayrshare is opt-in."""
@@ -163,6 +186,13 @@ class PublishAdapterFactoryTests(unittest.TestCase):
             ayrshare_publish_adapter.publish(
                 _scheduled_post_job(),
                 _draft_artifact(),
+                _instagram_account(),
+                [],
+            )
+
+        with self.assertRaises(AyrshareLivePublishNotWiredError):
+            ayrshare_publish_adapter.publish_media(
+                FIXED_POST_JOB_ID,
                 _instagram_account(),
                 [],
             )

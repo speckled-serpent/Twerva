@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -11,13 +12,20 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.account import Account
 from app.models.campaign import (
+    CAMPAIGN_POST_FAILED_STATUS,
+    CAMPAIGN_POST_POSTED_STATUS,
     CAMPAIGN_POST_UPCOMING_STATUS,
     Campaign,
     CampaignAccount,
     CampaignPost,
 )
 from app.models.carousel import AssembledCarousel, AssembledCarouselFrame, CarouselAssembly
+from app.publish.errors import PublishMediaMissingError
+from app.publish.factory import get_publish_adapter
+from app.publish.media import resolve_asset_reference_path
 from app.schedule.cadence import raise_if_cadence_cap_exceeded
+from app.settings import get_settings
+from app.storage.artifacts import ensure_artifact_storage_directory
 
 
 CAMPAIGN_POST_NEEDS_CAROUSEL_DETAIL: str = (
@@ -36,6 +44,10 @@ CAMPAIGN_POST_ONLY_UPCOMING_DETAIL: str = (
     "Only an upcoming post can change its time."
 )
 CAMPAIGN_POST_STAYS_DETAIL: str = "This post stays on the timeline."
+CAMPAIGN_POST_ALREADY_UP_DETAIL: str = "This post is already up."
+PUBLISHABLE_CAMPAIGN_POST_STATUSES: frozenset[str] = frozenset(
+    {CAMPAIGN_POST_UPCOMING_STATUS, CAMPAIGN_POST_FAILED_STATUS},
+)
 
 
 def place_campaign_post(
@@ -240,6 +252,129 @@ def remove_campaign_post(
     )
     our_database_session.delete(stored_post)
     our_database_session.flush()
+
+
+def publish_campaign_post(
+    campaign: Campaign,
+    campaign_post_id: uuid.UUID,
+    our_database_session: Session,
+) -> CampaignPost:
+    """Mock-publish an upcoming or failed post through the configured adapter.
+
+    The clock and the campaign status are not consulted. A missing frame
+    file, a path that leaves the store, or an adapter exception stores
+    ``failed`` and ``last_error`` and leaves ``published_at`` null. The
+    caller commits. This does not insert an artifact or a post job.
+
+    Args:
+        campaign: Campaign that must own the post.
+        campaign_post_id: Post to publish.
+        our_database_session: Open SQLAlchemy session.
+
+    Returns:
+        The post after it is ``posted`` or ``failed``.
+
+    Raises:
+        HTTPException: The post is missing, belongs to another campaign,
+            or is already posted.
+    """
+
+    stored_post: CampaignPost = _require_publishable_post(
+        campaign,
+        campaign_post_id,
+        our_database_session,
+    )
+    linked_account: Account | None = our_database_session.get(
+        Account,
+        stored_post.account_id,
+    )
+
+    if linked_account is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CAMPAIGN_POST_ACCOUNT_DETAIL,
+        )
+
+    try:
+        media_paths: list[Path] = _frame_media_paths(stored_post)
+        publish_result = get_publish_adapter().publish_media(
+            stored_post.id,
+            linked_account,
+            media_paths,
+        )
+    except Exception as publish_error:
+        stored_post.status = CAMPAIGN_POST_FAILED_STATUS
+        stored_post.last_error = str(publish_error)
+        stored_post.published_at = None
+    else:
+        stored_post.status = CAMPAIGN_POST_POSTED_STATUS
+        stored_post.published_at = datetime.now(timezone.utc)
+        stored_post.platform_post_id = publish_result.platform_post_id
+        stored_post.platform_post_url = publish_result.platform_post_url
+        stored_post.last_error = None
+
+    our_database_session.flush()
+    loaded_post: CampaignPost = _load_campaign_post(
+        stored_post.id,
+        our_database_session,
+    )
+
+    return loaded_post
+
+
+def _frame_media_paths(post: CampaignPost) -> list[Path]:
+    """Resolve frame files in position order under the artifact store."""
+
+    storage_directory: Path = ensure_artifact_storage_directory(
+        Path(get_settings().artifact_storage_dir),
+    )
+    media_paths: list[Path] = []
+
+    for frame in ordered_frames(post.assembled_carousel):
+        resolved_path: Path = resolve_asset_reference_path(
+            frame.asset_ref,
+            storage_directory,
+        )
+
+        if not resolved_path.is_file():
+            raise PublishMediaMissingError(frame.asset_ref, resolved_path)
+
+        media_paths.append(resolved_path)
+
+    return media_paths
+
+
+def _require_publishable_post(
+    campaign: Campaign,
+    campaign_post_id: uuid.UUID,
+    our_database_session: Session,
+) -> CampaignPost:
+    """Return an upcoming or failed post with its frames loaded."""
+
+    stored_post: CampaignPost | None = our_database_session.scalars(
+        select(CampaignPost)
+        .where(CampaignPost.id == campaign_post_id)
+        .options(
+            selectinload(CampaignPost.assembled_carousel).selectinload(
+                AssembledCarousel.frames,
+            ),
+            selectinload(CampaignPost.account),
+        ),
+    ).first()
+
+    if stored_post is None or stored_post.campaign_id != campaign.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=CAMPAIGN_POST_NOT_FOUND_DETAIL,
+        )
+
+    if stored_post.status not in PUBLISHABLE_CAMPAIGN_POST_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CAMPAIGN_POST_ALREADY_UP_DETAIL,
+        )
+
+    return stored_post
 
 
 def _require_upcoming_post(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from pathlib import Path
 
 from app.models import Account, Artifact, PostJob
@@ -55,6 +56,43 @@ class MockPublishAdapter(PublishAdapter):
         self._logger.info(
             "MockPublishAdapter published post_job=%s platform=%s media_path_count=%s",
             post_job_identifier,
+            platform_name,
+            media_path_count,
+        )
+        publish_result: PublishResult = PublishResult(
+            platform_post_id=fake_platform_post_id,
+            platform_post_url=fake_platform_post_url,
+        )
+
+        return publish_result
+
+    def publish_media(
+        self,
+        post_id: uuid.UUID,
+        account: Account,
+        media_paths: list[Path],
+    ) -> PublishResult:
+        """Return fake platform ids for a campaign post and log the file count.
+
+        Args:
+            post_id: Campaign post being mock-published.
+            account: Supplies the platform segment of the fake id and URL.
+            media_paths: Resolved frame files. Counted in the log line.
+
+        Returns:
+            Deterministic `mock-{platform}-{post_id}` id and example URL.
+        """
+
+        media_path_count: int = len(media_paths)
+        post_identifier: str = str(post_id)
+        platform_name: str = account.platform.value
+        fake_platform_post_id: str = f"mock-{platform_name}-{post_identifier}"
+        fake_platform_post_url: str = (
+            f"https://{EXAMPLE_INVALID_HOST}/{platform_name}/p/{post_identifier}"
+        )
+        self._logger.info(
+            "MockPublishAdapter published post=%s platform=%s media_path_count=%s",
+            post_identifier,
             platform_name,
             media_path_count,
         )

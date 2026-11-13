@@ -1,8 +1,10 @@
 """Place an assembled carousel on a campaign timeline."""
 
 import os
+import tempfile
 import unittest
 import uuid
+from unittest.mock import patch
 from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -23,6 +25,7 @@ from app.api.v1.accounts import create_account
 from app.api.v1.brands import create_brand
 from app.api.v1.campaign_posts import (
     place_campaign_post_by_id,
+    publish_campaign_post_by_id,
     remove_campaign_post_by_id,
     reschedule_campaign_post_by_id,
 )
@@ -54,6 +57,7 @@ from app.auth.passwords import hash_plain_password
 from app.campaigns.posts import (
     ASSEMBLED_CAROUSEL_NOT_FOUND_DETAIL,
     CAMPAIGN_POST_ACCOUNT_DETAIL,
+    CAMPAIGN_POST_ALREADY_UP_DETAIL,
     CAMPAIGN_POST_BLOCKED_DETAIL,
     CAMPAIGN_POST_DUPLICATE_DETAIL,
     CAMPAIGN_POST_NEEDS_CAROUSEL_DETAIL,
@@ -655,6 +659,117 @@ class CampaignPostPlacementTests(unittest.TestCase):
         self.assertEqual(delete_error.exception.detail, CAMPAIGN_POST_NOT_FOUND_DETAIL)
         self.assertIsNotNone(self.session.get(CampaignPost, placed.id))
 
+    def test_publish_retries_a_missing_file_then_refuses_a_posted_row(self) -> None:
+        """A missing frame fails the post. Restoring the file publishes it."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            placed = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_assembled(self.session, self.world.carousel_name),
+                self.world.open_account_id,
+            )
+            before_artifacts: int = _row_count(self.session, Artifact)
+            before_post_jobs: int = _row_count(self.session, PostJob)
+            failed = _publish(self.session, self.world.campaign_id, placed.id)
+
+            self.assertEqual(failed.status, "failed")
+            self.assertIsNotNone(failed.last_error)
+            self.assertNotEqual(failed.last_error, "")
+            self.assertIsNone(failed.published_at)
+
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+            posted = _publish(self.session, self.world.campaign_id, placed.id)
+
+            self.assertEqual(posted.status, "posted")
+            self.assertEqual(
+                posted.platform_post_id,
+                f"mock-instagram-{placed.id}",
+            )
+            self.assertIsNotNone(posted.platform_post_url)
+            assert posted.platform_post_url is not None
+            self.assertIn("example.invalid", posted.platform_post_url)
+            self.assertIsNone(posted.last_error)
+            self.assertIsNotNone(posted.published_at)
+            self.assertEqual(_row_count(self.session, Artifact), before_artifacts)
+            self.assertEqual(_row_count(self.session, PostJob), before_post_jobs)
+
+            with self.assertRaises(HTTPException) as raised_http:
+                _publish(self.session, self.world.campaign_id, placed.id)
+
+            self.assertEqual(raised_http.exception.status_code, 409)
+            self.assertEqual(
+                raised_http.exception.detail,
+                CAMPAIGN_POST_ALREADY_UP_DETAIL,
+            )
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+    def test_an_adapter_exception_leaves_the_post_failed(self) -> None:
+        """A raising adapter stores failed and does not mark the post up."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            placed = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_assembled(self.session, self.world.carousel_name),
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=_RaisingPublishAdapter(),
+            ):
+                failed = _publish(self.session, self.world.campaign_id, placed.id)
+
+            self.assertEqual(failed.status, "failed")
+            self.assertIn("adapter broke", failed.last_error or "")
+            self.assertIsNone(failed.published_at)
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+
+class _RaisingPublishAdapter:
+    """Test double whose media publish always fails."""
+
+    def publish_media(
+        self,
+        post_id: uuid.UUID,
+        account: object,
+        media_paths: list[Path],
+    ) -> None:
+
+        _ = post_id
+        _ = account
+        _ = media_paths
+
+        raise RuntimeError("adapter broke")
+
 
 class CampaignPostRouteTests(unittest.TestCase):
     """The new route stays on the API, and a reader cannot call it."""
@@ -673,6 +788,12 @@ class CampaignPostRouteTests(unittest.TestCase):
         self.assertIn(
             "delete",
             methods_by_path["/api/v1/campaigns/{campaign_id}/posts/{post_id}"],
+        )
+        self.assertIn(
+            "post",
+            methods_by_path[
+                "/api/v1/campaigns/{campaign_id}/posts/{post_id}/publish"
+            ],
         )
 
     def test_a_reader_is_rejected(self) -> None:
@@ -759,6 +880,43 @@ class CampaignPostRouteTests(unittest.TestCase):
         self.assertIn("read-only", patch_response.json()["detail"].lower())
         self.assertIn("read-only", delete_response.json()["detail"].lower())
 
+    def test_a_reader_cannot_publish_a_post(self) -> None:
+        """Publish is refused for a reader."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        client: TestClient = _reader_client()
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": READER_PASSWORD},
+        )
+
+        try:
+            response = client.post(
+                f"/api/v1/campaigns/{uuid.uuid4()}/posts/{uuid.uuid4()}/publish",
+            )
+        finally:
+            client.close()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("read-only", response.json()["detail"].lower())
+
 
 def _place(
     session: Session,
@@ -800,6 +958,43 @@ def _place_at(
     )
 
     return placed
+
+
+def _publish(
+    session: Session,
+    campaign_id: uuid.UUID,
+    post_id: uuid.UUID,
+) -> CampaignPostRead:
+    """Call the publish route and return the read model."""
+
+    published: CampaignPostRead = publish_campaign_post_by_id(
+        campaign_id,
+        post_id,
+        session,
+        None,
+    )
+
+    return published
+
+
+def _write_frame_file(
+    session: Session,
+    frame_id: uuid.UUID,
+    storage_directory: Path,
+) -> None:
+    """Write the frame's stored relative path under the artifact store."""
+
+    stored_frame: AssembledCarouselFrame | None = session.get(
+        AssembledCarouselFrame,
+        frame_id,
+    )
+
+    if stored_frame is None:
+        raise AssertionError("Frame was not stored.")
+
+    frame_path: Path = storage_directory / stored_frame.asset_ref
+    frame_path.parent.mkdir(parents=True, exist_ok=True)
+    frame_path.write_bytes(b"\x89PNG\r\n\x1a\n")
 
 
 def _fresh_assembled(session: Session, caption: str) -> uuid.UUID:

@@ -67,7 +67,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Publish
 
-- [ ] **9.4 Publish through the mock adapter**
+- [x] **9.4 Publish through the mock adapter**
 
   `POST /api/v1/campaigns/{campaign_id}/posts/{post_id}/publish`, empty body, admin only, response `CampaignPostRead`. Register it on the router from task 9.2. Add the path to `EXPECTED_API_V1_PATHS`. The helper is `publish_campaign_post` in `app/campaigns/posts.py`.
 

@@ -48,6 +48,19 @@ class FailingPublishAdapter(PublishAdapter):
 
         raise RuntimeError("forced adapter failure")
 
+    def publish_media(
+        self,
+        post_id: uuid.UUID,
+        account: Account,
+        media_paths: list[Path],
+    ) -> PublishResult:
+
+        _ = post_id
+        _ = account
+        _ = media_paths
+
+        raise RuntimeError("forced adapter failure")
+
 
 def _post_job(status: PostJobStatus, last_error: str | None = None) -> PostJob:
     """Build an unbound PostJob with a stable id."""
