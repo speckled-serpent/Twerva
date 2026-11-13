@@ -48,6 +48,7 @@ export interface CarouselInstructionsStepProps {
   onCarouselSaved: (savedCarousel: CarouselReadResponse) => void;
   onActions?: (actions: InstructionEditorActions | null) => void;
   onGenerateEnabled?: (enabled: boolean) => void;
+  onInstructionDraft?: (draft: InstructionDraft) => void;
 }
 
 /**
@@ -69,6 +70,7 @@ export function CarouselInstructionsStep({
   onCarouselSaved,
   onActions,
   onGenerateEnabled,
+  onInstructionDraft,
 }: CarouselInstructionsStepProps): ReactElement {
 
   const documents: CarouselInstructionReadResponse[] = orderedInstructionDocuments(
@@ -87,10 +89,13 @@ export function CarouselInstructionsStep({
     useRef(onActions);
   const onGenerateEnabledRef: { current: ((enabled: boolean) => void) | undefined } =
     useRef(onGenerateEnabled);
+  const onInstructionDraftRef: { current: ((draft: InstructionDraft) => void) | undefined } =
+    useRef(onInstructionDraft);
   carouselRef.current = carousel;
   onCarouselSavedRef.current = onCarouselSaved;
   onActionsRef.current = onActions;
   onGenerateEnabledRef.current = onGenerateEnabled;
+  onInstructionDraftRef.current = onInstructionDraft;
 
   if (carousel.id !== trackedCarouselId) {
     const loadedDraft: InstructionDraft = instructionDraftFromDocument(
@@ -326,7 +331,8 @@ export function CarouselInstructionsStep({
 
   useEffect((): void => {
     onGenerateEnabledRef.current?.(generateEnabled);
-  }, [generateEnabled]);
+    onInstructionDraftRef.current?.(draft);
+  }, [generateEnabled, draft]);
 
   return (
     <section

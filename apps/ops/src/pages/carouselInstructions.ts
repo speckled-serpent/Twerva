@@ -161,14 +161,6 @@ export function moveInstructionDocuments(
   return nextDocuments;
 }
 
-/** Accessible name while Generate cannot fill slides yet. */
-export const INSTRUCTIONS_GENERATE_LATER_DETAIL: string =
-  "Filling slides from these instructions is a later phase.";
-
-/** Line under the Instructions Generate button. */
-export const INSTRUCTIONS_GENERATE_HINT: string =
-  "Generate fills slides in a later phase.";
-
 /**
  * Whether Generate can be pressed.
  *
@@ -213,36 +205,6 @@ export function instructionsGenerateEnabled(
   );
 
   return hasInstructionText;
-}
-
-/**
- * Accessible name for the Instructions Generate button.
- *
- * Disabled, it says filling slides from these instructions is a later phase.
- *
- * @param enabled - Whether the button can be pressed
- * @returns The accessible name
- */
-export function instructionsGenerateAccessibleName(enabled: boolean): string {
-
-  if (!enabled) {
-    return `Generate. ${INSTRUCTIONS_GENERATE_LATER_DETAIL}`;
-  }
-
-  return "Generate";
-}
-
-/**
- * The Generate click does not change slides or documents.
- *
- * There is no request. The same carousel is returned.
- *
- * @param carousel - The open carousel
- * @returns That same carousel
- */
-export function instructionsAfterGenerateClick<T>(carousel: T): T {
-
-  return carousel;
 }
 
 function instructionBodyEnablesGenerate(body: string, placeholder: string): boolean {

@@ -518,7 +518,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Page
 
-- [ ] **6.8 Wire Generate to the collection route**
+- [x] **6.8 Wire Generate to the collection route**
 
   `CarouselGenerateControl` posts `generateCarouselCollection` in `apps/ops/src/api/client.ts`: `POST /api/v1/carousels/{carouselId}/slides/generate-collection`, returning `CarouselReadResponse`. The click flushes open edits through `flushOpenEdits` and `leaveAfterAutosave` before the request, the same way `handleGenerateSlide` does, so the saved instruction bodies and the album are what the route reads. While the request runs, the label is `Generating…` and the button is disabled. Success replaces the open carousel. The Slides section is the same `#carousel-slides` on this page. "No slides yet." stays the empty copy. A set of drafted slides replaces that sentence. The status line uses the existing `statusMessage`: `Drafted a set of {n} slides. Accept the set to make them live.` A 400, 409, or 502 shows the API detail in `ErrorBanner`.
 

@@ -171,6 +171,7 @@ function slideWith(
     draft_texts: [],
     excluded_slide_ids: ["other-slide"],
     images: [albumImage(albumImageId, 1)],
+    draft_batch_id: null,
   };
 
   return slide;

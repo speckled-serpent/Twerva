@@ -500,6 +500,16 @@ export async function fetchTextGenerationStatus(): Promise<TextGenerationStatusR
   );
 }
 
+export async function generateCarouselCollection(
+  carouselId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/slides/generate-collection`,
+  );
+}
+
 export async function generateCarouselSlide(sourceId: string): Promise<SlideReadResponse> {
 
   return requestJson<SlideReadResponse>(
