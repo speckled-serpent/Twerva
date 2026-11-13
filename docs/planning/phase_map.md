@@ -452,7 +452,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Prompt
 
-- [ ] **6.2 Build one collection prompt**
+- [x] **6.2 Build one collection prompt**
 
   Add `collection_prompt_text` in `app/carousels/collection_prompt.py`. It takes instruction bodies already in position order, research items as title plus body in position order, album images as id, position, alt text, source, and license note, exclusion pairs as the two names and ids, the skeleton text elements (`TextElementPrompt`), the slide count, and whether an image is required. It calls `instruction_prompt_text` for the bodies. Blank instruction bodies are dropped there. An attached research item is included even when its body is empty.
 
