@@ -462,7 +462,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Provider
 
-- [ ] **6.3 Validate a collection JSON object**
+- [x] **6.3 Validate a collection JSON object**
 
   Add `DraftedCollectionSlide` (name, `values_by_element_id`, `album_image_id`) and `DraftedSlideCollection` (slides, in order) in `app/carousels/collection_generation.py`. `parse_slide_collection` reads one JSON object:
 
