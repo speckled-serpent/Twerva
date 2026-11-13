@@ -41,6 +41,7 @@ CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID: str = (
 )
 SLIDE_DRAFT_BATCHES_REVISION_ID: str = "slide_draft_batches"
 CAROUSEL_FINAL_ASSEMBLY_REVISION_ID: str = "carousel_final_assembly"
+CAROUSEL_GENERATIONS_REVISION_ID: str = "carousel_generations"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -78,6 +79,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID}.py",
                 f"{CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID}.py",
                 f"{CAROUSEL_FINAL_ASSEMBLY_REVISION_ID}.py",
+                f"{CAROUSEL_GENERATIONS_REVISION_ID}.py",
                 f"{CAROUSEL_INSTRUCTIONS_REVISION_ID}.py",
                 f"{CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID}.py",
                 f"{CAROUSEL_STEPS_REVISION_ID}.py",
@@ -1084,6 +1086,95 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertNotIn("UPDATE artifacts", revision_source)
         self.assertNotIn('op.create_check_constraint(\n        "editor_step"', revision_source)
         self.assertNotIn("ck_carousel_assemblies_ck_", revision_source)
+
+    def test_generations_follow_final_assembly(self) -> None:
+        """The snapshot revision follows Final assembly. The id fits the version column."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAROUSEL_GENERATIONS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+        drop_generation_id_at: int = revision_source.index(
+            'op.drop_column("carousel_assemblies", "generation_id")',
+        )
+        drop_exclusions_at: int = revision_source.index(
+            'op.drop_table("carousel_generation_slide_exclusions")',
+        )
+        drop_texts_at: int = revision_source.index(
+            'op.drop_table("carousel_generation_slide_texts")',
+        )
+        drop_slides_at: int = revision_source.index(
+            'op.drop_table("carousel_generation_slides")',
+        )
+        drop_images_at: int = revision_source.index(
+            'op.drop_table("carousel_generation_images")',
+        )
+        drop_research_at: int = revision_source.index(
+            'op.drop_table("carousel_generation_research")',
+        )
+        drop_instructions_at: int = revision_source.index(
+            'op.drop_table("carousel_generation_instructions")',
+        )
+        drop_generations_at: int = revision_source.index(
+            'op.drop_table("carousel_generations")',
+        )
+
+        self.assertEqual(assigned_values.get("revision"), CAROUSEL_GENERATIONS_REVISION_ID)
+        self.assertEqual(len(CAROUSEL_GENERATIONS_REVISION_ID), 20)
+        self.assertLessEqual(len(CAROUSEL_GENERATIONS_REVISION_ID), 64)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_FINAL_ASSEMBLY_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "carousel_generations"', revision_source)
+        self.assertIn(
+            'op.create_table(\n        "carousel_generation_instructions"',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_table(\n        "carousel_generation_research"',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_table(\n        "carousel_generation_images"',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_table(\n        "carousel_generation_slides"',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_table(\n        "carousel_generation_slide_texts"',
+            revision_source,
+        )
+        self.assertIn(
+            'op.create_table(\n        "carousel_generation_slide_exclusions"',
+            revision_source,
+        )
+        self.assertIn("INSERT INTO carousel_generations", revision_source)
+        self.assertIn("INSERT INTO carousel_generation_instructions", revision_source)
+        self.assertIn("INSERT INTO carousel_generation_research", revision_source)
+        self.assertIn("INSERT INTO carousel_generation_images", revision_source)
+        self.assertIn("INSERT INTO carousel_generation_slides", revision_source)
+        self.assertIn("INSERT INTO carousel_generation_slide_texts", revision_source)
+        self.assertIn("INSERT INTO carousel_generation_slide_exclusions", revision_source)
+        self.assertIn('sa.Column("generation_id"', revision_source)
+        self.assertIn('ondelete="RESTRICT"', revision_source)
+        self.assertIn("uq_carousel_assemblies_generation_id", revision_source)
+        self.assertLess(drop_generation_id_at, drop_exclusions_at)
+        self.assertLess(drop_exclusions_at, drop_texts_at)
+        self.assertLess(drop_texts_at, drop_slides_at)
+        self.assertLess(drop_slides_at, drop_images_at)
+        self.assertLess(drop_images_at, drop_research_at)
+        self.assertLess(drop_research_at, drop_instructions_at)
+        self.assertLess(drop_instructions_at, drop_generations_at)
+        self.assertNotIn("UPDATE carousels", revision_source)
+        self.assertNotIn("UPDATE slides", revision_source)
+        self.assertNotIn("UPDATE artifacts", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

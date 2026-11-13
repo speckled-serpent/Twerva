@@ -24,11 +24,12 @@ from those documents.
 ``slide_draft_batches`` is the review state for one press of Generate.
 A slide may point at that batch. Deleting the batch does not delete
 the slide. It is not the phase 8 snapshot, and it is not
-``campaign_carousels``. ``carousel_assemblies`` is one Final assembly
-for a carousel and generation. ``assembled_carousels`` and
-``assembled_carousel_frames`` are the reviewed carousels and the
-frozen frames. Deleting a slide or an album image clears the frame
-pointer and leaves the frame.
+``campaign_carousels``. ``carousel_generations`` is that snapshot.
+``carousel_assemblies`` is one Final assembly for a carousel and
+generation. It hangs on the snapshot through ``generation_id``.
+``assembled_carousels`` and ``assembled_carousel_frames`` are the
+reviewed carousels and the frozen frames. Deleting a slide or an
+album image clears the frame pointer and leaves the frame.
 ``album_images`` holds the files. A slide points at most one of them.
 A carousel may point at the album those images came from.
 ``research_items`` is one text document: a title, a slug, and a body.
@@ -71,6 +72,13 @@ from app.models.carousel import (
     AssembledCarouselFrame,
     Carousel,
     CarouselAssembly,
+    CarouselGeneration,
+    CarouselGenerationImage,
+    CarouselGenerationInstruction,
+    CarouselGenerationResearch,
+    CarouselGenerationSlide,
+    CarouselGenerationSlideExclusion,
+    CarouselGenerationSlideText,
     CarouselInstruction,
     CarouselResearchItem,
     Slide,
@@ -167,6 +175,13 @@ __all__ = [
     "Cluster",
     "Carousel",
     "CarouselAssembly",
+    "CarouselGeneration",
+    "CarouselGenerationImage",
+    "CarouselGenerationInstruction",
+    "CarouselGenerationResearch",
+    "CarouselGenerationSlide",
+    "CarouselGenerationSlideExclusion",
+    "CarouselGenerationSlideText",
     "CarouselInstruction",
     "CarouselResearchItem",
     "RESOURCE_FILE_MEDIA_TYPE_ENUM",

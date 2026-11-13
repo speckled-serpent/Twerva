@@ -30,7 +30,13 @@ from app.api.v1.carousel_writes import (
 )
 from app.api.v1.carousels import get_carousel
 from app.models.album import Album, AlbumImage
-from app.models.carousel import Carousel, CarouselInstruction, CarouselResearchItem, Slide
+from app.models.carousel import (
+    Carousel,
+    CarouselGeneration,
+    CarouselInstruction,
+    CarouselResearchItem,
+    Slide,
+)
 from app.models.research_item import ResearchItem
 from app.models.enums import (
     AdvertisementType,
@@ -125,6 +131,24 @@ class _MemoryCarouselSession:
     def rollback(self) -> None:
         return
 
+    def expire(self, row: object, attribute_names: list[str] | None = None) -> None:
+        """Drop cached snapshot children. Working rows stay in memory.
+
+        A real session reloads a deleted snapshot from the database.
+        This stand-in empties a generation's child lists so the next
+        copy does not append onto rows that were just deleted.
+        """
+
+        if attribute_names is None or not isinstance(row, CarouselGeneration):
+
+            return
+
+        for attribute_name in attribute_names:
+            collection: object = getattr(row, attribute_name, None)
+
+            if isinstance(collection, list):
+                collection.clear()
+
     def refresh(self, row: object) -> None:
         persisted_at: datetime = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
 
@@ -157,6 +181,9 @@ class _MemoryCarouselSession:
 
     def scalars(self, statement: object) -> _ScalarResult:
         sql: str = str(statement)
+
+        if "carousels.id" in sql and "carousel_research_items" in sql:
+            return _ScalarResult(self._carousel_ids_for_research(statement))
 
         if "carousel_research_items" in sql:
             return _ScalarResult(self._research_links_for_statement(statement))
@@ -219,6 +246,18 @@ class _MemoryCarouselSession:
                 return research_item
 
         return None
+
+    def _carousel_ids_for_research(self, statement: object) -> list[uuid.UUID]:
+        """Return carousel ids for a research-link query."""
+
+        carousel_ids: list[uuid.UUID] = []
+
+        for link in self._research_links_for_statement(statement):
+
+            if link.carousel_id not in carousel_ids:
+                carousel_ids.append(link.carousel_id)
+
+        return carousel_ids
 
     def _research_links_for_statement(self, statement: object) -> list[CarouselResearchItem]:
         links: list[CarouselResearchItem] = []

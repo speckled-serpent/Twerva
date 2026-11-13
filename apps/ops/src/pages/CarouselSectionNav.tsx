@@ -11,7 +11,10 @@ export interface CarouselGenerationProps {
 }
 
 /**
- * Pill for the stored generation number. The page shows "Generation 1" now.
+ * Pill for the stored generation number.
+ *
+ * Duplicate sits beside this pill on the open carousel. The slide editor
+ * keeps the pill only. The page does not switch generations.
  *
  * @param props - Stored generation number
  * @returns The generation pill

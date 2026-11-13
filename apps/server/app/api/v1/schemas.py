@@ -1100,6 +1100,76 @@ class CarouselAssemblyReadResponse(BaseModel):
     carousels: list[AssembledCarouselReadResponse]
 
 
+class CarouselGenerationSummaryResponse(BaseModel):
+    """Counts for one stored generation. The copied text is on the detail route."""
+
+    id: uuid.UUID
+    generation_number: int
+    album_id: uuid.UUID | None = None
+    instruction_count: int
+    research_count: int
+    image_count: int
+    slide_count: int
+    has_assembly: bool
+
+
+class CarouselGenerationInstructionReadResponse(BaseModel):
+    """One copied instruction body."""
+
+    position: int
+    body: str
+
+
+class CarouselGenerationResearchReadResponse(BaseModel):
+    """One copied research document."""
+
+    research_item_id: uuid.UUID | None = None
+    position: int
+    title: str
+    body: str
+
+
+class CarouselGenerationImageReadResponse(BaseModel):
+    """One copied album image id."""
+
+    album_image_id: uuid.UUID | None = None
+    position: int
+
+
+class CarouselGenerationSlideTextReadResponse(BaseModel):
+    """Copied text for one skeleton element."""
+
+    skeleton_element_id: uuid.UUID
+    value: str
+    draft_value: str | None = None
+
+
+class CarouselGenerationSlideReadResponse(BaseModel):
+    """One copied slide. ``excluded_slide_ids`` are other snapshot slide ids."""
+
+    id: uuid.UUID
+    source_slide_id: uuid.UUID | None = None
+    position: int
+    name: str
+    text_status: SlideTextStatus
+    album_image_id: uuid.UUID | None = None
+    texts: list[CarouselGenerationSlideTextReadResponse]
+    excluded_slide_ids: list[uuid.UUID]
+
+
+class CarouselGenerationReadResponse(BaseModel):
+    """One generation snapshot. Frames stay on the assembly route."""
+
+    id: uuid.UUID
+    carousel_id: uuid.UUID
+    generation_number: int
+    album_id: uuid.UUID | None = None
+    instructions: list[CarouselGenerationInstructionReadResponse]
+    research: list[CarouselGenerationResearchReadResponse]
+    images: list[CarouselGenerationImageReadResponse]
+    slides: list[CarouselGenerationSlideReadResponse]
+
+
 class CarouselReadResponse(BaseModel):
     """One carousel, its research, instruction documents, and slides.
 
@@ -1109,6 +1179,7 @@ class CarouselReadResponse(BaseModel):
     document, in position order. ``pending_slide_draft_batch`` is the
     set still waiting for review, or null. ``assembly`` is the Final
     assembly for this generation, or null when none has been stored.
+    ``generations`` is one summary per snapshot, in generation order.
     """
 
     id: uuid.UUID
@@ -1127,6 +1198,7 @@ class CarouselReadResponse(BaseModel):
     slides: list[SlideReadResponse]
     pending_slide_draft_batch: PendingSlideDraftBatchResponse | None = None
     assembly: CarouselAssemblyReadResponse | None = None
+    generations: list[CarouselGenerationSummaryResponse] = Field(default_factory=list)
 
 
 class TextGenerationStatusResponse(BaseModel):

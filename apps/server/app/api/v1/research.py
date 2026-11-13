@@ -14,6 +14,10 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.api.v1.persist import commit_database_session_or_raise_conflict
+from app.carousels.generations import (
+    carousel_ids_for_research,
+    refresh_generation_snapshots,
+)
 from app.api.v1.schemas import (
     ResearchCreateRequest,
     ResearchListItemResponse,
@@ -122,6 +126,10 @@ def patch_research(
     found_item: ResearchItem = _fetch_research_or_raise(research_id, our_database_session)
     found_item.title = _require_title(research_patch_request.title)
     found_item.body = _require_body(research_patch_request.body)
+    refresh_generation_snapshots(
+        carousel_ids_for_research(found_item.id, our_database_session),
+        our_database_session,
+    )
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Research could not be saved.",
@@ -148,8 +156,13 @@ def delete_research(
 
     from app.api.v1.carousel_writes import detach_research_item_links
 
+    linked_carousel_ids: list[uuid.UUID] = carousel_ids_for_research(
+        found_item.id,
+        our_database_session,
+    )
     detach_research_item_links(found_item.id, our_database_session)
     our_database_session.delete(found_item)
+    refresh_generation_snapshots(linked_carousel_ids, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Research could not be deleted.",

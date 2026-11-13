@@ -5,7 +5,9 @@ chosen at create. Create stores generation 1 and opens on Basic.
 A slide image is an album image that already exists. Storing one
 does not create an album. Research is an ordered list and does not
 gate a step. Instruction documents are the carousel's own rows.
-Writing one does not change slides.
+Writing one does not change slides. Create, album, research,
+instruction, and slide writes refresh the current generation
+snapshot in the same commit. Rename and the open step do not.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from app.api.v1.lookups import (
     fetch_carousel_by_id_or_raise,
     fetch_skeleton_by_id_or_raise,
 )
+from app.carousels.generations import replace_current_generation_snapshot
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
     CarouselAlbumAttachRequest,
@@ -274,6 +277,7 @@ def create_carousel(
     created_source.instructions = []
     created_source.draft_batches = []
     our_database_session.add(created_source)
+    replace_current_generation_snapshot(created_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail=CAROUSEL_SLUG_CONFLICT_DETAIL,
@@ -383,6 +387,7 @@ def put_carousel_album(
         our_database_session,
     )
     _point_carousel_at_album(found_source, found_album)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Album could not be attached.",
@@ -420,6 +425,7 @@ def post_carousel_album(
     )
     created_album: Album = _create_named_album(album_name, our_database_session)
     _point_carousel_at_album(found_source, created_album)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Album could not be saved.",
@@ -457,6 +463,7 @@ def delete_carousel_album(
     if found_source.album_id is not None:
         found_source.album = None
         found_source.album_id = None
+        replace_current_generation_snapshot(found_source.id, our_database_session)
         commit_database_session_or_raise_conflict(
             our_database_session,
             conflict_detail="Album could not be detached.",
@@ -491,6 +498,7 @@ def post_carousel_research(
     )
     _reject_when_research_already_attached(found_source, found_item.id)
     _append_research_link(found_source, found_item, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Research could not be attached.",
@@ -528,6 +536,7 @@ def put_carousel_research(
         our_database_session,
     )
     _replace_research_links(found_source, ordered_items, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Research order could not be saved.",
@@ -573,6 +582,7 @@ def delete_carousel_research(
 
     _drop_research_link(found_source, found_link, our_database_session)
     _close_research_positions(found_source, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Research could not be detached.",
@@ -603,6 +613,7 @@ def post_carousel_instruction(
     )
     body: str = _require_instruction_body(instruction_create_request.body)
     _append_instruction(found_source, body, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Instruction could not be saved.",
@@ -637,6 +648,7 @@ def patch_carousel_instruction(
     )
     body: str = _require_instruction_body(instruction_patch_request.body)
     found_document.body = body
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Instruction could not be saved.",
@@ -673,6 +685,7 @@ def put_carousel_instructions(
         ordered_ids,
     )
     _assign_instruction_positions(ordered_documents, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Instruction order could not be saved.",
@@ -706,6 +719,7 @@ def delete_carousel_instruction(
     )
     _drop_instruction(found_source, found_document, our_database_session)
     _close_instruction_positions(found_source, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Instruction could not be deleted.",
@@ -839,6 +853,7 @@ def create_slide(
     _replace_texts(created_slide, stored_texts, our_database_session)
     our_database_session.add(created_slide)
     _store_exclusion_pairs(created_slide, excluded_ids, found_source, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",
@@ -902,6 +917,7 @@ def patch_slide(
 
     _replace_exclusion_pairs(found_slide, excluded_ids, found_source, our_database_session)
     _store_slide_image(found_slide, chosen_image)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",
@@ -934,6 +950,7 @@ def delete_slide(
     )
     _clear_exclusion_pairs(found_slide, found_source, our_database_session)
     our_database_session.delete(found_slide)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be deleted.",
@@ -977,6 +994,7 @@ def delete_slide_image(
     ]
     found_slide.images = []
     our_database_session.delete(found_image)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Image could not be deleted.",

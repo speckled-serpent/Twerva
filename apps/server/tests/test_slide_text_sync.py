@@ -7,9 +7,12 @@ Draft copy lives on ``slide_element_texts.draft_value``, not a second table.
 import os
 import unittest
 import uuid
+from pathlib import Path
 
 os.environ.setdefault("TWERVA_ENV", "test")
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import Select, create_engine, select, text
 from sqlalchemy.sql.elements import TextClause
 from sqlalchemy.engine import Engine
@@ -49,59 +52,36 @@ from app.models.enums import (
 )
 from app.models.skeleton_element import SkeletonElement
 from app.carousels.slide_text_sync import sync_empty_texts_for_skeleton_element
+from app.settings import clear_settings_cache
 
 
-CANDIDATE_DATABASE_URLS: tuple[str, ...] = (
-    os.environ.get("TWERVA_TEST_DATABASE_URL", "").strip(),
-    os.environ.get("DATABASE_URL", "").strip(),
-    "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva_test",
-    "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva",
-)
+SERVER_ROOT: Path = Path(__file__).resolve().parents[1]
+ADMIN_DATABASE_URL: str = "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/postgres"
 SKELETON_ELEMENT_TEXT_FK: str = (
     "fk_slide_element_texts_skeleton_element_id_skeleton_elements"
 )
 
 
-def _connect_test_engine() -> Engine | None:
-    """Return an engine for the first reachable candidate URL, if any."""
+def _postgres_available() -> bool:
+    """Return whether the local Postgres admin database accepts a connection."""
 
-    for candidate_database_url in CANDIDATE_DATABASE_URLS:
+    admin_engine: Engine | None = None
 
-        if candidate_database_url == "":
-            continue
+    try:
+        admin_engine = create_engine(ADMIN_DATABASE_URL, isolation_level="AUTOCOMMIT")
 
-        normalized_database_url: str = candidate_database_url
+        with admin_engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except OperationalError:
 
-        if normalized_database_url.startswith("postgresql://"):
-            remainder: str = normalized_database_url[len("postgresql://"):]
-            normalized_database_url = f"postgresql+psycopg://{remainder}"
+        return False
+    else:
 
-        candidate_engine: Engine | None = None
+        return True
+    finally:
 
-        try:
-            candidate_engine = create_engine(normalized_database_url)
-            with candidate_engine.connect() as our_database_connection:
-                our_database_connection.execute(text("SELECT 1"))
-        except OperationalError:
-
-            if candidate_engine is not None:
-                candidate_engine.dispose()
-
-            continue
-        except Exception:
-
-            if candidate_engine is not None:
-                candidate_engine.dispose()
-
-            continue
-        else:
-
-            return candidate_engine
-
-    return None
-
-
-TEST_ENGINE: Engine | None = _connect_test_engine()
+        if admin_engine is not None:
+            admin_engine.dispose()
 
 
 def _text_element_request(
@@ -123,20 +103,76 @@ def _text_element_request(
     return text_request
 
 
-@unittest.skipIf(TEST_ENGINE is None, "Postgres is not reachable for slide text sync tests")
+@unittest.skipIf(not _postgres_available(), "Postgres is not reachable for slide text sync tests")
 class SkeletonElementSlideTextSyncTests(unittest.TestCase):
     """Add fills empty slots. Delete cascades. Live slides stay live."""
+
+    database_engine: Engine
+    database_name: str
+    database_url: str
+    previous_database_url: str | None
+    admin_engine: Engine
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Create one database and migrate it to head."""
+
+        cls.database_name = f"twerva_slidetext_{uuid.uuid4().hex[:10]}"
+        cls.database_url = (
+            "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/"
+            f"{cls.database_name}"
+        )
+        cls.previous_database_url = os.environ.get("DATABASE_URL")
+        cls.admin_engine = create_engine(
+            ADMIN_DATABASE_URL,
+            isolation_level="AUTOCOMMIT",
+        )
+
+        with cls.admin_engine.connect() as connection:
+            connection.execute(text(f'CREATE DATABASE "{cls.database_name}"'))
+
+        os.environ["DATABASE_URL"] = cls.database_url
+        clear_settings_cache()
+        cls.database_engine = create_engine(cls.database_url)
+        alembic_config: Config = Config(str(SERVER_ROOT / "alembic.ini"))
+        alembic_config.set_main_option("script_location", str(SERVER_ROOT / "alembic"))
+        command.upgrade(alembic_config, "head")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        """Drop the migrated database and restore the previous URL."""
+
+        clear_settings_cache()
+        cls.database_engine.dispose()
+
+        if cls.previous_database_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = cls.previous_database_url
+
+        clear_settings_cache()
+
+        with cls.admin_engine.connect() as connection:
+            connection.execute(
+                text(
+                    """
+                    SELECT pg_terminate_backend(pid)
+                    FROM pg_stat_activity
+                    WHERE datname = :database_name
+                      AND pid <> pg_backend_pid()
+                    """
+                ),
+                {"database_name": cls.database_name},
+            )
+            connection.execute(text(f'DROP DATABASE IF EXISTS "{cls.database_name}"'))
+
+        cls.admin_engine.dispose()
 
     def setUp(self) -> None:
         """Two skeletons with slides, one of them already a draft."""
 
-        if TEST_ENGINE is None:
-            self.skipTest("Postgres is not reachable for slide text sync tests")
-
         self.SessionFactory: sessionmaker[Session] = sessionmaker(
-            bind=TEST_ENGINE,
-            autoflush=False,
-            autocommit=False,
+            bind=self.database_engine,
             expire_on_commit=False,
         )
         self.our_database_session: Session = self.SessionFactory()

@@ -586,6 +586,8 @@ These are the choices this sheet made so a task could name a file. The tasks abo
 
 **Open questions.** After a duplicate, do slide edits land only on the new generation? The album is shared. Does the snapshot store the album id, or the list of images it used at the time? A later upload to that album would change a shared id. It would not change a copied list.
 
+**Task sheet.** The checklist is `docs/planning/phase_8_generations.md`.
+
 ## 9. Campaign timeline
 
 **Goal.** Pick a campaign and see its posts.
