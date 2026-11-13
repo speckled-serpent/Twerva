@@ -1,6 +1,6 @@
 """Join a carousel's instruction documents into one draft prompt.
 
-Phase 6 should use this same join for the instructions button.
+``collection_prompt_text`` uses this same join for the instructions section.
 """
 
 from __future__ import annotations

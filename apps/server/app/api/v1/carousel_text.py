@@ -18,6 +18,7 @@ from app.api.v1.lookups import (
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
+    CarouselReadResponse,
     SlideAcceptTextRequest,
     SlideReadResponse,
 )
@@ -63,6 +64,24 @@ def register_source_text_routes(carousels_router: APIRouter) -> None:
         methods=["POST"],
         response_model=SlideReadResponse,
         status_code=status.HTTP_201_CREATED,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/slides/generate-collection",
+        generate_slide_collection,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/slide-draft-batches/{batch_id}/accept",
+        accept_slide_draft_batch,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
+        "/{carousel_id}/slide-draft-batches/{batch_id}/discard",
+        discard_slide_draft_batch,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
     )
     carousels_router.add_api_route(
         "/{carousel_id}/slides/{slide_id}/generate",
@@ -127,6 +146,110 @@ def generate_source_slide(
     from app.api.v1.carousels import serialize_slide
 
     return serialize_slide(created_slide)
+
+
+def generate_slide_collection(
+    carousel_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Draft a set of slides from the instructions, album, and research.
+
+    The slides stay draft until the set is accepted. Readers cannot call
+    this.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
+
+    from app.carousels.slide_collection import write_generated_slide_collection
+
+    write_generated_slide_collection(
+        our_database_session,
+        found_source,
+        found_skeleton,
+        _provider_or_http,
+    )
+    our_database_session.refresh(found_source)
+
+    from app.api.v1.carousels import serialize_carousel
+
+    return serialize_carousel(found_source, found_skeleton)
+
+
+def accept_slide_draft_batch(
+    carousel_id: uuid.UUID,
+    batch_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Make one pending set live. The body is empty. Readers cannot call this."""
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
+
+    from app.carousels.slide_collection import accept_generated_slide_collection
+
+    accept_generated_slide_collection(
+        our_database_session,
+        found_source,
+        found_skeleton,
+        batch_id,
+    )
+    our_database_session.refresh(found_source)
+
+    from app.api.v1.carousels import serialize_carousel
+
+    return serialize_carousel(found_source, found_skeleton)
+
+
+def discard_slide_draft_batch(
+    carousel_id: uuid.UUID,
+    batch_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Delete one pending set. The batch row stays, marked discarded.
+
+    The body is empty. Album files stay. Readers cannot call this.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
+
+    from app.carousels.slide_collection import discard_generated_slide_collection
+
+    discard_generated_slide_collection(
+        our_database_session,
+        found_source,
+        batch_id,
+    )
+    our_database_session.refresh(found_source)
+
+    from app.api.v1.carousels import serialize_carousel
+
+    return serialize_carousel(found_source, found_skeleton)
 
 
 def generate_slide_text(

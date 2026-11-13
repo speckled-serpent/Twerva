@@ -581,6 +581,7 @@ export interface SlideReadResponse {
   draft_texts: SlideElementTextReadResponse[];
   excluded_slide_ids: string[];
   images: SlideImageReadResponse[];
+  draft_batch_id: string | null;
 }
 
 export type CarouselStepState = "locked" | "available" | "done";
@@ -619,6 +620,12 @@ export interface CarouselListItemResponse {
   updated_at: string;
 }
 
+export interface PendingSlideDraftBatchResponse {
+  id: string;
+  status: string;
+  slide_count: number;
+}
+
 export interface CarouselReadResponse {
   id: string;
   skeleton_id: string;
@@ -634,6 +641,7 @@ export interface CarouselReadResponse {
   instructions: CarouselInstructionReadResponse[];
   steps: CarouselStepsResponse;
   slides: SlideReadResponse[];
+  pending_slide_draft_batch: PendingSlideDraftBatchResponse | null;
 }
 
 export interface AlbumImageReadResponse {

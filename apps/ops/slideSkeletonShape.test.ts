@@ -120,6 +120,7 @@ const drafts: Record<string, string> = textDraftsForSkeleton(
     draft_texts: [],
     excluded_slide_ids: [],
     images: [],
+    draft_batch_id: null,
   },
 );
 assert.equal(drafts["heading-top"], "");
@@ -136,6 +137,7 @@ const draftValues: Record<string, string> = textDraftsForSkeleton(
     draft_texts: [{ skeleton_element_id: "title-bottom", value: "Draft fog" }],
     excluded_slide_ids: [],
     images: [],
+    draft_batch_id: null,
   },
 );
 assert.equal(draftValues["title-bottom"], "Draft fog");

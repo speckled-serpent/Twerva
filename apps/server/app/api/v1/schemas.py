@@ -988,6 +988,7 @@ class SlideReadResponse(BaseModel):
     draft_texts: list[SlideElementTextReadResponse]
     excluded_slide_ids: list[uuid.UUID]
     images: list[SlideImageReadResponse]
+    draft_batch_id: uuid.UUID | None = None
 
 
 class CarouselResearchReadResponse(BaseModel):
@@ -1050,13 +1051,26 @@ class CarouselListItemResponse(BaseModel):
     updated_at: datetime
 
 
+class PendingSlideDraftBatchResponse(BaseModel):
+    """The generated set still waiting for review.
+
+    ``status`` is ``pending``. ``slide_count`` is the count stored for
+    that press of Generate.
+    """
+
+    id: uuid.UUID
+    status: str
+    slide_count: int
+
+
 class CarouselReadResponse(BaseModel):
     """One carousel, its research, instruction documents, and slides.
 
     ``editor_step`` is the stored open step. ``steps`` is derived and
     does not change that stored value. ``research`` is the attached
     research in position order. ``instructions`` is one entry per
-    document, in position order.
+    document, in position order. ``pending_slide_draft_batch`` is the
+    set still waiting for review, or null.
     """
 
     id: uuid.UUID
@@ -1073,6 +1087,7 @@ class CarouselReadResponse(BaseModel):
     instructions: list[CarouselInstructionReadResponse]
     steps: CarouselStepsResponse
     slides: list[SlideReadResponse]
+    pending_slide_draft_batch: PendingSlideDraftBatchResponse | None = None
 
 
 class TextGenerationStatusResponse(BaseModel):

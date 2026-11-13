@@ -10,8 +10,6 @@ import {
   instructionDraftFromDocument,
   instructionDraftReadiness,
   type InstructionDraft,
-  instructionsAfterGenerateClick,
-  instructionsGenerateAccessibleName,
   instructionsGenerateEnabled,
   moveInstructionDocuments,
 } from "./src/pages/carouselInstructions.ts";
@@ -129,19 +127,3 @@ assert.equal(
   ),
   false,
 );
-assert.match(
-  instructionsGenerateAccessibleName(false),
-  /Filling slides from these instructions is a later phase/,
-);
-
-const carouselBeforeGenerate: {
-  slides: { id: string }[];
-  instructions: CarouselInstructionReadResponse[];
-} = {
-  slides: [{ id: "slide-1" }],
-  instructions: [writtenDocument],
-};
-const carouselAfterGenerate = instructionsAfterGenerateClick(carouselBeforeGenerate);
-assert.equal(carouselAfterGenerate, carouselBeforeGenerate);
-assert.equal(carouselAfterGenerate.slides, carouselBeforeGenerate.slides);
-assert.equal(carouselAfterGenerate.instructions, carouselBeforeGenerate.instructions);

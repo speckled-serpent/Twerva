@@ -500,6 +500,38 @@ export async function fetchTextGenerationStatus(): Promise<TextGenerationStatusR
   );
 }
 
+export async function generateCarouselCollection(
+  carouselId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/slides/generate-collection`,
+  );
+}
+
+export async function acceptSlideDraftBatch(
+  carouselId: string,
+  batchId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/slide-draft-batches/${batchId}/accept`,
+  );
+}
+
+export async function discardSlideDraftBatch(
+  carouselId: string,
+  batchId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/slide-draft-batches/${batchId}/discard`,
+  );
+}
+
 export async function generateCarouselSlide(sourceId: string): Promise<SlideReadResponse> {
 
   return requestJson<SlideReadResponse>(

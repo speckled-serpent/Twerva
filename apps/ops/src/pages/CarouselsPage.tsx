@@ -36,7 +36,13 @@ import {
 } from "./CarouselInstructionsStep";
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import type { AlbumEditorActions } from "./AlbumImagesEditor";
+import { CarouselCollectionReview } from "./CarouselCollectionReview";
 import { CarouselGenerateControl } from "./CarouselGenerateControl";
+import {
+  collectionSlideReviewAccessibleName,
+  slideUsesCollectionReview,
+} from "./carouselCollection";
+import { type InstructionDraft } from "./carouselInstructions";
 import { CarouselGeneration, CarouselSectionNav } from "./CarouselSectionNav";
 import {
   carouselLabelFingerprint,
@@ -364,6 +370,7 @@ export function CarouselsPage({
           setStatusMessage("Deleted the carousel.");
           requestReload();
         }}
+        onStatusMessage={setStatusMessage}
       />
     );
   }
@@ -508,6 +515,7 @@ interface AlbumViewProps {
   onCarouselChanged: (message: string) => void;
   onCarouselSaved: (savedCarousel: CarouselReadResponse) => void;
   onCarouselDeleted: () => void;
+  onStatusMessage: (message: string) => void;
 }
 
 /**
@@ -547,6 +555,7 @@ function AlbumView({
   onCarouselChanged,
   onCarouselSaved,
   onCarouselDeleted,
+  onStatusMessage,
 }: AlbumViewProps): ReactElement {
 
   const canWrite: boolean = useCanWriteOps();
@@ -557,17 +566,16 @@ function AlbumView({
   );
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [generateEnabled, setGenerateEnabled] = useState<boolean>(false);
+  const [instructionDraft, setInstructionDraft] = useState<InstructionDraft>({
+    instructionId: null,
+    body: "",
+  });
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [pendingSlideDelete, setPendingSlideDelete] = useState<SlideReadResponse | null>(null);
   const albumEditorActionsRef: { current: AlbumEditorActions | null } = useRef(null);
   const instructionEditorActionsRef: { current: InstructionEditorActions | null } = useRef(null);
   const slidesSection: CarouselPageSection = carouselPageSection("slides");
   const finalSection: CarouselPageSection = carouselPageSection("final");
-  const handleGenerateEnabled = useCallback((enabled: boolean): void => {
-    setGenerateEnabled(enabled);
-  }, []);
-
   if (carouselId !== trackedCarouselId) {
     const nextDraft: CarouselLabelDraft | null = carousel === null
       ? null
@@ -759,7 +767,7 @@ function AlbumView({
             carousel={carousel}
             canWrite={canWrite}
             onCarouselSaved={onCarouselSaved}
-            onGenerateEnabled={handleGenerateEnabled}
+            onInstructionDraft={setInstructionDraft}
             onActions={(actions: InstructionEditorActions | null): void => {
               instructionEditorActionsRef.current = actions;
             }}
@@ -772,7 +780,18 @@ function AlbumView({
               albumEditorActionsRef.current = actions;
             }}
           />
-          <CarouselGenerateControl carousel={carousel} enabled={generateEnabled} />
+          <CarouselGenerateControl
+            carousel={carousel}
+            instructionDraft={instructionDraft}
+            canWrite={canWrite}
+            textGeneration={textGeneration}
+            flushBeforeGenerate={(afterFlush: () => void): void => {
+              leaveEditor(afterFlush);
+            }}
+            onCarouselSaved={onCarouselSaved}
+            onStatusMessage={onStatusMessage}
+            onError={setSaveError}
+          />
           <section
             id={slidesSection.id}
             className="carousel-page-section"
@@ -830,6 +849,13 @@ function AlbumView({
                 {textGeneration.detail}
               </p>
             )}
+            <CarouselCollectionReview
+              carousel={carousel}
+              canWrite={canWrite}
+              onCarouselSaved={onCarouselSaved}
+              onStatusMessage={onStatusMessage}
+              onError={setSaveError}
+            />
             {carousel.slides.length === 0 ? (
               <p>No slides yet.</p>
             ) : (
@@ -1328,6 +1354,10 @@ function SlideEditorView({
       ? NEW_PICTURE_SLIDE_AUTOSAVE_HINT
       : NEW_SLIDE_AUTOSAVE_HINT;
   const editorBusy: boolean = isGenerating || isAccepting || isChoosingImage;
+  const usesCollectionReview: boolean = slideUsesCollectionReview(
+    slide?.draft_batch_id ?? null,
+    carousel?.pending_slide_draft_batch?.id ?? null,
+  );
 
   const pageTitle: string = slide === null ? "New slide" : "Slide";
   const pageLede: string = (
@@ -1492,7 +1522,12 @@ function SlideEditorView({
                   <button
                     id="generate-slide-text"
                     type="button"
-                    disabled={!textGeneration.available || editorBusy}
+                    disabled={!textGeneration.available || editorBusy || usesCollectionReview}
+                    aria-label={
+                      usesCollectionReview
+                        ? collectionSlideReviewAccessibleName("Generate text")
+                        : undefined
+                    }
                     onClick={(): void => {
                       void handleGenerateText();
                     }}
@@ -1503,7 +1538,12 @@ function SlideEditorView({
                     <button
                       id="accept-slide-text"
                       type="button"
-                      disabled={editorBusy}
+                      disabled={editorBusy || usesCollectionReview}
+                      aria-label={
+                        usesCollectionReview
+                          ? collectionSlideReviewAccessibleName("Accept text")
+                          : undefined
+                      }
                       onClick={(): void => {
                         void handleAcceptText();
                       }}

@@ -442,7 +442,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Data model
 
-- [ ] **6.1 Add a slide draft batch**
+- [x] **6.1 Add a slide draft batch**
 
   Alembic revision `slide_draft_batches`, down-revision `carousel_instructions_drop_guidance`. New table `slide_draft_batches`: `id`, `carousel_id` (cascade on carousel delete), `status` (text, not null, check `status IN ('pending', 'accepted', 'discarded')`), `slide_count` (integer, not null, check `slide_count >= 1`), and the timestamp columns from `TimestampMixin`. A partial unique index `uq_slide_draft_batches_one_pending_carousel` on `carousel_id` where `status = 'pending'`. One carousel can hold one pending set.
 
@@ -452,7 +452,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Prompt
 
-- [ ] **6.2 Build one collection prompt**
+- [x] **6.2 Build one collection prompt**
 
   Add `collection_prompt_text` in `app/carousels/collection_prompt.py`. It takes instruction bodies already in position order, research items as title plus body in position order, album images as id, position, alt text, source, and license note, exclusion pairs as the two names and ids, the skeleton text elements (`TextElementPrompt`), the slide count, and whether an image is required. It calls `instruction_prompt_text` for the bodies. Blank instruction bodies are dropped there. An attached research item is included even when its body is empty.
 
@@ -462,7 +462,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Provider
 
-- [ ] **6.3 Validate a collection JSON object**
+- [x] **6.3 Validate a collection JSON object**
 
   Add `DraftedCollectionSlide` (name, `values_by_element_id`, `album_image_id`) and `DraftedSlideCollection` (slides, in order) in `app/carousels/collection_generation.py`. `parse_slide_collection` reads one JSON object:
 
@@ -476,7 +476,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `apps/server/tests/test_slide_collection_text.py`: a valid object with two slides round-trips. A short list, a blank name, an unknown element id, an unknown image id, an image when none is required, and a missing image when one is required each raise `TextGenerationError`. An empty text value is kept. The request body uses `json_object` and contains the instruction text.
 
-- [ ] **6.4 Draft a collection from the fake provider and from OpenAI**
+- [x] **6.4 Draft a collection from the fake provider and from OpenAI**
 
   Add `draft_slide_collection` on `TextGenerationProvider`, `FakeTextGenerationProvider`, and `OpenAITextGenerationProvider`. The argument is the same pieces `collection_prompt_text` takes, plus the model call's settings on the OpenAI class. Both methods return `DraftedSlideCollection`. Neither writes rows.
 
@@ -488,7 +488,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### API
 
-- [ ] **6.5 Add the generate-collection route**
+- [x] **6.5 Add the generate-collection route**
 
   `POST /api/v1/carousels/{carousel_id}/slides/generate-collection`, registered in `register_source_text_routes` (`app/api/v1/carousel_text.py`). Admin only, same as `generate_source_slide`. The response is the carousel detail from `serialize_carousel`. The handler lives in a thin route. The write helper lives in `app/carousels/slide_collection.py`.
 
@@ -502,7 +502,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `apps/server/tests/test_slide_collection.py`, with `TEXT_GENERATION_PROVIDER=fake`: a carousel with two instruction documents, two research items, and two album images gets the patched count of slides, named `Drafted slide 1` onward, each text element containing the joined instructions, `draft_value` set, `value` `""`, `text_status` `draft`, and image ids round-robin. The detail includes the pending batch. A second POST is 409 and the slide count stays. A carousel with an older draft slide (null `draft_batch_id`) keeps that slide draft. Default, with no instruction text, is 400 and still has six live slides. A picture carousel with no album is 400. A reader is rejected. Provider off is 409 and writes nothing.
 
-- [ ] **6.6 Accept the whole set**
+- [x] **6.6 Accept the whole set**
 
   `POST /api/v1/carousels/{carousel_id}/slide-draft-batches/{batch_id}/accept`, admin only, empty body, response `serialize_carousel`. The batch must be `pending` and belong to this carousel. Otherwise 404. The helper loads the slides whose `draft_batch_id` is this batch. Zero such slides is 400, detail `This set has no slides to accept.` The batch stays `pending`. A picture skeleton whose batch slide has a null `album_image_id` is 400, `IMAGE_REQUIRED_DETAIL`, and no slide in the set changes status.
 
@@ -510,7 +510,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `test_slide_collection.py`: accepting a set of three makes those three `live`, copies the drafted strings onto `value`, clears `draft_value`, and returns a null `pending_slide_draft_batch`. An older draft slide on the same carousel stays `draft` with its old `draft_value` and its old `value`. A live hand-entered slide keeps its text. Accepting an accepted batch is 404. A reader is rejected.
 
-- [ ] **6.7 Discard the whole set**
+- [x] **6.7 Discard the whole set**
 
   `POST /api/v1/carousels/{carousel_id}/slide-draft-batches/{batch_id}/discard`, admin only, empty body, response `serialize_carousel`. The same 404 rule as accept. Delete each slide in the batch: clear its exclusion pairs with `_clear_exclusion_pairs`, then delete the row. Do not delete `album_images` rows or files, and do not call `_reject_when_paths_in_use`. Other slides keep their positions. Set the batch `status` to `discarded` and leave the row. `pending_slide_draft_batch` returns null. Slides outside the batch stay, including drafts that are not in the batch.
 
@@ -518,7 +518,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Page
 
-- [ ] **6.8 Wire Generate to the collection route**
+- [x] **6.8 Wire Generate to the collection route**
 
   `CarouselGenerateControl` posts `generateCarouselCollection` in `apps/ops/src/api/client.ts`: `POST /api/v1/carousels/{carouselId}/slides/generate-collection`, returning `CarouselReadResponse`. The click flushes open edits through `flushOpenEdits` and `leaveAfterAutosave` before the request, the same way `handleGenerateSlide` does, so the saved instruction bodies and the album are what the route reads. While the request runs, the label is `Generating…` and the button is disabled. Success replaces the open carousel. The Slides section is the same `#carousel-slides` on this page. "No slides yet." stays the empty copy. A set of drafted slides replaces that sentence. The status line uses the existing `statusMessage`: `Drafted a set of {n} slides. Accept the set to make them live.` A 400, 409, or 502 shows the API detail in `ErrorBanner`.
 
@@ -526,7 +526,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `apps/ops/carouselCollection.test.ts` and an updated `carouselInstructions.test.ts`: an empty draft is disabled, one non-blank document is enabled, a reader is disabled, provider off is disabled, and a pending batch is disabled. The old later-phase hint is gone. The click helper that returned the carousel unchanged is gone.
 
-- [ ] **6.9 Review the set on the Slides section**
+- [x] **6.9 Review the set on the Slides section**
 
   When `pending_slide_draft_batch` is set, the Slides section shows a review block above the slide grid: `Review this generated set. It stays off Final until you accept it.` Accept set is `#accept-slide-draft-batch`. Discard set is `#discard-slide-draft-batch`. Accept calls `acceptSlideDraftBatch`. Discard calls `discardSlideDraftBatch`. Both return the carousel detail and replace the open carousel. Accept's status line is `Accepted the set. These slides are live.` Discard's is `Discarded the set.` A reader sees the sentence and both buttons disabled. The block is absent when the pending batch is null. This PR does not add a route and does not move the operator to another page. Final stays the locked heading.
 
@@ -534,7 +534,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `carouselCollection.test.ts`: the review block is present only with a pending batch, and a reader cannot accept or discard. After a successful accept the helper's next state has a null pending batch. The Final notice is unchanged.
 
-- [ ] **6.10 Keep per-slide Generate next to the set**
+- [x] **6.10 Keep per-slide Generate next to the set**
 
   `#generate-slide` and `#generate-slide-text` still call `draft_slide_text` through `_draft_or_http`. They do not set `draft_batch_id`. `generate_source_slide` still appends one draft slide with no image and an empty exclusion list. `generate_slide_text` still leaves the live `value` in place until `#accept-slide-text`.
 
@@ -544,7 +544,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Tests
 
-- [ ] **6.11 Run the full server and ops suites**
+- [x] **6.11 Run the full server and ops suites**
 
   From `apps/server`, `python -m unittest discover -s tests`. From `apps/ops`, `node --test *.test.ts`. This PR adds no product behavior. It fixes failures that this phase's tasks left, and it does not start a new feature. Migration tests that skip because Postgres is down stay skipped, the same way `test_carousel_steps_migration.py` skips. A skip is not a failure. The phase is done when both suites pass aside from those skips.
 

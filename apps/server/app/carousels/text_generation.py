@@ -11,10 +11,20 @@ import json
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import httpx
 
 from app.settings import Settings
+
+
+if TYPE_CHECKING:
+    from app.carousels.collection_generation import DraftedSlideCollection
+    from app.carousels.collection_prompt import (
+        CollectionAlbumImage,
+        CollectionExclusion,
+        CollectionResearch,
+    )
 
 
 GENERATE_DISABLED_DETAIL: str = "Generate is off until OPENAI_API_KEY is set."
@@ -62,7 +72,7 @@ class TextGenerationAvailability:
 
 
 class TextGenerationProvider:
-    """Drafts one slide's skeleton text. Implementations do not write rows."""
+    """Drafts slide text. Implementations do not write rows."""
 
     def draft_slide_text(
         self,
@@ -81,6 +91,36 @@ class TextGenerationProvider:
 
         Returns:
             A name and one value per element.
+
+        Raises:
+            TextGenerationError: The provider did not return a draft.
+        """
+
+        raise NotImplementedError
+
+    def draft_slide_collection(
+        self,
+        instruction_bodies: Sequence[str],
+        research_items: Sequence[CollectionResearch],
+        album_images: Sequence[CollectionAlbumImage],
+        exclusion_pairs: Sequence[CollectionExclusion],
+        text_elements: Sequence[TextElementPrompt],
+        slide_count: int,
+        image_required: bool,
+    ) -> DraftedSlideCollection:
+        """Return one generated set. Implementations do not write rows.
+
+        Args:
+            instruction_bodies: Document bodies, already in position order.
+            research_items: Title plus body, already in position order.
+            album_images: Images the model may choose, in position order.
+            exclusion_pairs: Each unordered pair once.
+            text_elements: Skeleton text elements, in frame order.
+            slide_count: How many slides this set should contain.
+            image_required: True when every slide must choose an image.
+
+        Returns:
+            The slides in order.
 
         Raises:
             TextGenerationError: The provider did not return a draft.
@@ -123,6 +163,56 @@ class FakeTextGenerationProvider(TextGenerationProvider):
         )
 
         return drafted_text
+
+    def draft_slide_collection(
+        self,
+        instruction_bodies: Sequence[str],
+        research_items: Sequence[CollectionResearch],
+        album_images: Sequence[CollectionAlbumImage],
+        exclusion_pairs: Sequence[CollectionExclusion],
+        text_elements: Sequence[TextElementPrompt],
+        slide_count: int,
+        image_required: bool,
+    ) -> DraftedSlideCollection:
+        """Return ``slide_count`` slides. No network, and no rows are written.
+
+        Names are ``Drafted slide 1`` onward. Each element joins its label
+        and the instruction text. Research and exclusion pairs are accepted
+        and do not change those names.
+        """
+
+        from app.carousels.collection_generation import (
+            DraftedCollectionSlide,
+            DraftedSlideCollection,
+        )
+        from app.carousels.instructions import instruction_prompt_text
+
+        instruction_text: str = instruction_prompt_text(list(instruction_bodies))
+        slides: list[DraftedCollectionSlide] = []
+
+        for index in range(slide_count):
+            drafted_name: str = f"Drafted slide {index + 1}"[:MAX_DRAFTED_NAME_LENGTH]
+            values_by_element_id: dict[uuid.UUID, str] = {
+                element.skeleton_element_id: ". ".join([element.label, instruction_text])
+                for element in text_elements
+            }
+            album_image_id: uuid.UUID | None = None
+
+            if image_required:
+                album_image_id = album_images[index % len(album_images)].image_id
+
+            slide: DraftedCollectionSlide = DraftedCollectionSlide(
+                name=drafted_name,
+                values_by_element_id=values_by_element_id,
+                album_image_id=album_image_id,
+            )
+            slides.append(slide)
+
+        drafted_collection: DraftedSlideCollection = DraftedSlideCollection(
+            slides=tuple(slides),
+        )
+
+        return drafted_collection
 
 
 class OpenAITextGenerationProvider(TextGenerationProvider):
@@ -168,6 +258,69 @@ class OpenAITextGenerationProvider(TextGenerationProvider):
             raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL) from decode_error
 
         return drafted_text_from_openai_response(response_body, elements, slide_name)
+
+    def draft_slide_collection(
+        self,
+        instruction_bodies: Sequence[str],
+        research_items: Sequence[CollectionResearch],
+        album_images: Sequence[CollectionAlbumImage],
+        exclusion_pairs: Sequence[CollectionExclusion],
+        text_elements: Sequence[TextElementPrompt],
+        slide_count: int,
+        image_required: bool,
+    ) -> DraftedSlideCollection:
+        """Ask the configured model for one JSON collection. No rows are written."""
+
+        from app.carousels.collection_generation import (
+            DraftedSlideCollection,
+            openai_collection_request_body,
+            parse_slide_collection,
+        )
+
+        request_body: dict[str, object] = openai_collection_request_body(
+            self._model,
+            instruction_bodies,
+            research_items,
+            album_images,
+            exclusion_pairs,
+            text_elements,
+            slide_count,
+            image_required,
+        )
+
+        try:
+            response: httpx.Response = httpx.post(
+                OPENAI_CHAT_COMPLETIONS_URL,
+                headers={"Authorization": f"Bearer {self._api_key}"},
+                json=request_body,
+                timeout=30.0,
+            )
+        except httpx.HTTPError as request_error:
+            raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL) from request_error
+
+        if response.status_code >= 400:
+            raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL)
+
+        try:
+            response_body: object = response.json()
+        except json.JSONDecodeError as decode_error:
+            raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL) from decode_error
+
+        try:
+            parsed_content: object = json.loads(_chat_message_content(response_body))
+        except json.JSONDecodeError as content_error:
+            raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL) from content_error
+
+        image_ids: list[uuid.UUID] = [image.image_id for image in album_images]
+        drafted_collection: DraftedSlideCollection = parse_slide_collection(
+            parsed_content,
+            slide_count,
+            text_elements,
+            image_ids,
+            image_required,
+        )
+
+        return drafted_collection
 
 
 def text_generation_availability(settings: Settings) -> TextGenerationAvailability:
@@ -327,6 +480,35 @@ def drafted_text_from_openai_response(
     )
 
     return drafted_text
+
+
+def _chat_message_content(response_body: object) -> str:
+    """Return the assistant message string from one chat completion."""
+
+    if not isinstance(response_body, dict):
+        raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL)
+
+    choices: object = response_body.get("choices")
+
+    if not isinstance(choices, list) or len(choices) == 0:
+        raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL)
+
+    first_choice: object = choices[0]
+
+    if not isinstance(first_choice, dict):
+        raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL)
+
+    message: object = first_choice.get("message")
+
+    if not isinstance(message, dict):
+        raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL)
+
+    content: object = message.get("content")
+
+    if not isinstance(content, str):
+        raise TextGenerationError(TEXT_GENERATION_FAILED_DETAIL)
+
+    return content
 
 
 def _drafted_name(inspiration: str, slide_name: str | None) -> str:

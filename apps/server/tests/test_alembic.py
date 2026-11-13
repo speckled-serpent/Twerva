@@ -39,6 +39,7 @@ CAROUSEL_INSTRUCTIONS_REVISION_ID: str = "carousel_instructions"
 CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID: str = (
     "carousel_instructions_drop_guidance"
 )
+SLIDE_DRAFT_BATCHES_REVISION_ID: str = "slide_draft_batches"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -82,6 +83,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{OPS_USERS_REVISION_ID}.py",
                 f"{RESEARCH_ITEMS_REVISION_ID}.py",
                 f"{SKELETONS_CAROUSELS_SLIDES_REVISION_ID}.py",
+                f"{SLIDE_DRAFT_BATCHES_REVISION_ID}.py",
                 f"{SOURCES_DEFAULT_ALBUM_REVISION_ID}.py",
                 f"{SOURCES_RESOURCE_FILES_REVISION_ID}.py",
                 f"{SOURCES_THEME_BOUND_REVISION_ID}.py",
@@ -989,6 +991,45 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertIn("nullable=False", revision_source)
         self.assertNotIn("INSERT INTO", revision_source)
         self.assertNotIn("op.drop_table(", revision_source)
+
+    def test_slide_draft_batches_follow_drop_guidance(self) -> None:
+        """The review batch follows the guidance drop. The id fits the version column."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{SLIDE_DRAFT_BATCHES_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+        drop_column_at: int = revision_source.index(
+            'op.drop_column("slides", "draft_batch_id")',
+        )
+        drop_table_at: int = revision_source.index(
+            'op.drop_table("slide_draft_batches")',
+        )
+
+        self.assertEqual(assigned_values.get("revision"), SLIDE_DRAFT_BATCHES_REVISION_ID)
+        self.assertEqual(len(SLIDE_DRAFT_BATCHES_REVISION_ID), 19)
+        self.assertLessEqual(len(SLIDE_DRAFT_BATCHES_REVISION_ID), 64)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "slide_draft_batches"', revision_source)
+        self.assertIn("SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL", revision_source)
+        self.assertIn("SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL", revision_source)
+        self.assertIn("uq_slide_draft_batches_one_pending_carousel", revision_source)
+        self.assertIn("status = 'pending'", revision_source)
+        self.assertIn('sa.Column("draft_batch_id"', revision_source)
+        self.assertIn('ondelete="SET NULL"', revision_source)
+        self.assertIn('ondelete="CASCADE"', revision_source)
+        self.assertLess(drop_column_at, drop_table_at)
+        self.assertNotIn("INSERT INTO", revision_source)
+        self.assertNotIn("UPDATE slides", revision_source)
+        self.assertNotIn("UPDATE carousels", revision_source)
+        self.assertNotIn("ck_slide_draft_batches_ck_", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

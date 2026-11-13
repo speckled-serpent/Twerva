@@ -19,6 +19,7 @@ from app.api.v1.schemas import (
     CarouselReadResponse,
     CarouselResearchReadResponse,
     CarouselStepsResponse,
+    PendingSlideDraftBatchResponse,
     TextGenerationStatusResponse,
     SlideElementTextReadResponse,
     SlideImageReadResponse,
@@ -208,6 +209,7 @@ def serialize_carousel(
         instructions=instruction_responses,
         steps=_steps_response(step_states),
         slides=slide_responses,
+        pending_slide_draft_batch=_pending_slide_draft_batch(carousel),
     )
 
     return source_read_response
@@ -315,6 +317,25 @@ def _steps_response(step_states: CarouselStepStates) -> CarouselStepsResponse:
     return steps_response
 
 
+def _pending_slide_draft_batch(
+    carousel: Carousel,
+) -> PendingSlideDraftBatchResponse | None:
+    """Return the pending generated set, or null when none is waiting."""
+
+    for batch in list(carousel.draft_batches):
+
+        if batch.status == "pending":
+            pending: PendingSlideDraftBatchResponse = PendingSlideDraftBatchResponse(
+                id=batch.id,
+                status=batch.status,
+                slide_count=batch.slide_count,
+            )
+
+            return pending
+
+    return None
+
+
 def _slides_in_position_order(carousel: Carousel) -> list[Slide]:
     """Return slides sorted by position."""
 
@@ -354,6 +375,7 @@ def serialize_slide(slide: Slide) -> SlideReadResponse:
         draft_texts=draft_responses,
         excluded_slide_ids=excluded_slide_ids,
         images=image_responses,
+        draft_batch_id=slide.draft_batch_id,
     )
 
     return slide_response

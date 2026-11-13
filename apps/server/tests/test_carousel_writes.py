@@ -113,6 +113,9 @@ class _MemoryCarouselSession:
         if isinstance(row, CarouselInstruction):
             self._remove_instruction(row)
 
+        if isinstance(row, Slide):
+            self._remove_slide(row)
+
     def flush(self) -> None:
         return
 
@@ -260,6 +263,21 @@ class _MemoryCarouselSession:
             stored
             for stored in list(carousel.instructions)
             if stored.id != document.id
+        ]
+
+    def _remove_slide(self, slide: Slide) -> None:
+        """Drop a deleted slide from its carousel. The album image stays."""
+
+        carousel: Carousel | None = self._find_source(slide.carousel_id)
+
+        if carousel is None:
+
+            return
+
+        carousel.slides = [
+            stored
+            for stored in list(carousel.slides)
+            if stored.id != slide.id
         ]
 
     def _remove_research_link(self, link: CarouselResearchItem) -> None:
