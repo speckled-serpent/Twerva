@@ -45,11 +45,13 @@ from app.campaigns.slug import (
 from app.db import get_our_database_session
 from app.models import (
     Account,
+    AssembledCarousel,
     Campaign,
     CampaignAccount,
     CampaignCarousel,
     CampaignCarouselSlide,
     CampaignInterest,
+    CampaignPost,
     CampaignStatus,
     CampaignType,
     Carousel,
@@ -68,9 +70,6 @@ CAMPAIGN_TYPE_OTHER_NOT_IMPLEMENTED: str = (
 CAMPAIGN_NAME_REQUIRED_DETAIL: str = "Campaign name is required."
 CAMPAIGN_PLATFORMS_REQUIRED_DETAIL: str = "At least one platform is required."
 CAMPAIGN_ACCOUNTS_REQUIRED_DETAIL: str = "At least one account is required."
-CAMPAIGN_INTERESTS_REQUIRED_DETAIL: str = (
-    "At least one Spotmu interest is required."
-)
 DUPLICATE_ACCOUNT_PLATFORM_DETAIL: str = (
     "Account platform is not in the campaign platform list."
 )
@@ -122,7 +121,6 @@ def create_campaign(
         campaign_create_request.campaign_type,
         platform_values,
         unique_account_ids,
-        unique_interests,
     )
 
     selected_accounts: list[Account] = _load_accounts_or_raise(
@@ -385,6 +383,13 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
     carousel_responses: list[CampaignCarouselRead] = [
         _serialize_carousel(carousel) for carousel in list(campaign.carousels)
     ]
+    ordered_posts: list[CampaignPost] = sorted(
+        list(campaign.posts),
+        key=lambda post: (post.scheduled_for, str(post.id)),
+    )
+    post_responses: list[CampaignPostRead] = [
+        serialize_campaign_post(post) for post in ordered_posts
+    ]
     campaign_read_response: CampaignReadResponse = CampaignReadResponse(
         id=campaign.id,
         name=campaign.name,
@@ -403,6 +408,7 @@ def serialize_campaign(campaign: Campaign) -> CampaignReadResponse:
         accounts=account_responses,
         interests=interest_responses,
         carousels=carousel_responses,
+        posts=post_responses,
         created_at=campaign.created_at,
         updated_at=campaign.updated_at,
         created_by=campaign.created_by,
@@ -530,6 +536,14 @@ def _campaign_read_options() -> tuple[object, ...]:
         selectinload(Campaign.carousels)
         .selectinload(CampaignCarousel.slides)
         .selectinload(CampaignCarouselSlide.slide),
+        selectinload(Campaign.posts).selectinload(CampaignPost.account),
+        selectinload(Campaign.posts).selectinload(CampaignPost.metric_snapshots),
+        selectinload(Campaign.posts)
+        .selectinload(CampaignPost.assembled_carousel)
+        .selectinload(AssembledCarousel.frames),
+        selectinload(Campaign.posts)
+        .selectinload(CampaignPost.assembled_carousel)
+        .selectinload(AssembledCarousel.assembly),
     )
 
     return read_options
@@ -641,14 +655,13 @@ def _raise_if_spotmu_create_collections_empty(
     campaign_type: CampaignType,
     platform_values: list[str],
     unique_account_ids: list[uuid.UUID],
-    unique_interests: list[CampaignInterestWrite],
 ) -> None:
-    """Reject Spotmu-family create when required lists are empty after dedupe.
+    """Reject Spotmu-family create when a required list is empty after dedupe.
 
-    ``spotmu`` requires platforms, accounts, and interests. ``spotmu_test``
-    waives accounts so throwaway campaigns can be saved without a linked
-    social handle. Provided accounts are still loaded and platform-checked
-    by the caller.
+    ``spotmu`` requires platforms and accounts. A Spotmu interest is
+    optional. ``spotmu_test`` waives accounts so throwaway campaigns can
+    be saved without a linked social handle. Provided accounts are still
+    loaded and platform-checked by the caller.
     """
 
     if len(platform_values) == 0:
@@ -661,12 +674,6 @@ def _raise_if_spotmu_create_collections_empty(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=CAMPAIGN_ACCOUNTS_REQUIRED_DETAIL,
-        )
-
-    if len(unique_interests) == 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=CAMPAIGN_INTERESTS_REQUIRED_DETAIL,
         )
 
 
@@ -766,3 +773,13 @@ def _optional_stripped_text(raw_value: str | None) -> str | None:
         return None
 
     return stripped_value
+
+
+from app.api.v1.campaign_posts import (
+    register_campaign_post_routes,
+    serialize_campaign_post,
+)
+from app.api.v1.schemas import CampaignPostRead
+
+
+register_campaign_post_routes(campaigns_router)

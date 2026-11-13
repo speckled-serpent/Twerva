@@ -78,7 +78,7 @@ class ScheduleClusterMismatchError(ScheduleError):
 
 
 class CadenceCapExceededError(ScheduleError):
-    """Non-failed post_jobs on the UTC day already meet the account cap."""
+    """Non-failed post jobs and campaign posts already meet the account cap."""
 
     def __init__(
         self,
@@ -92,7 +92,7 @@ class CadenceCapExceededError(ScheduleError):
             (
                 f"Cadence cap exceeded for account {account_id} on UTC day "
                 f"{utc_day.isoformat()}: {existing_non_failed_count} existing "
-                f"non-failed post_jobs, cap {cadence_cap_per_day}."
+                f"non-failed post_jobs and campaign posts, cap {cadence_cap_per_day}."
             ),
         )
         self.account_id: uuid.UUID = account_id

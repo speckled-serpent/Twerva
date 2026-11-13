@@ -18,17 +18,22 @@ class StubMetricsNotAvailableError(MetricsError):
         self,
         post_job_id: uuid.UUID,
         platform_post_id: str | None,
-        current_status: PostJobStatus,
+        current_status: PostJobStatus | str,
     ) -> None:
 
+        status_label: str = (
+            current_status.value
+            if isinstance(current_status, PostJobStatus)
+            else current_status
+        )
         super().__init__(
             (
                 f"Stub metrics are only written for mock-published jobs "
                 f"(platform_post_id starting with 'mock-'). "
-                f"PostJob {post_job_id} status={current_status.value} "
+                f"PostJob {post_job_id} status={status_label} "
                 f"platform_post_id={platform_post_id!r}."
             ),
         )
         self.post_job_id: uuid.UUID = post_job_id
         self.platform_post_id: str | None = platform_post_id
-        self.current_status: PostJobStatus = current_status
+        self.current_status: PostJobStatus | str = current_status

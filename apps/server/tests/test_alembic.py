@@ -42,6 +42,8 @@ CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID: str = (
 SLIDE_DRAFT_BATCHES_REVISION_ID: str = "slide_draft_batches"
 CAROUSEL_FINAL_ASSEMBLY_REVISION_ID: str = "carousel_final_assembly"
 CAROUSEL_GENERATIONS_REVISION_ID: str = "carousel_generations"
+CAMPAIGN_POSTS_REVISION_ID: str = "campaign_posts"
+CAMPAIGN_POST_METRICS_REVISION_ID: str = "campaign_post_metrics"
 
 
 class AlembicInitializationTests(unittest.TestCase):
@@ -72,6 +74,8 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{DOMAIN_REVISION_ID}.py",
                 f"{ALBUMS_FROM_SLIDES_REVISION_ID}.py",
                 f"{ARTIFACT_TEMPLATE_ID_REVISION_ID}.py",
+                f"{CAMPAIGN_POST_METRICS_REVISION_ID}.py",
+                f"{CAMPAIGN_POSTS_REVISION_ID}.py",
                 f"{CAMPAIGN_STATUS_LIFECYCLE_REVISION_ID}.py",
                 f"{CAMPAIGN_THEME_SOURCE_REVISION_ID}.py",
                 f"{CAMPAIGN_TYPE_SPOTMU_TEST_REVISION_ID}.py",
@@ -1175,6 +1179,71 @@ class AlembicInitializationTests(unittest.TestCase):
         self.assertNotIn("UPDATE carousels", revision_source)
         self.assertNotIn("UPDATE slides", revision_source)
         self.assertNotIn("UPDATE artifacts", revision_source)
+
+    def test_campaign_posts_follow_generations(self) -> None:
+        """The timeline table follows the snapshot revision. The id fits the version column."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGN_POSTS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), CAMPAIGN_POSTS_REVISION_ID)
+        self.assertEqual(len(CAMPAIGN_POSTS_REVISION_ID), 14)
+        self.assertLessEqual(len(CAMPAIGN_POSTS_REVISION_ID), 64)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAROUSEL_GENERATIONS_REVISION_ID,
+        )
+        self.assertIn('op.create_table(\n        "campaign_posts"', revision_source)
+        self.assertIn("CAMPAIGN_POST_STATUS_CHECK_SQL", revision_source)
+        self.assertIn(
+            "uq_campaign_posts_assembled_carousel_id_account_id",
+            revision_source,
+        )
+        self.assertIn("ix_campaign_posts_campaign_id", revision_source)
+        self.assertIn("ix_campaign_posts_account_id_scheduled_for", revision_source)
+        self.assertIn('ondelete="CASCADE"', revision_source)
+        self.assertIn('ondelete="RESTRICT"', revision_source)
+        self.assertIn('op.drop_table("campaign_posts")', revision_source)
+        self.assertNotIn("INSERT INTO", revision_source)
+        self.assertNotIn("UPDATE artifacts", revision_source)
+        self.assertNotIn("UPDATE post_jobs", revision_source)
+        self.assertNotIn("UPDATE campaign_carousels", revision_source)
+        self.assertNotIn("ck_campaign_posts_ck_", revision_source)
+
+    def test_campaign_post_metrics_follow_campaign_posts(self) -> None:
+        """Result rows can point at a campaign post. The id fits the version column."""
+
+        revision_path: Path = (
+            SERVER_ROOT_DIRECTORY
+            / "alembic"
+            / "versions"
+            / f"{CAMPAIGN_POST_METRICS_REVISION_ID}.py"
+        )
+        assigned_values: dict[str, object] = _revision_module_constants(revision_path)
+        revision_source: str = revision_path.read_text(encoding="utf-8")
+
+        self.assertEqual(assigned_values.get("revision"), CAMPAIGN_POST_METRICS_REVISION_ID)
+        self.assertEqual(len(CAMPAIGN_POST_METRICS_REVISION_ID), 21)
+        self.assertLessEqual(len(CAMPAIGN_POST_METRICS_REVISION_ID), 64)
+        self.assertEqual(
+            assigned_values.get("down_revision"),
+            CAMPAIGN_POSTS_REVISION_ID,
+        )
+        self.assertIn('sa.Column("campaign_post_id"', revision_source)
+        self.assertIn("METRIC_SNAPSHOT_OWNER_CHECK_SQL", revision_source)
+        self.assertIn('ondelete="CASCADE"', revision_source)
+        self.assertIn(
+            "DELETE FROM metric_snapshots WHERE campaign_post_id IS NOT NULL",
+            revision_source,
+        )
+        self.assertNotIn("INSERT INTO", revision_source)
+        self.assertNotIn("UPDATE metric_snapshots", revision_source)
 
     def test_env_imports_models_package(self) -> None:
         """env.py must import app.models so target_metadata sees all tables."""

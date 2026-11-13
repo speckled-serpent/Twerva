@@ -598,6 +598,8 @@ These are the choices this sheet made so a task could name a file. The tasks abo
 
 **Open questions.** What does a campaign rule contain, where does it live, and how does it pick posts? Is approval its own status, or part of upcoming? The agreed labels are upcoming, posted, and failed. Who picks the clock time, the operator or a rule inside the account cap? Can a post still be edited after it has a time? Does create still require platforms and a Spotmu interest? If a cross-campaign view remains, is it one list or the old three pages?
 
+**Task sheet.** The checklist is `docs/planning/phase_9_campaign_timeline.md`.
+
 ## 10. Accounts and publishing
 
 **Goal.** Connect a real social account and post from the campaign timeline. The first test is Spotmu.

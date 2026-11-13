@@ -31,6 +31,7 @@ these rows.
 from __future__ import annotations
 
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Boolean,
@@ -56,6 +57,10 @@ from app.models.research_item import (
     RESEARCH_BODY_MAX_CHARACTERS,
     ResearchItem,
 )
+
+
+if TYPE_CHECKING:
+    from app.models.campaign import CampaignPost
 
 
 CAROUSEL_NAME_CHECK_SQL: str = (
@@ -744,6 +749,10 @@ class AssembledCarousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="assembled_carousel",
         cascade="all, delete-orphan",
         order_by="AssembledCarouselFrame.position",
+    )
+    campaign_posts: Mapped[list["CampaignPost"]] = relationship(
+        "CampaignPost",
+        back_populates="assembled_carousel",
     )
 
 

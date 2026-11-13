@@ -3,9 +3,9 @@
 Cadence day is the **UTC calendar day** of `scheduled_for` (not account-local).
 Naive datetimes are treated as UTC. `cadence_cap_per_day` null means no cap.
 
-Counted jobs: existing `post_jobs` for the account whose `scheduled_for`
-falls in that UTC day and whose status is **not** `failed`. Failed rows
-do not consume the cap so a retry can take the slot.
+Counted rows: existing `post_jobs` and `campaign_posts` for the account
+whose `scheduled_for` falls in that UTC day and whose status is not
+`failed`. Failed rows do not consume the cap so a retry can take the slot.
 """
 
 from __future__ import annotations
@@ -17,7 +17,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
-from app.models import Account, PostJob
+from app.models import Account, CampaignPost, PostJob
+from app.models.campaign import CAMPAIGN_POST_FAILED_STATUS
 from app.models.enums import PostJobStatus
 from app.schedule.errors import CadenceCapExceededError
 
@@ -105,10 +106,63 @@ def count_non_failed_post_jobs_for_account_on_utc_day(
     return existing_non_failed_count
 
 
+def count_non_failed_posts_for_account_on_utc_day(
+    account_id: uuid.UUID,
+    scheduled_for: datetime,
+    our_database_session: Session,
+    ignored_campaign_post_id: uuid.UUID | None = None,
+) -> int:
+    """Count non-failed post jobs and campaign posts on one UTC day.
+
+    Args:
+        account_id: Account whose rows are counted.
+        scheduled_for: Proposed time. The UTC calendar day comes from this.
+        our_database_session: Open SQLAlchemy session.
+        ignored_campaign_post_id: Campaign post left out of the count.
+            Rescheduling that post passes its own id.
+
+    Returns:
+        Combined count of non-failed rows.
+    """
+
+    day_start: datetime
+    day_end: datetime
+    day_start, day_end = utc_calendar_day_bounds(scheduled_for)
+    post_job_count: int = count_non_failed_post_jobs_for_account_on_utc_day(
+        account_id,
+        scheduled_for,
+        our_database_session,
+    )
+    campaign_post_count_selection: Select[tuple[int]] = (
+        select(func.count())
+        .select_from(CampaignPost)
+        .where(
+            CampaignPost.account_id == account_id,
+            CampaignPost.status != CAMPAIGN_POST_FAILED_STATUS,
+            CampaignPost.scheduled_for >= day_start,
+            CampaignPost.scheduled_for < day_end,
+        )
+    )
+
+    if ignored_campaign_post_id is not None:
+        campaign_post_count_selection = campaign_post_count_selection.where(
+            CampaignPost.id != ignored_campaign_post_id,
+        )
+
+    counted_posts: int | None = our_database_session.scalar(
+        campaign_post_count_selection,
+    )
+    campaign_post_count: int = 0 if counted_posts is None else counted_posts
+    existing_non_failed_count: int = post_job_count + campaign_post_count
+
+    return existing_non_failed_count
+
+
 def raise_if_cadence_cap_exceeded(
     account: Account,
     scheduled_for: datetime,
     our_database_session: Session,
+    ignored_campaign_post_id: uuid.UUID | None = None,
 ) -> None:
     """Raise CadenceCapExceededError when the UTC-day cap would be exceeded.
 
@@ -116,9 +170,11 @@ def raise_if_cadence_cap_exceeded(
         account: Account whose `cadence_cap_per_day` is consulted (null = no cap).
         scheduled_for: Proposed schedule time (UTC day derived from this).
         our_database_session: Open SQLAlchemy session.
+        ignored_campaign_post_id: Campaign post left out of the count.
 
     Raises:
-        CadenceCapExceededError: Existing non-failed jobs already meet/exceed cap.
+        CadenceCapExceededError: Existing non-failed post jobs and campaign
+            posts already meet or exceed the cap.
     """
 
     cadence_cap_per_day: int | None = account.cadence_cap_per_day
@@ -127,10 +183,11 @@ def raise_if_cadence_cap_exceeded(
 
         return
 
-    existing_non_failed_count: int = count_non_failed_post_jobs_for_account_on_utc_day(
+    existing_non_failed_count: int = count_non_failed_posts_for_account_on_utc_day(
         account.id,
         scheduled_for,
         our_database_session,
+        ignored_campaign_post_id,
     )
     cap_blocks_schedule: bool = cadence_cap_blocks_additional_schedule(
         existing_non_failed_count,

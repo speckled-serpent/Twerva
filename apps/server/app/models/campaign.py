@@ -7,9 +7,19 @@ carousels and does not generate text.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, Text, UniqueConstraint, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,9 +34,18 @@ from app.models.enums import (
 )
 
 
+CAMPAIGN_POST_UPCOMING_STATUS: str = "upcoming"
+CAMPAIGN_POST_POSTED_STATUS: str = "posted"
+CAMPAIGN_POST_FAILED_STATUS: str = "failed"
+CAMPAIGN_POST_STATUS_CHECK_SQL: str = (
+    "status IN ('upcoming', 'posted', 'failed')"
+)
+
+
 if TYPE_CHECKING:
     from app.models.account import Account
-    from app.models.carousel import Carousel, Slide
+    from app.models.carousel import AssembledCarousel, Carousel, Slide
+    from app.models.metric_snapshot import MetricSnapshot
     from app.models.ops_user import OpsUser
     from app.models.skeleton import Skeleton
 
@@ -101,6 +120,12 @@ class Campaign(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="campaign",
         cascade="all, delete-orphan",
         order_by="CampaignCarousel.position",
+    )
+    posts: Mapped[list["CampaignPost"]] = relationship(
+        "CampaignPost",
+        back_populates="campaign",
+        cascade="all, delete-orphan",
+        order_by="CampaignPost.scheduled_for",
     )
     account_links: Mapped[list["CampaignAccount"]] = relationship(
         "CampaignAccount",
@@ -244,3 +269,72 @@ class CampaignCarouselSlide(Base, UuidPrimaryKeyMixin):
         back_populates="slides",
     )
     slide: Mapped["Slide"] = relationship("Slide")
+
+
+class CampaignPost(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One assembled carousel on a campaign timeline.
+
+    ``status`` is ``upcoming``, ``posted``, or ``failed``. The
+    assembled carousel stays the content. Deleting the campaign
+    deletes this row. Deleting the assembled carousel is refused
+    while this row points at it.
+    """
+
+    __tablename__ = "campaign_posts"
+    __table_args__ = (
+        UniqueConstraint(
+            "assembled_carousel_id",
+            "account_id",
+            name="uq_campaign_posts_assembled_carousel_id_account_id",
+        ),
+        CheckConstraint(CAMPAIGN_POST_STATUS_CHECK_SQL, name="status"),
+        Index("ix_campaign_posts_campaign_id", "campaign_id"),
+        Index(
+            "ix_campaign_posts_account_id_scheduled_for",
+            "account_id",
+            "scheduled_for",
+        ),
+    )
+
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("campaigns.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    assembled_carousel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("assembled_carousels.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("accounts.id"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    platform_post_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    platform_post_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    campaign: Mapped[Campaign] = relationship(
+        "Campaign",
+        back_populates="posts",
+    )
+    assembled_carousel: Mapped["AssembledCarousel"] = relationship(
+        "AssembledCarousel",
+        back_populates="campaign_posts",
+    )
+    account: Mapped["Account"] = relationship("Account")
+    metric_snapshots: Mapped[list["MetricSnapshot"]] = relationship(
+        "MetricSnapshot",
+        back_populates="campaign_post",
+        order_by="MetricSnapshot.captured_at",
+    )

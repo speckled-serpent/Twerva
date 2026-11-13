@@ -44,6 +44,8 @@ A picture carousel with no album opens on Content after
 A campaign stores the skeleton
 and the carousel it runs. ``campaign_carousels`` is
 the latest assembly of live slides on that skeleton.
+``campaign_posts`` is one assembled carousel on that campaign's
+timeline. It is not ``campaign_carousels`` and it is not an artifact.
 
 Table class names follow the 1.2 task-sheet identifiers (``Brand``,
 ``SourceItem``, …) rather than the style-guide ``Our`` + plural form, so
@@ -65,6 +67,7 @@ from app.models.campaign import (
     CampaignCarousel,
     CampaignCarouselSlide,
     CampaignInterest,
+    CampaignPost,
 )
 from app.models.cluster import Cluster, cluster_source_items
 from app.models.carousel import (
@@ -170,6 +173,7 @@ __all__ = [
     "CampaignCarousel",
     "CampaignCarouselSlide",
     "CampaignInterest",
+    "CampaignPost",
     "CampaignStatus",
     "CampaignType",
     "Cluster",

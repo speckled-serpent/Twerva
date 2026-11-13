@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import (
@@ -31,6 +32,7 @@ from app.carousels.final_render import (
 from app.carousels.slide_exclusions import assert_slide_pick_allowed
 from app.carousels.slide_text_review import live_slides
 from app.global_settings import slide_count_or_global_default
+from app.models.campaign import CampaignPost
 from app.models.carousel import (
     AssembledCarousel,
     AssembledCarouselFrame,
@@ -47,6 +49,9 @@ from app.storage.artifacts import ensure_artifact_storage_directory
 
 
 TOO_FEW_LIVE_SLIDES_DETAIL: str = "Add at least two live slides before assembly."
+GENERATION_ON_TIMELINE_DETAIL: str = (
+    "This generation is on a campaign timeline. Duplicate it before assembling again."
+)
 ASSEMBLY_STORE_CONFLICT_DETAIL: str = "Assembly could not be stored."
 DRAFT_ASSEMBLY_STATUS: str = "draft"
 MINIMUM_LIVE_SLIDES: int = 2
@@ -129,9 +134,11 @@ def assemble_carousel_final(
     """Draw the live slides and store one assembly for this generation.
 
     Fewer than two live slides writes nothing. Draft slides are left
-    out. A later call for the same generation keeps the assembly row,
-    replaces its carousels and frames, and deletes the previous PNG
-    files only after the new rows commit. A failure rolls the rows
+    out. When a campaign post points at this assembly, the call raises
+    409 and leaves the rows and PNG files where they are. A later call
+    for the same generation, with no campaign post, keeps the assembly
+    row, replaces its carousels and frames, and deletes the previous
+    PNG files only after the new rows commit. A failure rolls the rows
     back and deletes PNGs written for the failed call.
 
     Args:
@@ -142,8 +149,8 @@ def assemble_carousel_final(
         The carousel, with the assembly attached.
 
     Raises:
-        HTTPException: The carousel is missing, or fewer than two
-            slides are live.
+        HTTPException: The carousel is missing, fewer than two slides
+            are live, or a campaign post points at this assembly.
     """
 
     carousel: Carousel = fetch_carousel_by_id_or_raise(carousel_id, our_database_session)
@@ -172,6 +179,13 @@ def assemble_carousel_final(
         Path(get_settings().artifact_storage_dir),
     )
     existing_assembly: CarouselAssembly | None = _existing_assembly(carousel)
+
+    if existing_assembly is not None:
+        _raise_if_generation_is_on_a_timeline(
+            existing_assembly,
+            our_database_session,
+        )
+
     assembly_id: uuid.UUID = new_row_id() if existing_assembly is None else existing_assembly.id
     previous_refs: list[str] = []
 
@@ -211,6 +225,44 @@ def assemble_carousel_final(
     our_database_session.refresh(carousel)
 
     return carousel
+
+
+def _raise_if_generation_is_on_a_timeline(
+    assembly: CarouselAssembly,
+    our_database_session: Session,
+) -> None:
+    """Refuse a new assemble when any campaign post uses this assembly.
+
+    The check runs before frames are drawn and before child rows are
+    replaced, so a refused call leaves the PNG files on disk.
+
+    Args:
+        assembly: The assembly for the carousel's current generation.
+        our_database_session: Open session. This function does not commit.
+
+    Raises:
+        HTTPException: A campaign post points at one assembled carousel.
+    """
+
+    posted_ids: list[uuid.UUID] = list(
+        our_database_session.scalars(
+            select(CampaignPost.id)
+            .join(
+                AssembledCarousel,
+                CampaignPost.assembled_carousel_id == AssembledCarousel.id,
+            )
+            .where(AssembledCarousel.assembly_id == assembly.id)
+            .limit(1),
+        ).all(),
+    )
+
+    if len(posted_ids) == 0:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=GENERATION_ON_TIMELINE_DETAIL,
+    )
 
 
 def _slide_order(slide: Slide) -> tuple[int, str]:
@@ -257,7 +309,8 @@ def _store_groups(
     """Replace the generation's children, creating the parent on the first call.
 
     The first call hangs the new row on the current generation's
-    snapshot header. A later call keeps that ``generation_id``.
+    snapshot header. A later call keeps that ``generation_id`` and
+    deletes the previous carousels before inserting the new ones.
     """
 
     assembly: CarouselAssembly
@@ -280,6 +333,8 @@ def _store_groups(
     else:
         assembly = existing_assembly
         assembly.slide_count = slide_count
+        assembly.assembled_carousels.clear()
+        our_database_session.flush()
 
     for assembled in assembled_carousels:
         our_database_session.add(assembled)
@@ -287,7 +342,6 @@ def _store_groups(
         for frame in assembled.frames:
             our_database_session.add(frame)
 
-    assembly.assembled_carousels.clear()
     assembly.assembled_carousels.extend(assembled_carousels)
 
     return assembly

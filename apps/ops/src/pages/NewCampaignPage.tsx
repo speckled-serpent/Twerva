@@ -25,6 +25,10 @@ import type {
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import {
+  listMissingCampaignCreateLabels,
+  readCampaignCreateRequirements,
+} from "./campaignCreate";
 import { campaignTypeRequiresLinkedAccount } from "./campaignDisplay";
 
 interface SelectedInterest {
@@ -256,7 +260,6 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
         selectedCarouselId,
         selectedPlatforms,
         selectedAccountIds,
-        selectedInterests,
         campaignTypeRequiresLinkedAccount(campaignType),
       ),
     );
@@ -311,7 +314,6 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
       selectedCarouselId,
       selectedPlatforms,
       selectedAccountIds,
-      selectedInterests,
       accountsAreRequired,
     ),
   );
@@ -527,7 +529,7 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
             <fieldset className="form-fieldset">
               <legend>Interest carousels</legend>
               <p className="field-hint">
-                Search live Spotmu interests and add at least one. This does not
+                Search live Spotmu interests. Adding one is optional. This does not
                 ingest or generate carousels.
               </p>
               <div className="inline-add-row">
@@ -635,66 +637,3 @@ export function NewCampaignPage({ onCreated, onCancel }: NewCampaignPageProps): 
   );
 }
 
-interface CampaignCreateRequirements {
-  hasName: boolean;
-  hasSkeleton: boolean;
-  hasCarousel: boolean;
-  hasPlatform: boolean;
-  hasAccount: boolean;
-  hasInterest: boolean;
-}
-
-function readCampaignCreateRequirements(
-  campaignName: string,
-  selectedSkeletonId: string,
-  selectedCarouselId: string,
-  selectedPlatforms: Platform[],
-  selectedAccountIds: string[],
-  selectedInterests: SelectedInterest[],
-  accountsAreRequired: boolean,
-): CampaignCreateRequirements {
-
-  const campaignCreateRequirements: CampaignCreateRequirements = {
-    hasName: campaignName.trim() !== "",
-    hasSkeleton: selectedSkeletonId !== "",
-    hasCarousel: selectedCarouselId !== "",
-    hasPlatform: selectedPlatforms.length > 0,
-    hasAccount: !accountsAreRequired || selectedAccountIds.length > 0,
-    hasInterest: selectedInterests.length > 0,
-  };
-
-  return campaignCreateRequirements;
-}
-
-function listMissingCampaignCreateLabels(
-  campaignCreateRequirements: CampaignCreateRequirements,
-): string[] {
-
-  const missingLabels: string[] = [];
-
-  if (!campaignCreateRequirements.hasSkeleton) {
-    missingLabels.push("a skeleton");
-  }
-
-  if (!campaignCreateRequirements.hasCarousel) {
-    missingLabels.push("a carousel");
-  }
-
-  if (!campaignCreateRequirements.hasName) {
-    missingLabels.push("a campaign name");
-  }
-
-  if (!campaignCreateRequirements.hasPlatform) {
-    missingLabels.push("at least one platform");
-  }
-
-  if (!campaignCreateRequirements.hasAccount) {
-    missingLabels.push("at least one account");
-  }
-
-  if (!campaignCreateRequirements.hasInterest) {
-    missingLabels.push("at least one Spotmu interest");
-  }
-
-  return missingLabels;
-}

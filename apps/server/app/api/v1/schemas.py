@@ -51,10 +51,11 @@ class CampaignCreateRequest(BaseModel):
     Slug and hashtag are generated from ``name``. Status is always
     ``ready``. ``other`` campaign types are rejected by the handler.
     Spotmu and Spotmu-test require a non-empty name plus at least one
-    platform and interest after the handler strips and dedupes. Spotmu
-    also requires at least one account; Spotmu-test may send an empty
-    ``account_ids`` list. Empty lists stay allowed on the model so
-    ``other`` still parses. ``skeleton_id`` and ``carousel_id`` are required.
+    platform after the handler strips and dedupes. A Spotmu interest is
+    optional. Spotmu also requires at least one account; Spotmu-test may
+    send an empty ``account_ids`` list. Empty lists stay allowed on the
+    model so ``other`` still parses. ``skeleton_id`` and ``carousel_id``
+    are required.
     The carousel has to be bound to that skeleton.
     """
 
@@ -102,6 +103,81 @@ class CampaignCarouselRead(BaseModel):
     slides: list[CampaignCarouselSlideRead] = Field(default_factory=list)
 
 
+class CampaignPostCreateRequest(BaseModel):
+    """Body for `POST /api/v1/campaigns/{campaign_id}/posts`."""
+
+    assembled_carousel_id: uuid.UUID
+    account_id: uuid.UUID
+    scheduled_for: datetime
+
+
+class CampaignPostRescheduleRequest(BaseModel):
+    """Body for `PATCH /api/v1/campaigns/{campaign_id}/posts/{post_id}`."""
+
+    scheduled_for: datetime
+
+
+class CampaignPostResultsRead(BaseModel):
+    """Latest recorded counts on one campaign post."""
+
+    captured_at: datetime
+    views: int | None
+    likes: int | None
+    comments: int | None
+    shares: int | None
+
+
+class CampaignPostFrameRead(BaseModel):
+    """One frozen frame on a campaign post."""
+
+    id: uuid.UUID
+    position: int
+    blocked: bool
+    block_reason: str | None
+    block_detail: str | None
+
+
+class CampaignPostRead(BaseModel):
+    """One assembled carousel placed on a campaign timeline."""
+
+    id: uuid.UUID
+    campaign_id: uuid.UUID
+    carousel_id: uuid.UUID
+    generation_number: int
+    assembled_carousel_id: uuid.UUID
+    account_id: uuid.UUID
+    platform: Platform
+    handle: str
+    status: str
+    scheduled_for: datetime
+    published_at: datetime | None
+    platform_post_id: str | None
+    platform_post_url: str | None
+    last_error: str | None
+    caption: str | None
+    cta_url: str | None
+    blocked: bool
+    frames: list[CampaignPostFrameRead]
+    results: CampaignPostResultsRead | None = None
+
+
+class TimelinePostRead(BaseModel):
+    """One row on the cross-campaign timeline."""
+
+    origin: Literal["campaign_post", "post_job"]
+    id: uuid.UUID
+    status: str
+    scheduled_for: datetime | None
+    published_at: datetime | None
+    campaign_id: uuid.UUID | None
+    campaign_name: str | None
+    account_id: uuid.UUID
+    platform: Platform
+    handle: str
+    caption: str | None
+    results: CampaignPostResultsRead | None
+
+
 class CampaignReadResponse(BaseModel):
     """Serialized Campaign plus join counts and snapshots."""
 
@@ -124,6 +200,7 @@ class CampaignReadResponse(BaseModel):
     accounts: list[CampaignAccountReadResponse] = Field(default_factory=list)
     interests: list[CampaignInterestReadResponse] = Field(default_factory=list)
     carousels: list[CampaignCarouselRead] = Field(default_factory=list)
+    posts: list[CampaignPostRead] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     created_by: uuid.UUID | None
@@ -812,7 +889,8 @@ class MetricSnapshotReadResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    post_job_id: uuid.UUID
+    post_job_id: uuid.UUID | None = None
+    campaign_post_id: uuid.UUID | None = None
     captured_at: datetime
     views: int | None
     likes: int | None
