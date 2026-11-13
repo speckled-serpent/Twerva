@@ -14,6 +14,8 @@ import {
   collectionGenerateStatusMessage,
   collectionReviewAfterAccept,
   collectionReviewState,
+  collectionSlideReviewAccessibleName,
+  slideUsesCollectionReview,
 } from "./src/pages/carouselCollection.ts";
 import type { InstructionDraft } from "./src/pages/carouselInstructions.ts";
 import { INSTRUCTION_SAMPLE_TEMPLATE } from "./src/pages/instructionTemplate.ts";
@@ -158,3 +160,15 @@ assert.equal(COLLECTION_ACCEPT_STATUS, "Accepted the set. These slides are live.
 assert.equal(COLLECTION_DISCARD_STATUS, "Discarded the set.");
 assert.equal(finalSectionNotice(), FINAL_CLOSED_DETAIL);
 assert.equal(finalSectionNotice(), "Final assembly is a later phase.");
+assert.equal(slideUsesCollectionReview("batch-1", "batch-1"), true);
+assert.equal(slideUsesCollectionReview(null, "batch-1"), false);
+assert.equal(slideUsesCollectionReview("batch-1", null), false);
+assert.equal(slideUsesCollectionReview("other-batch", "batch-1"), false);
+assert.equal(
+  collectionSlideReviewAccessibleName("Generate text"),
+  "Generate text. The set is accepted or discarded from the Slides section.",
+);
+assert.equal(
+  collectionSlideReviewAccessibleName("Accept text"),
+  "Accept text. The set is accepted or discarded from the Slides section.",
+);

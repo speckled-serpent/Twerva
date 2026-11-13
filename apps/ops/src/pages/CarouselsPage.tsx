@@ -38,6 +38,10 @@ import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import type { AlbumEditorActions } from "./AlbumImagesEditor";
 import { CarouselCollectionReview } from "./CarouselCollectionReview";
 import { CarouselGenerateControl } from "./CarouselGenerateControl";
+import {
+  collectionSlideReviewAccessibleName,
+  slideUsesCollectionReview,
+} from "./carouselCollection";
 import { type InstructionDraft } from "./carouselInstructions";
 import { CarouselGeneration, CarouselSectionNav } from "./CarouselSectionNav";
 import {
@@ -1350,6 +1354,10 @@ function SlideEditorView({
       ? NEW_PICTURE_SLIDE_AUTOSAVE_HINT
       : NEW_SLIDE_AUTOSAVE_HINT;
   const editorBusy: boolean = isGenerating || isAccepting || isChoosingImage;
+  const usesCollectionReview: boolean = slideUsesCollectionReview(
+    slide?.draft_batch_id ?? null,
+    carousel?.pending_slide_draft_batch?.id ?? null,
+  );
 
   const pageTitle: string = slide === null ? "New slide" : "Slide";
   const pageLede: string = (
@@ -1514,7 +1522,12 @@ function SlideEditorView({
                   <button
                     id="generate-slide-text"
                     type="button"
-                    disabled={!textGeneration.available || editorBusy}
+                    disabled={!textGeneration.available || editorBusy || usesCollectionReview}
+                    aria-label={
+                      usesCollectionReview
+                        ? collectionSlideReviewAccessibleName("Generate text")
+                        : undefined
+                    }
                     onClick={(): void => {
                       void handleGenerateText();
                     }}
@@ -1525,7 +1538,12 @@ function SlideEditorView({
                     <button
                       id="accept-slide-text"
                       type="button"
-                      disabled={editorBusy}
+                      disabled={editorBusy || usesCollectionReview}
+                      aria-label={
+                        usesCollectionReview
+                          ? collectionSlideReviewAccessibleName("Accept text")
+                          : undefined
+                      }
                       onClick={(): void => {
                         void handleAcceptText();
                       }}

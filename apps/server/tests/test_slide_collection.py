@@ -15,8 +15,11 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.carousel_text import (
     accept_slide_draft_batch,
+    accept_slide_text,
     discard_slide_draft_batch,
     generate_slide_collection,
+    generate_slide_text,
+    generate_source_slide,
 )
 from app.api.v1.carousel_writes import create_carousel, create_slide
 from app.api.v1.carousels import get_carousel
@@ -24,6 +27,7 @@ from app.api.v1.router import api_v1_router
 from app.api.v1.schemas import (
     CarouselCreateRequest,
     CarouselReadResponse,
+    SlideAcceptTextRequest,
     SlideElementTextWrite,
     SlideReadResponse,
     SlideWriteRequest,
@@ -682,6 +686,115 @@ class SlideCollectionRouteTests(unittest.TestCase):
         self.assertEqual(
             [slide.name for slide in get_carousel(created.id, session).slides],  # type: ignore[arg-type]
             ["Hand", "Earlier", "Drafted slide 1", "Drafted slide 2"],
+        )
+
+    def test_generate_slide_stays_outside_the_pending_set(self) -> None:
+        """Generate slide and Accept text do not accept or join the pending set."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        text_element = _title_element(session.skeleton.id)
+        session.skeleton.elements = [text_element]
+        created: CarouselReadResponse = create_carousel(
+            CarouselCreateRequest(name="Beside the set", skeleton_id=session.skeleton.id),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        carousel: Carousel | None = session.get(Carousel, created.id)  # type: ignore[assignment]
+        assert carousel is not None
+        _attach_instructions(carousel, ["Harbor fog"])
+        hand: SlideReadResponse = create_slide(
+            created.id,
+            SlideWriteRequest(
+                name="Hand",
+                texts=[
+                    SlideElementTextWrite(
+                        skeleton_element_id=text_element.id,
+                        value="Kept live",
+                    ),
+                ],
+            ),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+
+        with patch(
+            "app.carousels.slide_collection.slide_count_or_global_default",
+            return_value=2,
+        ):
+            drafted: CarouselReadResponse = generate_slide_collection(
+                created.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        assert drafted.pending_slide_draft_batch is not None
+        batch_id: uuid.UUID = drafted.pending_slide_draft_batch.id
+        added: SlideReadResponse = generate_source_slide(
+            created.id,
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        after_one: CarouselReadResponse = get_carousel(
+            created.id,
+            session,  # type: ignore[arg-type]
+        )
+        batch_slides: list[SlideReadResponse] = [
+            slide for slide in after_one.slides if slide.draft_batch_id == batch_id
+        ]
+
+        self.assertEqual(after_one.pending_slide_draft_batch is not None, True)
+        assert after_one.pending_slide_draft_batch is not None
+        self.assertEqual(after_one.pending_slide_draft_batch.id, batch_id)
+        self.assertEqual(len(batch_slides), 2)
+        self.assertIsNone(added.draft_batch_id)
+        self.assertEqual(added.text_status, SlideTextStatus.DRAFT)
+        self.assertEqual(added.images, [])
+        self.assertEqual(added.excluded_slide_ids, [])
+        self.assertEqual(added.texts[0].value, "")
+
+        drafted_hand: SlideReadResponse = generate_slide_text(
+            created.id,
+            hand.id,
+            session,  # type: ignore[arg-type]
+            None,
+        )
+
+        self.assertEqual(drafted_hand.text_status, SlideTextStatus.DRAFT)
+        self.assertIsNone(drafted_hand.draft_batch_id)
+        self.assertEqual(drafted_hand.texts[0].value, "Kept live")
+        self.assertIn("Harbor fog", drafted_hand.draft_texts[0].value)
+
+        accepted_hand: SlideReadResponse = accept_slide_text(
+            created.id,
+            hand.id,
+            SlideAcceptTextRequest(
+                texts=[
+                    SlideElementTextWrite(
+                        skeleton_element_id=text_element.id,
+                        value=drafted_hand.draft_texts[0].value,
+                    ),
+                ],
+            ),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        after_accept: CarouselReadResponse = get_carousel(
+            created.id,
+            session,  # type: ignore[arg-type]
+        )
+        still_batched: list[SlideReadResponse] = [
+            slide for slide in after_accept.slides if slide.draft_batch_id == batch_id
+        ]
+
+        self.assertEqual(accepted_hand.text_status, SlideTextStatus.LIVE)
+        self.assertEqual(accepted_hand.texts[0].value, drafted_hand.draft_texts[0].value)
+        self.assertIsNone(accepted_hand.draft_batch_id)
+        self.assertEqual(after_accept.pending_slide_draft_batch is not None, True)
+        assert after_accept.pending_slide_draft_batch is not None
+        self.assertEqual(after_accept.pending_slide_draft_batch.id, batch_id)
+        self.assertEqual(len(still_batched), 2)
+        self.assertTrue(
+            all(slide.text_status == SlideTextStatus.DRAFT for slide in still_batched),
         )
 
     def test_a_reader_cannot_discard_a_set(self) -> None:

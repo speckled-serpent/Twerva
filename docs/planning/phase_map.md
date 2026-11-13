@@ -534,7 +534,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `carouselCollection.test.ts`: the review block is present only with a pending batch, and a reader cannot accept or discard. After a successful accept the helper's next state has a null pending batch. The Final notice is unchanged.
 
-- [ ] **6.10 Keep per-slide Generate next to the set**
+- [x] **6.10 Keep per-slide Generate next to the set**
 
   `#generate-slide` and `#generate-slide-text` still call `draft_slide_text` through `_draft_or_http`. They do not set `draft_batch_id`. `generate_source_slide` still appends one draft slide with no image and an empty exclusion list. `generate_slide_text` still leaves the live `value` in place until `#accept-slide-text`.
 

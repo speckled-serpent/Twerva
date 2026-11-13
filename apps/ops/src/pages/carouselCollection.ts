@@ -116,6 +116,10 @@ export const COLLECTION_ACCEPT_STATUS: string =
 /** Status line after Discard set. */
 export const COLLECTION_DISCARD_STATUS: string = "Discarded the set.";
 
+/** Why Generate text and Accept text are disabled on a slide in the pending set. */
+export const COLLECTION_SLIDE_REVIEW_DETAIL: string =
+  "The set is accepted or discarded from the Slides section.";
+
 export interface CollectionReviewState {
   pendingBatch: PendingSlideDraftBatchResponse | null;
   reviewVisible: boolean;
@@ -170,6 +174,39 @@ export function collectionReviewState(
  * @param savedCarouselPendingBatch - The pending field on the accepted detail
  * @returns The next review state
  */
+/**
+ * Whether this slide is reviewed with the pending set.
+ *
+ * True only when its `draft_batch_id` is the pending batch. A slide from
+ * Generate slide has a null batch id and stays on Accept text.
+ *
+ * @param draftBatchId - The slide's batch id, or null
+ * @param pendingBatchId - The carousel's pending batch id, or null
+ * @returns True when Generate text and Accept text stay disabled
+ */
+export function slideUsesCollectionReview(
+  draftBatchId: string | null,
+  pendingBatchId: string | null,
+): boolean {
+
+  if (draftBatchId === null || pendingBatchId === null) {
+    return false;
+  }
+
+  return draftBatchId === pendingBatchId;
+}
+
+/**
+ * Accessible name for Generate text or Accept text on a set slide.
+ *
+ * @param actionLabel - The button label, without the reason
+ * @returns The accessible name
+ */
+export function collectionSlideReviewAccessibleName(actionLabel: string): string {
+
+  return `${actionLabel}. ${COLLECTION_SLIDE_REVIEW_DETAIL}`;
+}
+
 export function collectionReviewAfterAccept(
   savedCarouselPendingBatch: PendingSlideDraftBatchResponse | null,
 ): CollectionReviewState {
