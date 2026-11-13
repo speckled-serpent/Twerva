@@ -476,7 +476,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `apps/server/tests/test_slide_collection_text.py`: a valid object with two slides round-trips. A short list, a blank name, an unknown element id, an unknown image id, an image when none is required, and a missing image when one is required each raise `TextGenerationError`. An empty text value is kept. The request body uses `json_object` and contains the instruction text.
 
-- [ ] **6.4 Draft a collection from the fake provider and from OpenAI**
+- [x] **6.4 Draft a collection from the fake provider and from OpenAI**
 
   Add `draft_slide_collection` on `TextGenerationProvider`, `FakeTextGenerationProvider`, and `OpenAITextGenerationProvider`. The argument is the same pieces `collection_prompt_text` takes, plus the model call's settings on the OpenAI class. Both methods return `DraftedSlideCollection`. Neither writes rows.
 
