@@ -133,7 +133,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Tests
 
-- [ ] **9.10 Run the full server suite, the full ops suite, and the ops build**
+- [x] **9.10 Run the full server suite, the full ops suite, and the ops build**
 
   From `apps/server`, `python -m unittest discover -s tests`. From `apps/ops`, `node --test *.test.ts`, then `npm run build`. This commit adds no product behavior. It fixes failures that this phase's tasks left, and it does not start a new feature. Migration tests that skip because Postgres is down stay skipped, the same way `test_carousel_steps_migration.py` skips. A skip is not a failure. The phase is done when both suites pass aside from those skips, and `npm run build` succeeds.
 
