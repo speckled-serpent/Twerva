@@ -353,9 +353,10 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
     def _assert_generate_still_reads_the_columns(self) -> None:
         """Generate drafts from the copied document. The columns still read back.
 
-        The current slide model selects ``draft_batch_id``, so the
-        provider call runs after ``slide_draft_batches``. The column
-        check stays at this revision, before that upgrade.
+        The current slide model selects ``draft_batch_id``, and
+        Generate refreshes the generation snapshot, so the provider
+        call runs at head. The column check stays at this revision,
+        before that upgrade.
         """
 
         guidance_before_generate: CarouselSnapshot = self._carousel_rows()[BOTH_SLUG]
@@ -363,7 +364,7 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
 
         self.assertEqual(guidance_before_generate[0], BOTH_INSPIRATION)
         self.assertEqual(guidance_before_generate[1], BOTH_RULES)
-        self._upgrade(SLIDE_DRAFT_BATCHES_REVISION)
+        self._upgrade("head")
 
         previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
         os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
@@ -420,11 +421,12 @@ class CarouselInstructionsMigrationTests(unittest.TestCase):
     def _assert_generate_drafts_from_the_copied_document(self) -> None:
         """Generate text after the drop still drafts from the copied body.
 
-        The current slide model selects ``draft_batch_id``, so this
-        continues to ``slide_draft_batches`` before the provider call.
+        The current slide model selects ``draft_batch_id``, and
+        Generate refreshes the generation snapshot, so this continues
+        to head before the provider call.
         """
 
-        self._upgrade(SLIDE_DRAFT_BATCHES_REVISION)
+        self._upgrade("head")
         previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
         os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
         clear_settings_cache()

@@ -79,6 +79,7 @@ class AlembicInitializationTests(unittest.TestCase):
                 f"{CAROUSEL_EDITOR_STEP_CONTENT_REVISION_ID}.py",
                 f"{CAROUSEL_EDITOR_STEP_INSTRUCTIONS_REVISION_ID}.py",
                 f"{CAROUSEL_FINAL_ASSEMBLY_REVISION_ID}.py",
+                f"{CAROUSEL_GENERATIONS_REVISION_ID}.py",
                 f"{CAROUSEL_INSTRUCTIONS_REVISION_ID}.py",
                 f"{CAROUSEL_INSTRUCTIONS_DROP_GUIDANCE_REVISION_ID}.py",
                 f"{CAROUSEL_STEPS_REVISION_ID}.py",

@@ -686,6 +686,7 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
         """The detail summarizes generation 1. A reader can read that snapshot."""
 
         previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
         previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
         os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
         os.environ["SESSION_COOKIE_SECURE"] = "false"
@@ -811,7 +812,10 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
             else:
                 os.environ["SESSION_SECRET"] = previous_secret
 
-            os.environ.pop("SESSION_COOKIE_SECURE", None)
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
 
             if previous_storage is None:
                 os.environ.pop("ARTIFACT_STORAGE_DIR", None)

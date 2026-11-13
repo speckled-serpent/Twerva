@@ -182,6 +182,9 @@ class _MemoryCarouselSession:
     def scalars(self, statement: object) -> _ScalarResult:
         sql: str = str(statement)
 
+        if "carousels.id" in sql and "carousel_research_items" in sql:
+            return _ScalarResult(self._carousel_ids_for_research(statement))
+
         if "carousel_research_items" in sql:
             return _ScalarResult(self._research_links_for_statement(statement))
 
@@ -243,6 +246,18 @@ class _MemoryCarouselSession:
                 return research_item
 
         return None
+
+    def _carousel_ids_for_research(self, statement: object) -> list[uuid.UUID]:
+        """Return carousel ids for a research-link query."""
+
+        carousel_ids: list[uuid.UUID] = []
+
+        for link in self._research_links_for_statement(statement):
+
+            if link.carousel_id not in carousel_ids:
+                carousel_ids.append(link.carousel_id)
+
+        return carousel_ids
 
     def _research_links_for_statement(self, statement: object) -> list[CarouselResearchItem]:
         links: list[CarouselResearchItem] = []
