@@ -626,6 +626,33 @@ export interface PendingSlideDraftBatchResponse {
   slide_count: number;
 }
 
+export interface AssembledFrameReadResponse {
+  id: string;
+  position: number;
+  slide_id: string | null;
+  album_image_id: string | null;
+  blocked: boolean;
+  block_reason: string | null;
+  block_detail: string | null;
+}
+
+export interface AssembledCarouselReadResponse {
+  id: string;
+  position: number;
+  status: string;
+  caption: string | null;
+  cta_url: string | null;
+  blocked: boolean;
+  frames: AssembledFrameReadResponse[];
+}
+
+export interface CarouselAssemblyReadResponse {
+  id: string;
+  generation_number: number;
+  slide_count: number;
+  carousels: AssembledCarouselReadResponse[];
+}
+
 export interface CarouselReadResponse {
   id: string;
   skeleton_id: string;
@@ -642,6 +669,7 @@ export interface CarouselReadResponse {
   steps: CarouselStepsResponse;
   slides: SlideReadResponse[];
   pending_slide_draft_batch: PendingSlideDraftBatchResponse | null;
+  assembly: CarouselAssemblyReadResponse | null;
 }
 
 export interface AlbumImageReadResponse {

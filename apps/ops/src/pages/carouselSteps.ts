@@ -82,16 +82,6 @@ export const SLIDES_ALBUM_REQUIRED_DETAIL: string =
   "Attach an album on Content first.";
 
 /**
- * Why Final has no assembly controls.
- *
- * Phase 7 assembles the slides. This page keeps the heading and this
- * sentence. It does not call the template generate route and it does
- * not write campaign-run rows. Final is not stored.
- */
-export const FINAL_CLOSED_DETAIL: string =
-  "Final assembly is a later phase.";
-
-/**
  * Derived state for one section.
  *
  * @param steps - The five states from the carousel detail

@@ -98,7 +98,7 @@ Publish reads artifact files, not carousel slides. `publish_post_job` resolves `
 
 ### Page
 
-- [ ] **7.7 Show the assembly on Final**
+- [x] **7.7 Show the assembly on Final**
 
   Replace the later-phase sentence in the Final section. `CarouselFinalSection` renders under `#carousel-final`. Empty copy, when `assembly` is null: `No assembly yet. Assemble draws the live slides with this skeleton.` The button is `#assemble-final`, label `Assemble`. It calls `assembleCarousel` in `apps/ops/src/api/client.ts`, `POST /api/v1/carousels/{carouselId}/assemble`, returning the carousel detail. Success replaces the open carousel. The status line is `Assembled {n} carousels.` A 400 shows the API detail in `ErrorBanner`. While the request runs, the label is `Assembling…` and the button is disabled.
 
