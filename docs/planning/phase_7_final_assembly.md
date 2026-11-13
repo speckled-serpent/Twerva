@@ -64,7 +64,7 @@ Publish reads artifact files, not carousel slides. `publish_post_job` resolves `
 
 ### API
 
-- [ ] **7.4 Assemble the live slides and store the rows**
+- [x] **7.4 Assemble the live slides and store the rows**
 
   `POST /api/v1/carousels/{carousel_id}/assemble`, empty body, admin only, same as `generate_source_slide`. Register it from `register_carousel_assembly_routes` in `app/api/v1/carousel_assembly.py`, called next to `register_source_preview_routes` in `app/api/v1/carousels.py`. The response is `serialize_carousel`. The write helper is `assemble_carousel_final` in `app/carousels/final_assembly.py`.
 
