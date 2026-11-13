@@ -11,17 +11,42 @@ os.environ.setdefault("TWERVA_ENV", "test")
 
 from alembic import command
 from alembic.config import Config
+from fastapi import HTTPException
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.api.v1.carousel_writes import (
+    create_carousel,
+    delete_carousel_album,
+    delete_carousel_instruction,
+    delete_carousel_research,
+    patch_carousel_instruction,
+    post_carousel_album,
+    post_carousel_instruction,
+    post_carousel_research,
+    put_carousel_album,
+    put_carousel_instructions,
+    put_carousel_research,
+)
+from app.api.v1.schemas import (
+    CarouselAlbumAttachRequest,
+    CarouselAlbumCreateRequest,
+    CarouselCreateRequest,
+    CarouselInstructionCreateRequest,
+    CarouselInstructionOrderRequest,
+    CarouselInstructionPatchRequest,
+    CarouselResearchAttachRequest,
+    CarouselResearchOrderRequest,
+)
 from app.carousels.editing import new_row_id
 from app.carousels.generations import replace_current_generation_snapshot
 from app.models.album import Album, AlbumImage
 from app.models.artifact import Artifact
 from app.models.campaign import CampaignCarousel
 from app.models.carousel import (
+    INSTRUCTION_BODY_MAX_CHARACTERS,
     Carousel,
     CarouselGeneration,
     CarouselGenerationInstruction,
@@ -187,6 +212,192 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
             self._assert_older_generation(session, older_id)
             self._assert_full_snapshot(session, carousel_id)
             self.assertEqual(self._foreign_counts(session), before_counts)
+
+    def test_carousel_writes_refresh_generation_one_only(self) -> None:
+        """Create, instructions, research, and the album update generation 1."""
+
+        with Session(self.database_engine) as session:
+            element: SkeletonElement = self._text_element(session)
+            before_counts: tuple[int, int, int] = self._foreign_counts(session)
+            created: CarouselReadResponse = create_carousel(
+                CarouselCreateRequest(name="Harbor", skeleton_id=element.skeleton_id),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            other: CarouselReadResponse = create_carousel(
+                CarouselCreateRequest(name="Other", skeleton_id=element.skeleton_id),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            carousel: Carousel | None = session.get(Carousel, created.id)
+            assert carousel is not None
+            older: CarouselGeneration = self._older_generation(session, carousel)
+            session.commit()
+            self._assert_empty_snapshot(session, created.id)
+            self._assert_empty_snapshot(session, other.id)
+            saved: CarouselReadResponse = post_carousel_instruction(
+                created.id,
+                CarouselInstructionCreateRequest(body=KEPT_BODY),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            patched: CarouselReadResponse = patch_carousel_instruction(
+                created.id,
+                saved.instructions[0].id,
+                CarouselInstructionPatchRequest(body="Keep the tide."),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            put_carousel_instructions(
+                created.id,
+                CarouselInstructionOrderRequest(instruction_ids=[patched.instructions[0].id]),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+            with self.assertRaises(HTTPException) as too_long:
+                patch_carousel_instruction(
+                    created.id,
+                    patched.instructions[0].id,
+                    CarouselInstructionPatchRequest(
+                        body="x" * (INSTRUCTION_BODY_MAX_CHARACTERS + 1),
+                    ),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+
+            research: ResearchItem = ResearchItem(
+                id=new_row_id(),
+                title=FIRST_RESEARCH_TITLE,
+                slug=f"tides-{uuid.uuid4().hex[:8]}",
+                body=FIRST_RESEARCH_BODY,
+            )
+            session.add(research)
+            session.commit()
+            post_carousel_research(
+                created.id,
+                CarouselResearchAttachRequest(research_item_id=research.id),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            put_carousel_research(
+                created.id,
+                CarouselResearchOrderRequest(research_item_ids=[research.id]),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            album: Album = Album(
+                id=new_row_id(),
+                name="Harbor photos",
+                slug=f"harbor-photos-{uuid.uuid4().hex[:8]}",
+            )
+            album.images = [
+                _album_image(album.id, 0, f"albums/write-{uuid.uuid4().hex[:8]}.png"),
+                _album_image(album.id, 1, f"albums/write-{uuid.uuid4().hex[:8]}.png"),
+            ]
+            session.add(album)
+            session.commit()
+            put_carousel_album(
+                created.id,
+                CarouselAlbumAttachRequest(album_id=album.id),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            post_carousel_album(
+                other.id,
+                CarouselAlbumCreateRequest(name="Side album"),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            self.assertEqual(too_long.exception.status_code, 400)
+            self._assert_write_snapshot(session, created.id, album.id)
+            self._assert_older_generation(session, older.id)
+            self.assertEqual(self._instruction_bodies_for(session, other.id), [])
+            self.assertEqual(self._research_titles_for(session, other.id), [])
+            delete_carousel_album(
+                created.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            cleared: CarouselGeneration = self._current_generation_for(session, created.id)
+
+            self.assertIsNone(cleared.album_id)
+            self.assertEqual(list(cleared.images), [])
+            self.assertEqual(self._instruction_bodies_for(session, created.id), ["Keep the tide."])
+            delete_carousel_instruction(
+                created.id,
+                patched.instructions[0].id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+            delete_carousel_research(
+                created.id,
+                research.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+            self.assertEqual(self._instruction_bodies_for(session, created.id), [])
+            self.assertEqual(self._research_titles_for(session, created.id), [])
+            self.assertEqual(self._generation_number(session, created.id), 1)
+            self._assert_older_generation(session, older.id)
+            self.assertEqual(self._foreign_counts(session), before_counts)
+
+    def _assert_write_snapshot(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        album_id: uuid.UUID,
+    ) -> None:
+        """Generation 1 has the saved instruction, research, and album images."""
+
+        generation: CarouselGeneration = self._current_generation_for(session, carousel_id)
+        image_ids: list[uuid.UUID | None] = [
+            image.album_image_id
+            for image in sorted(list(generation.images), key=_position)
+        ]
+
+        self.assertEqual(generation.generation_number, 1)
+        self.assertEqual(generation.album_id, album_id)
+        self.assertEqual(self._instruction_bodies_for(session, carousel_id), ["Keep the tide."])
+        self.assertEqual(self._research_titles_for(session, carousel_id), [FIRST_RESEARCH_TITLE])
+        self.assertEqual(len(image_ids), 2)
+        self.assertEqual(image_ids[0], generation.images[0].album_image_id)
+
+    def _current_generation_for(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+    ) -> CarouselGeneration:
+        """Return the snapshot for the carousel's current number."""
+
+        carousel: Carousel | None = session.get(Carousel, carousel_id)
+        assert carousel is not None
+        generation: CarouselGeneration = self._current_generation(session, carousel)
+
+        return generation
+
+    def _instruction_bodies_for(self, session: Session, carousel_id: uuid.UUID) -> list[str]:
+        """Return copied instruction bodies for the current generation."""
+
+        generation: CarouselGeneration = self._current_generation_for(session, carousel_id)
+        bodies: list[str] = [
+            instruction.body
+            for instruction in sorted(list(generation.instructions), key=_position)
+        ]
+
+        return bodies
+
+    def _research_titles_for(self, session: Session, carousel_id: uuid.UUID) -> list[str]:
+        """Return copied research titles for the current generation."""
+
+        generation: CarouselGeneration = self._current_generation_for(session, carousel_id)
+        titles: list[str] = [
+            research.title
+            for research in sorted(list(generation.research_items), key=_position)
+        ]
+
+        return titles
 
     def _assert_full_snapshot(self, session: Session, carousel_id: uuid.UUID) -> None:
         """The current snapshot matches the two documents, images, and slides."""

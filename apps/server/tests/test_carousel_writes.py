@@ -125,6 +125,12 @@ class _MemoryCarouselSession:
     def rollback(self) -> None:
         return
 
+    def expire(self, row: object, attribute_names: list[str] | None = None) -> None:
+        """Leave in-memory collections loaded. There is no database to refresh."""
+
+        _ = row
+        _ = attribute_names
+
     def refresh(self, row: object) -> None:
         persisted_at: datetime = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)
 

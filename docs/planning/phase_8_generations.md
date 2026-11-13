@@ -61,7 +61,7 @@ Final already keys `carousel_assemblies` by `(carousel_id, generation_number)`. 
 
   Acceptance, in `apps/server/tests/test_carousel_generations.py`: a carousel with two instructions, two research items, two album images, and two slides (one `live`, one `draft` with a `draft_value`, and an exclusion pair) replaces generation 1 with that same content, and a second call with no edits leaves the copied text in place. A blank instruction body is kept. A carousel with no album and no research replaces to empty child lists. A generation 2 row, inserted for the test with a different body, is still that body after the current generation is generation 1 and the helper runs.
 
-- [ ] **8.3 Refresh the snapshot from carousel writes**
+- [x] **8.3 Refresh the snapshot from carousel writes**
 
   Call `replace_current_generation_snapshot` in the same transaction as the write, before commit, from `create_carousel`, `put_carousel_album`, `post_carousel_album`, `delete_carousel_album`, `post_carousel_research`, `put_carousel_research`, `delete_carousel_research`, `post_carousel_instruction`, `patch_carousel_instruction`, `put_carousel_instructions`, and `delete_carousel_instruction` in `app/api/v1/carousel_writes.py`. Create writes generation 1 with empty children. `patch_carousel` and `patch_carousel_step` do not call it. A failed write rolls the snapshot back with the working rows.
 
