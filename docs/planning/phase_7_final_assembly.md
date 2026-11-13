@@ -54,7 +54,7 @@ Publish reads artifact files, not carousel slides. `publish_post_job` resolves `
 
 ### Render
 
-- [ ] **7.3 Draw one live slide with the skeleton**
+- [x] **7.3 Draw one live slide with the skeleton**
 
   Add `slide_fill_from_live_slide` and `render_assembled_frame` in `app/carousels/final_render.py`. The fill uses each `slide_element_texts.value` keyed by `skeleton_element_id`. It does not read `draft_value`. The image path is `slide.album_image.relative_path` when the album image is set, and null when it is not. `render_assembled_frame` calls `render_skeleton_sample` with that fill and `source_item` None, so a Spotmu interest is not drawn. The canvas stays 1080×1920 from the skeleton drawer.
 
