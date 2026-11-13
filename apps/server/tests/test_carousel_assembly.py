@@ -17,17 +17,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.carousel_assembly import assemble_carousel
-from app.api.v1.carousel_writes import create_carousel, create_slide
+from app.api.v1.carousel_writes import create_carousel, create_slide, patch_carousel_step
+from app.api.v1.carousels import get_carousel
 from app.api.v1.router import api_v1_router
+from app.api.v1.schemas import (
+    CarouselCreateRequest,
+    CarouselReadResponse,
+    CarouselStepPatchRequest,
+    SlideWriteRequest,
+)
+from app.carousels.slide_skeleton import (
+    FINAL_LOCKED_DETAIL,
+    SLIDES_LOCKED_DETAIL,
+    CarouselStepState,
+)
 from app.models.album import AlbumImage
-from app.api.v1.schemas import CarouselCreateRequest, CarouselReadResponse, SlideWriteRequest
 from app.auth.passwords import hash_plain_password
 from app.carousels.final_assembly import TOO_FEW_LIVE_SLIDES_DETAIL
 from app.db import get_our_database_session
 from app.models.artifact import Artifact
 from app.models.campaign import CampaignCarousel
 from app.models.carousel import Carousel, Slide, SlideDraftBatch
-from app.models.enums import OpsUserRole, SlideTextStatus
+from app.models.enums import BackgroundKind, OpsUserRole, SlideTextStatus
 from app.models.ops_user import OpsUser
 from app.models.post_job import PostJob
 from app.settings import clear_settings_cache
@@ -363,6 +374,107 @@ class CarouselAssemblyRouteTests(unittest.TestCase):
         self.assertEqual(escaped_response.status_code, 404)
         self.assertNotIn(b"NOT-A-PNG-SECRET", escaped_response.content)
         self.assertIn("post", methods_by_path["/api/v1/generate/carousel"])
+
+    def test_final_step_follows_live_slides_and_the_assembly(self) -> None:
+        """Two live slides make Final available. Assemble marks it done.
+
+        One live slide stays locked, including after the 400. Step 4 is
+        refused. A picture carousel with no album still refuses step 3.
+        """
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        created: CarouselReadResponse = create_carousel(
+            CarouselCreateRequest(name="Step", skeleton_id=session.skeleton.id),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        _add_live_slides(session, created.id, 1)
+        one_slide: CarouselReadResponse = get_carousel(
+            created.id,
+            session,  # type: ignore[arg-type]
+        )
+
+        with self.assertRaises(HTTPException) as refused:
+            assemble_carousel(
+                created.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        still_one: CarouselReadResponse = get_carousel(
+            created.id,
+            session,  # type: ignore[arg-type]
+        )
+
+        self.assertEqual(one_slide.steps.final, CarouselStepState.LOCKED)
+        self.assertEqual(refused.exception.status_code, 400)
+        self.assertEqual(refused.exception.detail, TOO_FEW_LIVE_SLIDES_DETAIL)
+        self.assertEqual(still_one.steps.final, CarouselStepState.LOCKED)
+        self.assertIsNone(still_one.assembly)
+
+        _add_live_slides(session, created.id, 1)
+        two_slides: CarouselReadResponse = get_carousel(
+            created.id,
+            session,  # type: ignore[arg-type]
+        )
+
+        with patch(
+            "app.carousels.final_assembly.slide_count_or_global_default",
+            return_value=PATCHED_CAP,
+        ):
+            assembled: CarouselReadResponse = assemble_carousel(
+                created.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        with self.assertRaises(HTTPException) as final_step:
+            patch_carousel_step(
+                created.id,
+                CarouselStepPatchRequest(editor_step=4),
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        stored: CarouselReadResponse = get_carousel(
+            created.id,
+            session,  # type: ignore[arg-type]
+        )
+
+        self.assertEqual(two_slides.steps.final, CarouselStepState.AVAILABLE)
+        self.assertIsNone(two_slides.assembly)
+        self.assertEqual(assembled.steps.final, CarouselStepState.DONE)
+        self.assertEqual(final_step.exception.status_code, 400)
+        self.assertEqual(final_step.exception.detail, FINAL_LOCKED_DETAIL)
+        self.assertEqual(stored.editor_step, created.editor_step)
+        self.assertEqual(stored.steps.final, CarouselStepState.DONE)
+
+        picture: _MemoryCarouselSession = _MemoryCarouselSession()
+        picture.skeleton.background_kind = BackgroundKind.PICTURE
+        picture.skeleton.elements = []
+        picture_carousel: CarouselReadResponse = create_carousel(
+            CarouselCreateRequest(name="Plates", skeleton_id=picture.skeleton.id),
+            picture,  # type: ignore[arg-type]
+            None,
+        )
+
+        with self.assertRaises(HTTPException) as slides_step:
+            patch_carousel_step(
+                picture_carousel.id,
+                CarouselStepPatchRequest(editor_step=3),
+                picture,  # type: ignore[arg-type]
+                None,
+            )
+
+        picture_loaded: CarouselReadResponse = get_carousel(
+            picture_carousel.id,
+            picture,  # type: ignore[arg-type]
+        )
+
+        self.assertEqual(slides_step.exception.status_code, 400)
+        self.assertEqual(slides_step.exception.detail, SLIDES_LOCKED_DETAIL)
+        self.assertEqual(picture_loaded.editor_step, 0)
+        self.assertEqual(picture_loaded.steps.slides, CarouselStepState.LOCKED)
 
 
 def _add_live_slides(

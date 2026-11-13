@@ -197,11 +197,15 @@ def serialize_carousel(
     has_instruction_text: bool = instruction_bodies_have_text(
         [document.body for document in list(carousel.instructions)],
     )
+    live_slide_count: int = len(live_slides(list(carousel.slides)))
+    has_final_assembly: bool = _generation_has_final_assembly(carousel)
     step_states: CarouselStepStates = carousel_step_states(
         skeleton,
         carousel.album_id,
         len(slide_responses),
         has_instruction_text,
+        live_slide_count,
+        has_final_assembly,
     )
     source_read_response: CarouselReadResponse = CarouselReadResponse(
         id=carousel.id,
@@ -211,7 +215,7 @@ def serialize_carousel(
         album_id=carousel.album_id,
         generation_number=carousel.generation_number,
         editor_step=carousel.editor_step,
-        live_slide_count=len(live_slides(list(carousel.slides))),
+        live_slide_count=live_slide_count,
         created_at=carousel.created_at,
         updated_at=carousel.updated_at,
         research=research_responses,
@@ -223,6 +227,18 @@ def serialize_carousel(
     )
 
     return source_read_response
+
+
+def _generation_has_final_assembly(carousel: Carousel) -> bool:
+    """Return whether this generation already has an assembly row."""
+
+    for assembly in list(carousel.assemblies):
+
+        if assembly.generation_number == carousel.generation_number:
+
+            return True
+
+    return False
 
 
 def _assembly_response(carousel: Carousel) -> CarouselAssemblyReadResponse | None:

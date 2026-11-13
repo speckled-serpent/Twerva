@@ -86,7 +86,7 @@ Publish reads artifact files, not carousel slides. `publish_post_job` resolves `
 
 ### Step state
 
-- [ ] **7.6 Mark Final from the assembly**
+- [x] **7.6 Mark Final from the assembly**
 
   `carousel_step_states` gains `live_slide_count` and `has_final_assembly`, appended after `has_instruction_text`. The existing `slide_count` argument stays the count of every slide, which is what marks Slides done. The caller sets `has_final_assembly` when an assembly row exists for this carousel's `generation_number`. `final` is `locked` when `live_slide_count` is under two, `available` when there are at least two live slides and no assembly, and `done` when the assembly exists. A pending draft set does not make Final done. `basic`, `instructions`, `content`, and `slides` stay on their current rules. `serialize_carousel` and `_accepted_editor_step` in `app/api/v1/carousel_writes.py` pass the new arguments. `STORED_EDITOR_STEPS` stays 0, 1, 2, and 3.
 

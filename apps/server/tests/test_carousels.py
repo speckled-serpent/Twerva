@@ -145,7 +145,7 @@ class CarouselReadApiTests(unittest.TestCase):
         self.assertEqual(response.steps.instructions, CarouselStepState.AVAILABLE)
         self.assertEqual(response.steps.content, CarouselStepState.DONE)
         self.assertEqual(response.steps.slides, CarouselStepState.DONE)
-        self.assertEqual(response.steps.final, CarouselStepState.LOCKED)
+        self.assertEqual(response.steps.final, CarouselStepState.AVAILABLE)
         self.assertEqual(len(response.slides), 6)
 
         for slide, filename in zip(response.slides, DEFAULT_IMAGE_FILENAMES, strict=True):

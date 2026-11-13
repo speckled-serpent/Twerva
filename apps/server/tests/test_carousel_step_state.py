@@ -42,7 +42,7 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         """A picture background with a null album leaves Slides locked."""
 
         skeleton: Skeleton = _skeleton(BackgroundKind.PICTURE)
-        states: CarouselStepStates = carousel_step_states(skeleton, None, 0, False)
+        states: CarouselStepStates = carousel_step_states(skeleton, None, 0, False, 0, False)
 
         self._assert_closed_steps(states)
         self.assertEqual(states.content, CarouselStepState.AVAILABLE)
@@ -52,7 +52,7 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         """Slide count does not open Slides while the album is missing."""
 
         skeleton: Skeleton = _skeleton(BackgroundKind.PICTURE)
-        states: CarouselStepStates = carousel_step_states(skeleton, None, 6, False)
+        states: CarouselStepStates = carousel_step_states(skeleton, None, 6, False, 6, False)
 
         self.assertEqual(states.content, CarouselStepState.AVAILABLE)
         self.assertEqual(states.slides, CarouselStepState.LOCKED)
@@ -61,7 +61,7 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         """A color skeleton with a null album and no slides is available."""
 
         skeleton: Skeleton = _skeleton(BackgroundKind.COLOR)
-        states: CarouselStepStates = carousel_step_states(skeleton, None, 0, False)
+        states: CarouselStepStates = carousel_step_states(skeleton, None, 0, False, 0, False)
 
         self._assert_closed_steps(states)
         self.assertEqual(states.content, CarouselStepState.DONE)
@@ -71,19 +71,21 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         """One slide stays available. Two slides mark Slides done."""
 
         skeleton: Skeleton = _skeleton(BackgroundKind.COLOR)
-        one_slide: CarouselStepStates = carousel_step_states(skeleton, None, 1, False)
-        two_slides: CarouselStepStates = carousel_step_states(skeleton, None, 2, False)
+        one_slide: CarouselStepStates = carousel_step_states(skeleton, None, 1, False, 1, False)
+        two_slides: CarouselStepStates = carousel_step_states(skeleton, None, 2, False, 2, False)
 
         self.assertEqual(one_slide.slides, CarouselStepState.AVAILABLE)
+        self.assertEqual(one_slide.final, CarouselStepState.LOCKED)
         self.assertEqual(two_slides.content, CarouselStepState.DONE)
         self.assertEqual(two_slides.slides, CarouselStepState.DONE)
+        self.assertEqual(two_slides.final, CarouselStepState.AVAILABLE)
 
     def test_fourth_and_ninth_slides_stay_done(self) -> None:
         """Four and nine slides stay done. The 5-to-8 default is not a cap."""
 
         skeleton: Skeleton = _skeleton(BackgroundKind.COLOR)
-        four_slides: CarouselStepStates = carousel_step_states(skeleton, None, 4, False)
-        nine_slides: CarouselStepStates = carousel_step_states(skeleton, None, 9, False)
+        four_slides: CarouselStepStates = carousel_step_states(skeleton, None, 4, False, 4, False)
+        nine_slides: CarouselStepStates = carousel_step_states(skeleton, None, 9, False, 9, False)
 
         self.assertEqual(four_slides.slides, CarouselStepState.DONE)
         self.assertEqual(nine_slides.slides, CarouselStepState.DONE)
@@ -92,7 +94,7 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         """A gradient skeleton passes the album rule immediately."""
 
         skeleton: Skeleton = _skeleton(BackgroundKind.GRADIENT)
-        states: CarouselStepStates = carousel_step_states(skeleton, None, 0, False)
+        states: CarouselStepStates = carousel_step_states(skeleton, None, 0, False, 0, False)
 
         self.assertEqual(states.content, CarouselStepState.DONE)
         self.assertEqual(states.slides, CarouselStepState.AVAILABLE)
@@ -102,7 +104,7 @@ class CarouselStepStateHelperTests(unittest.TestCase):
 
         skeleton: Skeleton = _skeleton(BackgroundKind.COLOR)
         skeleton.elements = [_image_element(skeleton.id)]
-        states: CarouselStepStates = carousel_step_states(skeleton, None, 3, False)
+        states: CarouselStepStates = carousel_step_states(skeleton, None, 3, False, 3, False)
 
         self.assertEqual(states.content, CarouselStepState.AVAILABLE)
         self.assertEqual(states.slides, CarouselStepState.LOCKED)
@@ -112,7 +114,7 @@ class CarouselStepStateHelperTests(unittest.TestCase):
 
         skeleton: Skeleton = _skeleton(BackgroundKind.PICTURE)
         album_id: uuid.UUID = uuid.uuid4()
-        states: CarouselStepStates = carousel_step_states(skeleton, album_id, 0, False)
+        states: CarouselStepStates = carousel_step_states(skeleton, album_id, 0, False, 0, False)
 
         self.assertEqual(states.content, CarouselStepState.DONE)
         self.assertEqual(states.slides, CarouselStepState.AVAILABLE)
@@ -121,7 +123,7 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         """A picture skeleton with an album is done once it has two slides."""
 
         skeleton: Skeleton = _skeleton(BackgroundKind.PICTURE)
-        states: CarouselStepStates = carousel_step_states(skeleton, uuid.uuid4(), 2, False)
+        states: CarouselStepStates = carousel_step_states(skeleton, uuid.uuid4(), 2, False, 2, False)
 
         self.assertEqual(states.content, CarouselStepState.DONE)
         self.assertEqual(states.slides, CarouselStepState.DONE)
@@ -133,8 +135,8 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         """
 
         skeleton: Skeleton = _skeleton(BackgroundKind.COLOR)
-        empty: CarouselStepStates = carousel_step_states(skeleton, None, 0, False)
-        written: CarouselStepStates = carousel_step_states(skeleton, None, 0, True)
+        empty: CarouselStepStates = carousel_step_states(skeleton, None, 0, False, 0, False)
+        written: CarouselStepStates = carousel_step_states(skeleton, None, 0, True, 0, False)
 
         self.assertFalse(instruction_bodies_have_text([]))
         self.assertFalse(instruction_bodies_have_text(["", "  \n\t"]))
@@ -145,6 +147,26 @@ class CarouselStepStateHelperTests(unittest.TestCase):
         self.assertEqual(written.slides, CarouselStepState.AVAILABLE)
         self.assertEqual(written.final, CarouselStepState.LOCKED)
         self.assertEqual(empty.final, CarouselStepState.LOCKED)
+        drafts_only: CarouselStepStates = carousel_step_states(
+            skeleton,
+            None,
+            5,
+            False,
+            0,
+            False,
+        )
+        assembled: CarouselStepStates = carousel_step_states(
+            skeleton,
+            None,
+            2,
+            False,
+            2,
+            True,
+        )
+
+        self.assertEqual(drafts_only.slides, CarouselStepState.DONE)
+        self.assertEqual(drafts_only.final, CarouselStepState.LOCKED)
+        self.assertEqual(assembled.final, CarouselStepState.DONE)
 
     def _assert_closed_steps(self, states: CarouselStepStates) -> None:
         """Basic is done. Instructions is available. Final stays locked."""
@@ -263,6 +285,7 @@ class CarouselStepReadTests(unittest.TestCase):
 
         self.assertEqual(loaded.live_slide_count, 0)
         self.assertEqual(loaded.steps.slides, CarouselStepState.DONE)
+        self.assertEqual(loaded.steps.final, CarouselStepState.LOCKED)
 
     def test_stored_open_step_is_independent_of_derived_state(self) -> None:
         """editor_step is the stored number. steps is computed beside it."""
