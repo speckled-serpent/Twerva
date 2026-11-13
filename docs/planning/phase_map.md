@@ -488,7 +488,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### API
 
-- [ ] **6.5 Add the generate-collection route**
+- [x] **6.5 Add the generate-collection route**
 
   `POST /api/v1/carousels/{carousel_id}/slides/generate-collection`, registered in `register_source_text_routes` (`app/api/v1/carousel_text.py`). Admin only, same as `generate_source_slide`. The response is the carousel detail from `serialize_carousel`. The handler lives in a thin route. The write helper lives in `app/carousels/slide_collection.py`.
 
