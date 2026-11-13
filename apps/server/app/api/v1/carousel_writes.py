@@ -75,6 +75,7 @@ from app.carousels.editing import (
     stored_paths_in_use,
 )
 from app.carousels.slide_exclusions import normalized_exclusion_ids
+from app.carousels.slide_text_review import live_slides
 from app.carousels.slide_skeleton import (
     IMAGE_NOT_USED_DETAIL,
     IMAGE_REQUIRED_DETAIL,
@@ -1099,11 +1100,18 @@ def _accepted_editor_step(
     has_instruction_text: bool = instruction_bodies_have_text(
         [document.body for document in list(carousel.instructions)],
     )
+    live_slide_count: int = len(live_slides(list(carousel.slides)))
+    has_final_assembly: bool = any(
+        assembly.generation_number == carousel.generation_number
+        for assembly in list(carousel.assemblies)
+    )
     step_states: CarouselStepStates = carousel_step_states(
         skeleton,
         carousel.album_id,
         len(list(carousel.slides)),
         has_instruction_text,
+        live_slide_count,
+        has_final_assembly,
     )
 
     try:

@@ -78,8 +78,10 @@ class CarouselStepStates:
 
     ``basic`` is done once the carousel exists. ``instructions`` is
     done when a document has text and available otherwise. ``final``
-    stays locked. ``content`` and ``slides`` follow the album rule
-    and the slide count.
+    is locked under two live slides, available at two with no
+    assembly, and done once that generation has an assembly.
+    ``content`` and ``slides`` follow the album rule and the slide
+    count.
     """
 
     basic: CarouselStepState
@@ -135,6 +137,8 @@ def carousel_step_states(
     album_id: uuid.UUID | None,
     slide_count: int,
     has_instruction_text: bool,
+    live_slide_count: int,
+    has_final_assembly: bool,
 ) -> CarouselStepStates:
     """Return the five derived step states for one carousel.
 
@@ -146,9 +150,11 @@ def carousel_step_states(
     fails, available when it passes and the carousel has fewer than two
     slides, and done at two or more. ``basic`` is done. ``instructions``
     is done when ``has_instruction_text`` is true and available when it
-    is false. It is not locked. ``final`` is locked. Research is
-    optional and does not change any state. This does not read or write
-    ``editor_step``.
+    is false. It is not locked. ``final`` is locked under two live
+    slides, available at two or more when this generation has no
+    assembly, and done when that assembly exists. Draft slides do not
+    count toward Final. Research is optional and does not change any
+    state. This does not read or write ``editor_step``.
 
     Args:
         skeleton: The carousel's skeleton, with elements loaded.
@@ -156,6 +162,9 @@ def carousel_step_states(
         slide_count: Every slide on the carousel, including drafts.
         has_instruction_text: True when any instruction body strips to
             a non-empty string.
+        live_slide_count: Slides whose text is live. Drafts are left out.
+        has_final_assembly: True when an assembly row exists for this
+            carousel's ``generation_number``.
 
     Returns:
         The five step states, in stepper order.
@@ -165,6 +174,7 @@ def carousel_step_states(
     content_state: CarouselStepState = CarouselStepState.AVAILABLE
     slides_state: CarouselStepState = CarouselStepState.LOCKED
     instructions_state: CarouselStepState = CarouselStepState.AVAILABLE
+    final_state: CarouselStepState = CarouselStepState.LOCKED
 
     if album_passes:
         content_state = CarouselStepState.DONE
@@ -176,12 +186,17 @@ def carousel_step_states(
     if has_instruction_text:
         instructions_state = CarouselStepState.DONE
 
+    if live_slide_count >= CAROUSEL_SLIDES_DONE_COUNT and has_final_assembly:
+        final_state = CarouselStepState.DONE
+    elif live_slide_count >= CAROUSEL_SLIDES_DONE_COUNT:
+        final_state = CarouselStepState.AVAILABLE
+
     step_states: CarouselStepStates = CarouselStepStates(
         basic=CarouselStepState.DONE,
         instructions=instructions_state,
         content=content_state,
         slides=slides_state,
-        final=CarouselStepState.LOCKED,
+        final=final_state,
     )
 
     return step_states
@@ -194,8 +209,9 @@ def accepted_editor_step(
     """Return ``editor_step`` when it may be stored.
 
     Stored steps are 0 Basic, 1 Instructions, 2 Content, and 3 Slides.
-    Final is locked and is never stored. Slides is refused while its
-    derived state is locked. This does not write the carousel.
+    Final is never stored, including when its derived state is
+    available or done. Slides is refused while its derived state is
+    locked. This does not write the carousel.
 
     Args:
         editor_step: The requested open step.
@@ -205,8 +221,12 @@ def accepted_editor_step(
         The same step, when it may be written.
 
     Raises:
-        ValueError: The step is locked, or it is not 0, 1, 2, or 3.
+        ValueError: The step is Final, it is locked, or it is not
+            0, 1, 2, or 3.
     """
+
+    if editor_step == EDITOR_STEP_FINAL:
+        raise ValueError(FINAL_LOCKED_DETAIL)
 
     step_state: CarouselStepState | None = _state_for_editor_step(
         editor_step,

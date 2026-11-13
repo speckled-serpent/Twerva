@@ -19,8 +19,6 @@ import {
 } from "./src/pages/carouselCollection.ts";
 import type { InstructionDraft } from "./src/pages/carouselInstructions.ts";
 import { INSTRUCTION_SAMPLE_TEMPLATE } from "./src/pages/instructionTemplate.ts";
-import { finalSectionNotice } from "./src/pages/carouselPage.ts";
-import { FINAL_CLOSED_DETAIL } from "./src/pages/carouselSteps.ts";
 
 const emptyDraft: InstructionDraft = { instructionId: null, body: "" };
 const writtenDocument: CarouselInstructionReadResponse = {
@@ -158,8 +156,6 @@ assert.equal(acceptedReview.pendingBatch, null);
 assert.equal(acceptedReview.reviewVisible, false);
 assert.equal(COLLECTION_ACCEPT_STATUS, "Accepted the set. These slides are live.");
 assert.equal(COLLECTION_DISCARD_STATUS, "Discarded the set.");
-assert.equal(finalSectionNotice(), FINAL_CLOSED_DETAIL);
-assert.equal(finalSectionNotice(), "Final assembly is a later phase.");
 assert.equal(slideUsesCollectionReview("batch-1", "batch-1"), true);
 assert.equal(slideUsesCollectionReview(null, "batch-1"), false);
 assert.equal(slideUsesCollectionReview("batch-1", null), false);

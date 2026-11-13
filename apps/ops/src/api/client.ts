@@ -500,6 +500,30 @@ export async function fetchTextGenerationStatus(): Promise<TextGenerationStatusR
   );
 }
 
+export async function assembleCarousel(
+  carouselId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/assemble`,
+  );
+}
+
+/**
+ * Same-origin URL for one frozen assembly frame.
+ *
+ * @param carouselId - Carousel UUID
+ * @param frameId - Frame UUID
+ * @returns Path the Final section can use as an img src
+ */
+export function assembledFrameFileUrl(carouselId: string, frameId: string): string {
+
+  const requestPath: string = `/api/v1/carousels/${carouselId}/assembly/frames/${frameId}/file`;
+
+  return `${resolveApiBaseUrl()}${requestPath}`;
+}
+
 export async function generateCarouselCollection(
   carouselId: string,
 ): Promise<CarouselReadResponse> {

@@ -1063,6 +1063,43 @@ class PendingSlideDraftBatchResponse(BaseModel):
     slide_count: int
 
 
+class AssembledFrameReadResponse(BaseModel):
+    """One frozen frame. The PNG is served separately."""
+
+    id: uuid.UUID
+    position: int
+    slide_id: uuid.UUID | None
+    album_image_id: uuid.UUID | None
+    blocked: bool
+    block_reason: str | None
+    block_detail: str | None
+
+
+class AssembledCarouselReadResponse(BaseModel):
+    """One reviewed carousel inside an assembly.
+
+    ``blocked`` is true when any frame is blocked. ``status`` is
+    ``draft``. ``cta_url`` is null in this phase.
+    """
+
+    id: uuid.UUID
+    position: int
+    status: str
+    caption: str | None
+    cta_url: str | None
+    blocked: bool
+    frames: list[AssembledFrameReadResponse]
+
+
+class CarouselAssemblyReadResponse(BaseModel):
+    """The assembly stored for one carousel generation."""
+
+    id: uuid.UUID
+    generation_number: int
+    slide_count: int
+    carousels: list[AssembledCarouselReadResponse]
+
+
 class CarouselReadResponse(BaseModel):
     """One carousel, its research, instruction documents, and slides.
 
@@ -1070,7 +1107,8 @@ class CarouselReadResponse(BaseModel):
     does not change that stored value. ``research`` is the attached
     research in position order. ``instructions`` is one entry per
     document, in position order. ``pending_slide_draft_batch`` is the
-    set still waiting for review, or null.
+    set still waiting for review, or null. ``assembly`` is the Final
+    assembly for this generation, or null when none has been stored.
     """
 
     id: uuid.UUID
@@ -1088,6 +1126,7 @@ class CarouselReadResponse(BaseModel):
     steps: CarouselStepsResponse
     slides: list[SlideReadResponse]
     pending_slide_draft_batch: PendingSlideDraftBatchResponse | None = None
+    assembly: CarouselAssemblyReadResponse | None = None
 
 
 class TextGenerationStatusResponse(BaseModel):

@@ -14,6 +14,9 @@ from app.api.v1.lookups import (
 )
 from app.api.v1.carousel_preview import register_source_preview_routes
 from app.api.v1.schemas import (
+    AssembledCarouselReadResponse,
+    AssembledFrameReadResponse,
+    CarouselAssemblyReadResponse,
     CarouselInstructionReadResponse,
     CarouselListItemResponse,
     CarouselReadResponse,
@@ -33,7 +36,10 @@ from app.carousels.text_generation import (
 from app.db import get_our_database_session
 from app.models.album import AlbumImage
 from app.models.carousel import (
+    AssembledCarousel,
+    AssembledCarouselFrame,
     Carousel,
+    CarouselAssembly,
     CarouselInstruction,
     CarouselResearchItem,
     Slide,
@@ -66,6 +72,9 @@ def carousels_list_statement() -> Select[tuple[Carousel]]:
             selectinload(Carousel.slides).selectinload(Slide.album_image),
             selectinload(Carousel.slides).selectinload(Slide.element_texts),
             selectinload(Carousel.slides).selectinload(Slide.exclusions),
+            selectinload(Carousel.assemblies)
+            .selectinload(CarouselAssembly.assembled_carousels)
+            .selectinload(AssembledCarousel.frames),
         )
         .order_by(Carousel.name.asc(), Carousel.slug.asc())
     )
@@ -188,11 +197,15 @@ def serialize_carousel(
     has_instruction_text: bool = instruction_bodies_have_text(
         [document.body for document in list(carousel.instructions)],
     )
+    live_slide_count: int = len(live_slides(list(carousel.slides)))
+    has_final_assembly: bool = _generation_has_final_assembly(carousel)
     step_states: CarouselStepStates = carousel_step_states(
         skeleton,
         carousel.album_id,
         len(slide_responses),
         has_instruction_text,
+        live_slide_count,
+        has_final_assembly,
     )
     source_read_response: CarouselReadResponse = CarouselReadResponse(
         id=carousel.id,
@@ -202,7 +215,7 @@ def serialize_carousel(
         album_id=carousel.album_id,
         generation_number=carousel.generation_number,
         editor_step=carousel.editor_step,
-        live_slide_count=len(live_slides(list(carousel.slides))),
+        live_slide_count=live_slide_count,
         created_at=carousel.created_at,
         updated_at=carousel.updated_at,
         research=research_responses,
@@ -210,9 +223,105 @@ def serialize_carousel(
         steps=_steps_response(step_states),
         slides=slide_responses,
         pending_slide_draft_batch=_pending_slide_draft_batch(carousel),
+        assembly=_assembly_response(carousel),
     )
 
     return source_read_response
+
+
+def _generation_has_final_assembly(carousel: Carousel) -> bool:
+    """Return whether this generation already has an assembly row."""
+
+    for assembly in list(carousel.assemblies):
+
+        if assembly.generation_number == carousel.generation_number:
+
+            return True
+
+    return False
+
+
+def _assembly_response(carousel: Carousel) -> CarouselAssemblyReadResponse | None:
+    """Return this generation's assembly, or null when Final has not run."""
+
+    for assembly in list(carousel.assemblies):
+
+        if assembly.generation_number != carousel.generation_number:
+            continue
+
+        assembled_carousels: list[AssembledCarousel] = sorted(
+            list(assembly.assembled_carousels),
+            key=_assembled_position,
+        )
+        carousel_responses: list[AssembledCarouselReadResponse] = [
+            _serialize_assembled_carousel(assembled) for assembled in assembled_carousels
+        ]
+        assembly_response: CarouselAssemblyReadResponse = CarouselAssemblyReadResponse(
+            id=assembly.id,
+            generation_number=assembly.generation_number,
+            slide_count=assembly.slide_count,
+            carousels=carousel_responses,
+        )
+
+        return assembly_response
+
+    return None
+
+
+def _assembled_position(assembled: AssembledCarousel) -> int:
+    """Return the sort key for one assembled carousel."""
+
+    position: int = assembled.position
+
+    return position
+
+
+def _serialize_assembled_carousel(assembled: AssembledCarousel) -> AssembledCarouselReadResponse:
+    """Return one assembled carousel and its frames."""
+
+    frames: list[AssembledCarouselFrame] = sorted(
+        list(assembled.frames),
+        key=_frame_position,
+    )
+    frame_responses: list[AssembledFrameReadResponse] = [
+        _serialize_frame(frame) for frame in frames
+    ]
+    blocked: bool = any(frame.blocked for frame in frames)
+    assembled_response: AssembledCarouselReadResponse = AssembledCarouselReadResponse(
+        id=assembled.id,
+        position=assembled.position,
+        status=assembled.status,
+        caption=assembled.caption,
+        cta_url=assembled.cta_url,
+        blocked=blocked,
+        frames=frame_responses,
+    )
+
+    return assembled_response
+
+
+def _frame_position(frame: AssembledCarouselFrame) -> int:
+    """Return the sort key for one frame."""
+
+    position: int = frame.position
+
+    return position
+
+
+def _serialize_frame(frame: AssembledCarouselFrame) -> AssembledFrameReadResponse:
+    """Return one frame without the PNG bytes."""
+
+    frame_response: AssembledFrameReadResponse = AssembledFrameReadResponse(
+        id=frame.id,
+        position=frame.position,
+        slide_id=frame.slide_id,
+        album_image_id=frame.album_image_id,
+        blocked=frame.blocked,
+        block_reason=frame.block_reason,
+        block_detail=frame.block_detail,
+    )
+
+    return frame_response
 
 
 def _instructions_in_position_order(
@@ -456,10 +565,12 @@ def serialize_image(image: AlbumImage) -> SlideImageReadResponse:
     return image_response
 
 
+from app.api.v1.carousel_assembly import register_carousel_assembly_routes
 from app.api.v1.carousel_text import register_source_text_routes
 from app.api.v1.carousel_writes import register_source_write_routes
 
 
 register_source_write_routes(carousels_router)
 register_source_preview_routes(carousels_router)
+register_carousel_assembly_routes(carousels_router)
 register_source_text_routes(carousels_router)

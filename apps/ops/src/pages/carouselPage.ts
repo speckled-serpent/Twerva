@@ -1,7 +1,6 @@
 import type { CarouselStepsResponse } from "../api/types";
 import {
   CAROUSEL_STEPS,
-  FINAL_CLOSED_DETAIL,
   SLIDES_ALBUM_REQUIRED_DETAIL,
   type CarouselStepDefinition,
 } from "./carouselSteps.ts";
@@ -129,18 +128,6 @@ export function slidesSectionNotice(steps: CarouselStepsResponse): string | null
   }
 
   return SLIDES_ALBUM_REQUIRED_DETAIL;
-}
-
-/**
- * Why Final has no assembly controls.
- *
- * Final is a heading on the page. The assembly itself is a later phase.
- *
- * @returns The later-phase sentence
- */
-export function finalSectionNotice(): string {
-
-  return FINAL_CLOSED_DETAIL;
 }
 
 /**

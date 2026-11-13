@@ -91,6 +91,22 @@ class AcceptedEditorStepTests(unittest.TestCase):
         self.assertEqual(accepted_editor_step(1, states), 1)
         self.assertEqual(_refusal(1, locked_instructions), INSTRUCTIONS_LOCKED_DETAIL)
         self.assertEqual(_refusal(4, states), FINAL_LOCKED_DETAIL)
+        self.assertEqual(
+            _refusal(4, _states(
+                content=CarouselStepState.DONE,
+                slides=CarouselStepState.DONE,
+                final=CarouselStepState.AVAILABLE,
+            )),
+            FINAL_LOCKED_DETAIL,
+        )
+        self.assertEqual(
+            _refusal(4, _states(
+                content=CarouselStepState.DONE,
+                slides=CarouselStepState.DONE,
+                final=CarouselStepState.DONE,
+            )),
+            FINAL_LOCKED_DETAIL,
+        )
         self.assertEqual(SLIDES_LOCKED_DETAIL, "Attach an album on Content first.")
         self.assertEqual(_refusal(3, states), SLIDES_LOCKED_DETAIL)
 
@@ -446,15 +462,16 @@ def _states(
     content: CarouselStepState,
     slides: CarouselStepState,
     instructions: CarouselStepState = CarouselStepState.AVAILABLE,
+    final: CarouselStepState = CarouselStepState.LOCKED,
 ) -> CarouselStepStates:
-    """Build the five states. Final stays locked."""
+    """Build the five states. Final defaults to locked."""
 
     states: CarouselStepStates = CarouselStepStates(
         basic=CarouselStepState.DONE,
         instructions=instructions,
         content=content,
         slides=slides,
-        final=CarouselStepState.LOCKED,
+        final=final,
     )
 
     return states

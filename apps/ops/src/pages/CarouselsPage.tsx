@@ -37,6 +37,7 @@ import {
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import type { AlbumEditorActions } from "./AlbumImagesEditor";
 import { CarouselCollectionReview } from "./CarouselCollectionReview";
+import { CarouselFinalSection } from "./CarouselFinalSection";
 import { CarouselGenerateControl } from "./CarouselGenerateControl";
 import {
   collectionSlideReviewAccessibleName,
@@ -53,7 +54,6 @@ import {
   CAROUSEL_LIST_LEDE,
   carouselPageLede,
   carouselPageSection,
-  finalSectionNotice,
   slidesSectionNotice,
   type CarouselPageSection,
 } from "./carouselPage";
@@ -895,9 +895,13 @@ function AlbumView({
             aria-labelledby="carousel-final-heading"
           >
             <h2 id="carousel-final-heading">{finalSection.label}</h2>
-            <p className="field-hint" id="carousel-final-notice">
-              {finalSectionNotice()}
-            </p>
+            <CarouselFinalSection
+              carousel={carousel}
+              canWrite={canWrite}
+              onCarouselSaved={onCarouselSaved}
+              onStatusMessage={onStatusMessage}
+              onError={setSaveError}
+            />
           </section>
         </>
       )}

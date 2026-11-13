@@ -4,7 +4,6 @@ import type { CarouselStepsResponse } from "./src/api/types.ts";
 import {
   CAROUSEL_STEPS,
   CAROUSEL_STEP_FINAL,
-  FINAL_CLOSED_DETAIL,
   SLIDES_ALBUM_REQUIRED_DETAIL,
   carouselStepByIndex,
   carouselStepLabel,
@@ -42,7 +41,6 @@ assert.deepEqual(
   ["Basic", "Instructions", "Content", "Slides", "Final"],
 );
 assert.equal(carouselStepByIndex(9), null);
-assert.equal(FINAL_CLOSED_DETAIL, "Final assembly is a later phase.");
 assert.equal(SLIDES_ALBUM_REQUIRED_DETAIL, "Attach an album on Content first.");
 assert.equal(stepStateFor(doneSlides, stepAt(3)), "done");
 assert.equal(stepStateFor(doneSlides, stepAt(CAROUSEL_STEP_FINAL)), "locked");

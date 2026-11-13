@@ -7,16 +7,12 @@ import {
   CAROUSEL_PAGE_SECTIONS,
   carouselPageLede,
   carouselPageSection,
-  finalSectionNotice,
   sectionIsVisible,
   slidesSectionNotice,
   type CarouselEditorBlock,
   type CarouselPageSection,
 } from "./src/pages/carouselPage.ts";
-import {
-  FINAL_CLOSED_DETAIL,
-  SLIDES_ALBUM_REQUIRED_DETAIL,
-} from "./src/pages/carouselSteps.ts";
+import { SLIDES_ALBUM_REQUIRED_DETAIL } from "./src/pages/carouselSteps.ts";
 
 const lockedSlides: CarouselStepsResponse = {
   basic: "done",
@@ -89,8 +85,6 @@ assert.equal(
 assert.equal(slidesSectionNotice(lockedSlides), SLIDES_ALBUM_REQUIRED_DETAIL);
 assert.equal(slidesSectionNotice(availableSlides), null);
 assert.equal(slidesSectionNotice(doneSlides), null);
-assert.equal(finalSectionNotice(), FINAL_CLOSED_DETAIL);
-assert.match(finalSectionNotice(), /later phase/);
 
 const storedSteps: number[] = [0, 1, 2, 3];
 const slideStates: CarouselStepsResponse[] = [lockedSlides, availableSlides, doneSlides];

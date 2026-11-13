@@ -574,6 +574,8 @@ These are the choices this sheet made so a task could name a file. The tasks abo
 
 **Open questions.** Does each assembled carousel become one draft? Does a draft freeze the slide's image file, or keep a pointer that can change? When the skeleton overlaps or a file is missing, preview marks the frame blocked and still writes a PNG. For a shipping draft, is that a blocked row, or no row? Where do the caption, hashtags, and any link come from? They are not on the slide. Do exclusion rules still split a group? Does Final read the Spotmu interest stored on the campaign?
 
+**Task sheet.** The checklist is `docs/planning/phase_7_final_assembly.md`.
+
 ## 8. Generations
 
 **Goal.** A generation is a snapshot. Duplicate it to try the next version.
