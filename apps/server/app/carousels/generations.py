@@ -90,8 +90,10 @@ def replace_current_generation_snapshot(
 
     Args:
         carousel_id: The carousel whose current generation is copied.
-        our_database_session: Open session. This function flushes and
-            does not commit.
+        our_database_session: Open session. This function flushes
+            before the lookup, then does not commit. The server session
+            has autoflush off, so a carousel added on this session is
+            not visible until that flush.
 
     Returns:
         The current generation, with its children replaced.
@@ -100,11 +102,11 @@ def replace_current_generation_snapshot(
         HTTPException: No carousel has this id.
     """
 
+    our_database_session.flush()
     carousel: Carousel = fetch_carousel_by_id_or_raise(
         carousel_id,
         our_database_session,
     )
-    our_database_session.flush()
     _expire_working_rows(carousel, our_database_session)
     generation: CarouselGeneration = ensure_current_generation(
         carousel,
