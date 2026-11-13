@@ -1,6 +1,6 @@
 # Twerva — Phase map
 
-*Last updated: 2026-11-12*  
+*Last updated: 2026-11-13*  
 *Status: What's left to implement, after the redesign agreed with Mu. Strategy: `docs/prompts/project.md`. Product design: `docs/prompts/product.md`.*
 
 This list replaces the previous one. A Skeleton is the structure of a carousel: the background and the named elements. A Carousel is what an operator builds, in steps. A Slide is one frame of content inside it. Albums and Research are shared libraries. A generation is a snapshot of one carousel. The campaign is the timeline of posts.
@@ -410,9 +410,13 @@ There is no instruction table. Research is the nearest pattern: `research_items.
 7. Downgrade of task 5.10 restores empty inspiration and rules columns and does not copy the documents back into them.
 8. Phase 8 still calls the generation snapshot "the instruction version." This sheet does not add a version table, and it does not rewrite phase 8.
 
+## Carousel editor
+
+The open carousel is one scrollable page. Links at the top scroll to Basic, Instructions, Content, Slides, and Final. The page does not switch steps, and it does not hide a section. `editor_step` stays on the API and is not what the page uses to choose a panel. Generate sits below Content. It enables when some instruction document has real text, and a reader always sees it disabled. Clicking it does not fill slides until phase 6. A picture carousel with no album still shows Slides, with the note to attach an album on Content first. Final is the last heading and says assembly is a later phase. Hand entry of slides stays on this page.
+
 ## 6. AI slide generation
 
-**Goal.** Pressing Generate, the button under the instructions from phase 5, sends the carousel's instruction documents together as one prompt in a fixed order, with the attached album and research, to the provider, and writes slide names, text per named text element, and image choices from the album. Hand entry stays.
+**Goal.** Pressing Generate, the button below Content, sends the carousel's instruction documents together as one prompt in a fixed order, with the attached album and research, to the provider, and writes slide names, text per named text element, and image choices from the album. Hand entry stays.
 
 **Scope.** A slide stays a name, an optional image, and one text per named text element. Pressing Generate sends the carousel's instruction documents together as one prompt in a fixed order, with the attached album and research, to the provider, and writes slide names, text per named text element, and image choices from the album. A person reviews the text before it is live. Images are chosen from the album. They are not drawn. A slide left unreviewed stays off Final, as a draft unit stays off a run today.
 

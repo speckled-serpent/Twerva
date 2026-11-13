@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 import {
   acceptSlideText,
@@ -7,7 +7,6 @@ import {
   fetchTextGenerationStatus,
   generateCarouselSlide,
   generateSlideText,
-  patchCarouselStep,
   deleteCarouselSlide,
   fetchCarouselById,
   fetchSkeletonById,
@@ -37,24 +36,23 @@ import {
 } from "./CarouselInstructionsStep";
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import type { AlbumEditorActions } from "./AlbumImagesEditor";
-import { CarouselGeneration, CarouselStepBar } from "./CarouselStepBar";
+import { CarouselGenerateControl } from "./CarouselGenerateControl";
+import { CarouselGeneration, CarouselSectionNav } from "./CarouselSectionNav";
 import {
   carouselLabelFingerprint,
   carouselLabelReadiness,
   type CarouselLabelDraft,
 } from "./carouselLabel";
 import {
-  CAROUSEL_STEP_BASIC,
-  CAROUSEL_STEP_CONTENT,
-  CAROUSEL_STEP_INSTRUCTIONS,
-  CAROUSEL_STEP_SLIDES,
-  carouselStepByIndex,
-  displayedEditorStep,
-  generationLabel,
-  openStepSentence,
-  shellEditorStep,
-  type CarouselStepDefinition,
-} from "./carouselSteps";
+  CAROUSEL_LIST_LEDE,
+  carouselPageLede,
+  carouselPageSection,
+  finalSectionNotice,
+  slidesSectionNotice,
+  type CarouselPageSection,
+} from "./carouselPage";
+import { generationLabel } from "./carouselSteps";
+import { slideCountFallbackHint } from "./slideCountFallback";
 import {
   SKELETON_AUTOSAVE_DELAY_MS,
   formatSkeletonAutosaveError,
@@ -116,10 +114,7 @@ export function CarouselsPage({
   const [loadError, setLoadError] = useState<unknown>(null);
   const [statusMessage, setStatusMessage] = useState<string>(openRequest?.statusMessage ?? "");
   const [reloadToken, setReloadToken] = useState<number>(0);
-  const [isSavingStep, setIsSavingStep] = useState<boolean>(false);
-  const [stepError, setStepError] = useState<unknown>(null);
-  const [viewedStep, setViewedStep] = useState<number | null>(null);
-  const canWriteOps: boolean = useCanWriteOps();
+  const [sectionScrollId, setSectionScrollId] = useState<string | null>(null);
   const [heldSlide, setHeldSlide] = useState<SlideReadResponse | null>(null);
   const [textGeneration, setTextGeneration] = useState<TextGenerationStatusResponse>({
     available: false,
@@ -238,91 +233,27 @@ export function CarouselsPage({
     setOpenedSlideId(null);
     setIsCreatingSlide(false);
     setHeldSlide(null);
-    setViewedStep(null);
+    setSectionScrollId(null);
     setStatusMessage(openRequest.statusMessage);
   }, [openRequest]);
-
-  useEffect((): void => {
-    setViewedStep(null);
-  }, [openedCarouselId]);
 
   const requestReload = (): void => {
     setReloadToken((currentToken: number): number => currentToken + 1);
   };
 
-  const handleOpenStep = async (editorStep: number): Promise<void> => {
+  const clearSectionScroll = useCallback((): void => {
+    setSectionScrollId(null);
+  }, []);
 
-    if (openedCarouselId === null) {
-      return;
-    }
-
-    if (!canWriteOps) {
-      setViewedStep(editorStep);
-      setStepError(null);
-
-      if (editorStep !== CAROUSEL_STEP_SLIDES) {
-        setOpenedSlideId(null);
-        setIsCreatingSlide(false);
-        setHeldSlide(null);
-      }
-
-      return;
-    }
-
-    const previousStep: number | null = selectedCarousel?.editor_step ?? null;
-    setViewedStep(null);
-
-    setIsSavingStep(true);
-    setStepError(null);
-
-    try {
-      const updatedCarousel: CarouselReadResponse = await patchCarouselStep(openedCarouselId, {
-        editor_step: editorStep,
-      });
-      const openedStep: CarouselStepDefinition | null = carouselStepByIndex(editorStep);
-      setSelectedCarousel(updatedCarousel);
-
-      if (editorStep !== CAROUSEL_STEP_SLIDES) {
-        setOpenedSlideId(null);
-        setIsCreatingSlide(false);
-        setHeldSlide(null);
-      }
-
-      if (previousStep !== editorStep && openedStep !== null) {
-        setStatusMessage(`Opened ${openedStep.label}.`);
-      }
-
-      requestReload();
-    } catch (caughtError: unknown) {
-      setStepError(caughtError);
-    } finally {
-      setIsSavingStep(false);
-    }
-  };
-
-  const storedEditorStep: number = selectedCarousel?.editor_step ?? CAROUSEL_STEP_SLIDES;
-  const requestedStep: number = displayedEditorStep(
-    storedEditorStep,
-    viewedStep,
-    canWriteOps,
-  );
-  const displayStep: number = selectedCarousel === null
-    ? requestedStep
-    : shellEditorStep(requestedStep, selectedCarousel.steps);
-  const slidesAreOpen: boolean = selectedCarousel === null
-    || shellEditorStep(CAROUSEL_STEP_SLIDES, selectedCarousel.steps) === CAROUSEL_STEP_SLIDES;
-
-  if (
-    selectedCarousel !== null
-    && !slidesAreOpen
-    && (openedSlideId !== null || isCreatingSlide)
-  ) {
+  const leaveSlideForSection = (sectionId: string): void => {
     setOpenedSlideId(null);
     setIsCreatingSlide(false);
     setHeldSlide(null);
-  }
+    setStatusMessage("");
+    setSectionScrollId(sectionId);
+  };
 
-  if (openedCarouselId !== null && slidesAreOpen && (openedSlideId !== null || isCreatingSlide)) {
+  if (openedCarouselId !== null && (openedSlideId !== null || isCreatingSlide)) {
     const loadedSlide: SlideReadResponse | null = findSlide(selectedCarousel, openedSlideId);
     const openedSlide: SlideReadResponse | null = isCreatingSlide
       ? null
@@ -337,17 +268,11 @@ export function CarouselsPage({
         loadError={loadError}
         statusMessage={statusMessage}
         textGeneration={textGeneration}
-        isSavingStep={isSavingStep}
-        stepError={stepError}
-        displayStep={displayStep}
-        onOpenStep={(editorStep: number): void => {
-          void handleOpenStep(editorStep);
+        onOpenContent={(): void => {
+          leaveSlideForSection(carouselPageSection("content").id);
         }}
         onBack={(): void => {
-          setOpenedSlideId(null);
-          setIsCreatingSlide(false);
-          setHeldSlide(null);
-          setStatusMessage("");
+          leaveSlideForSection(carouselPageSection("slides").id);
         }}
         onSaved={(savedSlide: SlideReadResponse, message: string): void => {
 
@@ -378,16 +303,12 @@ export function CarouselsPage({
         loadError={loadError}
         statusMessage={statusMessage}
         textGeneration={textGeneration}
-        isSavingStep={isSavingStep}
-        stepError={stepError}
-        displayStep={displayStep}
-        onOpenStep={(editorStep: number): void => {
-          void handleOpenStep(editorStep);
-        }}
+        sectionScrollId={sectionScrollId}
+        onSectionScrolled={clearSectionScroll}
         onBack={(): void => {
           setOpenedCarouselId(null);
+          setSectionScrollId(null);
           setStatusMessage("");
-          setStepError(null);
         }}
         onSlideDrafted={(draftedSlide: SlideReadResponse): void => {
           setHeldSlide(draftedSlide);
@@ -456,7 +377,7 @@ export function CarouselsPage({
       onOpenCarousel={(sourceId: string): void => {
         setOpenedCarouselId(sourceId);
         setStatusMessage("");
-        setStepError(null);
+        setSectionScrollId(null);
       }}
       onAlbumDeleted={(albumName: string): void => {
         setStatusMessage(`Deleted carousel ${albumName}.`);
@@ -493,7 +414,7 @@ function AlbumListView({
         <div>
           <h1>Carousels</h1>
           <p className="lede">
-            Each carousel has a skeleton. Open one to continue from its saved step.
+            {CAROUSEL_LIST_LEDE}
           </p>
         </div>
         <div className="page-header-actions">
@@ -578,10 +499,8 @@ interface AlbumViewProps {
   loadError: unknown;
   statusMessage: string;
   textGeneration: TextGenerationStatusResponse;
-  isSavingStep: boolean;
-  stepError: unknown;
-  displayStep: number;
-  onOpenStep: (editorStep: number) => void;
+  sectionScrollId: string | null;
+  onSectionScrolled: () => void;
   onBack: () => void;
   onOpenSlide: (slideId: string) => void;
   onCreateSlide: () => void;
@@ -619,10 +538,8 @@ function AlbumView({
   loadError,
   statusMessage,
   textGeneration,
-  isSavingStep,
-  stepError,
-  displayStep,
-  onOpenStep,
+  sectionScrollId,
+  onSectionScrolled,
   onBack,
   onOpenSlide,
   onCreateSlide,
@@ -640,15 +557,16 @@ function AlbumView({
   );
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [generateEnabled, setGenerateEnabled] = useState<boolean>(false);
   const [pendingDelete, setPendingDelete] = useState<boolean>(false);
   const [pendingSlideDelete, setPendingSlideDelete] = useState<SlideReadResponse | null>(null);
   const albumEditorActionsRef: { current: AlbumEditorActions | null } = useRef(null);
   const instructionEditorActionsRef: { current: InstructionEditorActions | null } = useRef(null);
-  const showsBasic: boolean = carousel !== null && displayStep === CAROUSEL_STEP_BASIC;
-  const showsInstructions: boolean = carousel !== null
-    && displayStep === CAROUSEL_STEP_INSTRUCTIONS;
-  const showsContent: boolean = carousel !== null && displayStep === CAROUSEL_STEP_CONTENT;
-  const showsSlides: boolean = carousel !== null && displayStep === CAROUSEL_STEP_SLIDES;
+  const slidesSection: CarouselPageSection = carouselPageSection("slides");
+  const finalSection: CarouselPageSection = carouselPageSection("final");
+  const handleGenerateEnabled = useCallback((enabled: boolean): void => {
+    setGenerateEnabled(enabled);
+  }, []);
 
   if (carouselId !== trackedCarouselId) {
     const nextDraft: CarouselLabelDraft | null = carousel === null
@@ -696,15 +614,29 @@ function AlbumView({
     autosave.schedule(labelDraft);
   }, [autosave.schedule, canWrite, labelDraft]);
 
-  let pageLede: string = "Slides in this carousel.";
-
-  if (carousel !== null) {
-    pageLede = openStepSentence(displayStep);
-
-    if (showsSlides) {
-      pageLede = `${pageLede} A card shows the first image, or the text when there is none. ${carousel.live_slide_count} live.`;
+  useEffect((): void => {
+    if (sectionScrollId === null || carousel === null) {
+      return;
     }
-  }
+
+    const scrollTarget: HTMLElement | null = document.getElementById(sectionScrollId);
+
+    if (scrollTarget !== null) {
+      scrollTarget.scrollIntoView({ block: "start" });
+    }
+
+    onSectionScrolled();
+  }, [carousel, onSectionScrolled, sectionScrollId]);
+
+  const pageLede: string = carousel === null
+    ? "Slides in this carousel."
+    : carouselPageLede(carousel.live_slide_count);
+  const slidesNotice: string | null = carousel === null
+    ? null
+    : slidesSectionNotice(carousel.steps);
+  const slideCountHint: string | null = carousel === null
+    ? null
+    : slideCountFallbackHint(carousel.steps.slides);
 
   const headingName: string = carouselHeadingName(carousel, labelDraft);
 
@@ -746,23 +678,15 @@ function AlbumView({
     return false;
   };
 
+  const leaveEditor = (afterLeave: () => void): void => {
+    void leaveAfterAutosave(flushOpenEdits, openEditsAreDirty, afterLeave);
+  };
+
   const handleBack = (): void => {
-    void leaveAfterAutosave(flushOpenEdits, openEditsAreDirty, onBack);
+    leaveEditor(onBack);
   };
 
-  // Leaving Basic flushes the label. Leaving Instructions flushes the
-  // document. Leaving Content flushes album image edits.
-  const handleStep = (editorStep: number): void => {
-    void leaveAfterAutosave(
-      flushOpenEdits,
-      openEditsAreDirty,
-      (): void => {
-        onOpenStep(editorStep);
-      },
-    );
-  };
-
-  const handleGenerateSlide = async (): Promise<void> => {
+  const draftGeneratedSlide = async (): Promise<void> => {
 
     if (!canWrite || carousel === null || !textGeneration.available) {
       return;
@@ -779,6 +703,17 @@ function AlbumView({
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleGenerateSlide = (): void => {
+
+    if (!canWrite || carousel === null || !textGeneration.available || isGenerating) {
+      return;
+    }
+
+    leaveEditor((): void => {
+      void draftGeneratedSlide();
+    });
   };
 
   return (
@@ -802,122 +737,142 @@ function AlbumView({
       <ReadOnlyNotice />
       <ErrorBanner error={loadError} />
       <ErrorBanner error={saveError} />
-      <ErrorBanner error={stepError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
-      {carousel === null ? (
+      {carousel === null || labelDraft === null ? (
         <p>Loading carousel…</p>
       ) : (
         <>
-          <CarouselStepBar
-            editorStep={displayStep}
-            steps={carousel.steps}
+          <CarouselSectionNav />
+          <CarouselBasicStep
+            carousel={carousel}
             canWrite={canWrite}
-            isSavingStep={isSavingStep}
-            onOpenStep={handleStep}
+            labelDraft={labelDraft}
+            autosaveState={autosave.state}
+            onLabelChange={(name: string): void => {
+              setLabelDraft({ name });
+            }}
+            onRetry={(): void => {
+              void autosave.retry();
+            }}
           />
-          {showsBasic && labelDraft !== null ? (
-            <CarouselBasicStep
-              carousel={carousel}
-              canWrite={canWrite}
-              labelDraft={labelDraft}
-              autosaveState={autosave.state}
-              onLabelChange={(name: string): void => {
-                setLabelDraft({ name });
-              }}
-              onRetry={(): void => {
-                void autosave.retry();
-              }}
-            />
-          ) : null}
-          {showsInstructions && carousel !== null ? (
-            <CarouselInstructionsStep
-              carousel={carousel}
-              canWrite={canWrite}
-              onCarouselSaved={onCarouselSaved}
-              onActions={(actions: InstructionEditorActions | null): void => {
-                instructionEditorActionsRef.current = actions;
-              }}
-            />
-          ) : null}
-          {showsContent ? (
-            <CarouselContentStep
-              carousel={carousel}
-              canWrite={canWrite}
-              onCarouselSaved={onCarouselSaved}
-              onAlbumEditorActions={(actions: AlbumEditorActions | null): void => {
-                albumEditorActionsRef.current = actions;
-              }}
-            />
-          ) : null}
-          {showsSlides ? (
-            <>
-              {canWrite ? (
-                <div className="button-row">
-                  <button
-                    type="button"
-                    className="danger"
-                    onClick={(): void => {
-                      setPendingDelete(true);
-                    }}
-                  >
-                    Delete carousel
-                  </button>
-                  <button id="add-slide" type="button" onClick={onCreateSlide}>
-                    Add slide
-                  </button>
-                  <button
-                    id="generate-slide"
-                    type="button"
-                    disabled={!textGeneration.available || isGenerating}
-                    onClick={(): void => {
-                      void handleGenerateSlide();
-                    }}
-                  >
-                    {isGenerating ? "Generating…" : "Generate slide"}
-                  </button>
-                </div>
-              ) : null}
-              <p className="field-hint">
-                Generate slide writes a draft.
-                A draft stays off the live slide until you accept it.
+          <CarouselInstructionsStep
+            carousel={carousel}
+            canWrite={canWrite}
+            onCarouselSaved={onCarouselSaved}
+            onGenerateEnabled={handleGenerateEnabled}
+            onActions={(actions: InstructionEditorActions | null): void => {
+              instructionEditorActionsRef.current = actions;
+            }}
+          />
+          <CarouselContentStep
+            carousel={carousel}
+            canWrite={canWrite}
+            onCarouselSaved={onCarouselSaved}
+            onAlbumEditorActions={(actions: AlbumEditorActions | null): void => {
+              albumEditorActionsRef.current = actions;
+            }}
+          />
+          <CarouselGenerateControl carousel={carousel} enabled={generateEnabled} />
+          <section
+            id={slidesSection.id}
+            className="carousel-page-section"
+            aria-labelledby="carousel-slides-heading"
+          >
+            <h2 id="carousel-slides-heading">{slidesSection.label}</h2>
+            {slidesNotice === null ? null : (
+              <p className="field-hint" id="carousel-slides-notice">
+                {slidesNotice}
               </p>
-              {textGeneration.available ? null : (
-                <p className="field-hint" id="generate-unavailable">
-                  {textGeneration.detail}
-                </p>
-              )}
-              {carousel.slides.length === 0 ? (
-                <p>No slides yet.</p>
-              ) : (
-                <ul className="slide-grid">
-                  {carousel.slides.map((slide: SlideReadResponse): ReactElement => (
-                    <li key={slide.id}>
+            )}
+            {slideCountHint === null ? null : (
+              <p className="field-hint" id="carousel-slide-count-fallback">
+                {slideCountHint}
+              </p>
+            )}
+            {canWrite ? (
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={(): void => {
+                    setPendingDelete(true);
+                  }}
+                >
+                  Delete carousel
+                </button>
+                <button
+                  id="add-slide"
+                  type="button"
+                  onClick={(): void => {
+                    leaveEditor(onCreateSlide);
+                  }}
+                >
+                  Add slide
+                </button>
+                <button
+                  id="generate-slide"
+                  type="button"
+                  disabled={!textGeneration.available || isGenerating}
+                  onClick={(): void => {
+                    void handleGenerateSlide();
+                  }}
+                >
+                  {isGenerating ? "Generating…" : "Generate slide"}
+                </button>
+              </div>
+            ) : null}
+            <p className="field-hint">
+              Generate slide writes a draft.
+              A draft stays off the live slide until you accept it.
+            </p>
+            {textGeneration.available ? null : (
+              <p className="field-hint" id="generate-unavailable">
+                {textGeneration.detail}
+              </p>
+            )}
+            {carousel.slides.length === 0 ? (
+              <p>No slides yet.</p>
+            ) : (
+              <ul className="slide-grid">
+                {carousel.slides.map((slide: SlideReadResponse): ReactElement => (
+                  <li key={slide.id}>
+                    <button
+                      type="button"
+                      className="slide-card"
+                      onClick={(): void => {
+                        leaveEditor((): void => {
+                          onOpenSlide(slide.id);
+                        });
+                      }}
+                    >
+                      <SlideCardBody albumId={carousel.album_id} slide={slide} />
+                    </button>
+                    {canWrite ? (
                       <button
                         type="button"
-                        className="slide-card"
+                        className="danger"
                         onClick={(): void => {
-                          onOpenSlide(slide.id);
+                          setPendingSlideDelete(slide);
                         }}
                       >
-                        <SlideCardBody albumId={carousel.album_id} slide={slide} />
+                        Delete slide
                       </button>
-                      {canWrite ? (
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={(): void => {
-                            setPendingSlideDelete(slide);
-                          }}
-                        >
-                          Delete slide
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          ) : null}
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          <section
+            id={finalSection.id}
+            className="carousel-page-section"
+            aria-labelledby="carousel-final-heading"
+          >
+            <h2 id="carousel-final-heading">{finalSection.label}</h2>
+            <p className="field-hint" id="carousel-final-notice">
+              {finalSectionNotice()}
+            </p>
+          </section>
         </>
       )}
       {pendingDelete && carousel !== null ? (
@@ -1011,10 +966,7 @@ interface SlideEditorViewProps {
   loadError: unknown;
   statusMessage: string;
   textGeneration: TextGenerationStatusResponse;
-  isSavingStep: boolean;
-  stepError: unknown;
-  displayStep: number;
-  onOpenStep: (editorStep: number) => void;
+  onOpenContent: () => void;
   onBack: () => void;
   onSaved: (savedSlide: SlideReadResponse, message: string) => void;
   onSlideDeleted: () => void;
@@ -1026,10 +978,7 @@ function SlideEditorView({
   loadError,
   statusMessage,
   textGeneration,
-  isSavingStep,
-  stepError,
-  displayStep,
-  onOpenStep,
+  onOpenContent,
   onBack,
   onSaved,
   onSlideDeleted,
@@ -1369,14 +1318,8 @@ function SlideEditorView({
     void leaveAfterAutosave(autosave.flush, autosave.isDirty, onBack);
   };
 
-  const handleStep = (editorStep: number): void => {
-    void leaveAfterAutosave(
-      autosave.flush,
-      autosave.isDirty,
-      (): void => {
-        onOpenStep(editorStep);
-      },
-    );
+  const handleOpenContent = (): void => {
+    void leaveAfterAutosave(autosave.flush, autosave.isDirty, onOpenContent);
   };
 
   const autosaveHint: string = slide !== null
@@ -1387,13 +1330,9 @@ function SlideEditorView({
   const editorBusy: boolean = isGenerating || isAccepting || isChoosingImage;
 
   const pageTitle: string = slide === null ? "New slide" : "Slide";
-  let pageLede: string = (
+  const pageLede: string = (
     "The fields follow this carousel's skeleton. Preview shows the slide on that skeleton."
   );
-
-  if (carousel !== null) {
-    pageLede = `${openStepSentence(displayStep)} ${pageLede}`;
-  }
 
   return (
     <section>
@@ -1418,19 +1357,11 @@ function SlideEditorView({
       <ErrorBanner error={loadError} />
       <ErrorBanner error={skeletonError} />
       <ErrorBanner error={saveError} />
-      <ErrorBanner error={stepError} />
       {statusMessage !== "" ? <p className="status-banner">{statusMessage}</p> : null}
       {carousel === null ? (
         <p>Loading carousel…</p>
       ) : (
         <>
-          <CarouselStepBar
-            editorStep={displayStep}
-            steps={carousel.steps}
-            canWrite={canWrite}
-            isSavingStep={isSavingStep}
-            onOpenStep={handleStep}
-          />
           {slide === null && !canWrite ? (
             <p>This slide is not available.</p>
           ) : !skeletonReady ? (
@@ -1450,9 +1381,7 @@ function SlideEditorView({
                 onChoose={(albumImageId: string): void => {
                   void handleChooseAlbumImage(albumImageId);
                 }}
-                onOpenContent={(): void => {
-                  handleStep(CAROUSEL_STEP_CONTENT);
-                }}
+                onOpenContent={handleOpenContent}
               />
             ) : null}
             <form

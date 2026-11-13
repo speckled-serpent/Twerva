@@ -28,6 +28,7 @@ import {
   visibleAlbumImageCount,
   visibleAlbumName,
 } from "./carouselContent";
+import { carouselPageSection, type CarouselPageSection } from "./carouselPage";
 import { skeletonRequiresImage } from "./slideSkeletonShape";
 
 export interface CarouselContentStepProps {
@@ -38,7 +39,7 @@ export interface CarouselContentStepProps {
 }
 
 /**
- * Step 2: attach an existing album, or create one by name, then edit its images.
+ * Content: attach an existing album, or create one by name, then edit its images.
  *
  * The attached album shows its name and image count. Replace and clear
  * stay on this step. A 409 shows the API reason in the form and leaves
@@ -48,7 +49,7 @@ export interface CarouselContentStepProps {
  * those images, or change the research list.
  *
  * @param props - The open carousel and the write callback
- * @returns The Content step
+ * @returns The Content section
  */
 export function CarouselContentStep({
   carousel,
@@ -247,8 +248,15 @@ export function CarouselContentStep({
     }
   };
 
+  const contentSection: CarouselPageSection = carouselPageSection("content");
+
   return (
-    <section id="carousel-content" className="carousel-content stack-form" aria-label="Content">
+    <section
+      id={contentSection.id}
+      className="carousel-page-section carousel-content stack-form"
+      aria-labelledby="carousel-content-heading"
+    >
+      <h2 id="carousel-content-heading">{contentSection.label}</h2>
       <ErrorBanner error={skeletonError} />
       <ErrorBanner error={albumError} />
       <AlbumStatus
