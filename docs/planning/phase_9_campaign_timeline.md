@@ -103,7 +103,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Assembly guard
 
-- [ ] **9.7 Keep a posted assembly where it is**
+- [x] **9.7 Keep a posted assembly where it is**
 
   `assemble_carousel_final` in `app/carousels/final_assembly.py` checks the current assembly before it deletes frame files or child rows. When any `campaign_posts` row points at one of that assembly's `assembled_carousels`, it raises 409, detail `This generation is on a campaign timeline. Duplicate it before assembling again.` It writes nothing and does not delete PNGs. An assembly with no campaign post still replaces its children, as it does today. The first assemble, with no assembly row, is unchanged. Duplicate stays free to add a generation, and that new generation still has no assembly until Assemble. `run_campaign` and `generate_carousel_artifact` are not called from this check.
 

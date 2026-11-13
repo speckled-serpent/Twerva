@@ -39,7 +39,8 @@ from app.api.v1.campaigns import (
     run_campaign,
     start_campaign_by_id,
 )
-from app.api.v1.carousel_writes import create_carousel
+from app.api.v1.carousel_assembly import assemble_carousel
+from app.api.v1.carousel_writes import create_carousel, create_slide
 from app.api.v1.clusters import create_cluster
 from app.api.v1.artifacts import create_artifact
 from app.api.v1.post_jobs import create_post_job
@@ -57,9 +58,11 @@ from app.api.v1.schemas import (
     PostJobMetricsCreateRequest,
     CarouselCreateRequest,
     SkeletonCreateRequest,
+    SlideWriteRequest,
 )
 from app.api.v1.skeletons import create_skeleton
 from app.auth.passwords import hash_plain_password
+from app.carousels.final_assembly import GENERATION_ON_TIMELINE_DETAIL
 from app.campaigns.posts import list_timeline_posts
 from app.campaigns.posts import (
     ASSEMBLED_CAROUSEL_NOT_FOUND_DETAIL,
@@ -1019,6 +1022,96 @@ class CampaignPostPlacementTests(unittest.TestCase):
         self.assertNotIn(approved_artifact.caption, captions)
         self.assertLess(timed_index, untimed_index)
 
+    def test_a_posted_assembly_stays_until_the_post_is_removed(self) -> None:
+        """A campaign post blocks the next assemble and keeps the PNG files."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            carousel_id, skeleton_id, assembly_id, group_id, first_refs = (
+                _assemble_two_live_slides(self.session)
+            )
+            campaign_id: uuid.UUID = _campaign_for_carousel(
+                self.session,
+                skeleton_id,
+                carousel_id,
+            )
+            placed: CampaignPostRead = _place(
+                self.session,
+                campaign_id,
+                group_id,
+                self.world.open_account_id,
+            )
+
+            with self.assertRaises(HTTPException) as refused:
+                assemble_carousel(carousel_id, self.session, None)
+
+            held_refs: list[str] = _frame_asset_refs(self.session, assembly_id)
+            held_files: bool = all(
+                (Path(storage.name) / asset_ref).is_file() for asset_ref in first_refs
+            )
+            remove_campaign_post_by_id(campaign_id, placed.id, self.session, None)
+            assemble_carousel(carousel_id, self.session, None)
+            replaced_refs: list[str] = _frame_asset_refs(self.session, assembly_id)
+            old_files_removed: bool = all(
+                not (Path(storage.name) / asset_ref).exists() for asset_ref in first_refs
+            )
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+        self.assertIn("post", methods_by_path["/api/v1/generate/carousel"])
+        self.assertEqual(refused.exception.status_code, 409)
+        self.assertEqual(refused.exception.detail, GENERATION_ON_TIMELINE_DETAIL)
+        self.assertEqual(held_refs, first_refs)
+        self.assertTrue(held_files)
+        self.assertEqual(_assembly_count(self.session, carousel_id), 1)
+        self.assertNotEqual(replaced_refs, first_refs)
+        self.assertTrue(old_files_removed)
+        self.assertGreater(len(replaced_refs), 0)
+
+    def test_an_assembly_with_no_post_still_replaces_its_frames(self) -> None:
+        """A second assemble replaces frames when nothing is on the timeline."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            carousel_id, _skeleton_id, assembly_id, _group_id, first_refs = (
+                _assemble_two_live_slides(self.session)
+            )
+            assemble_carousel(carousel_id, self.session, None)
+            replaced_refs: list[str] = _frame_asset_refs(self.session, assembly_id)
+            old_files_removed: bool = all(
+                not (Path(storage.name) / asset_ref).exists() for asset_ref in first_refs
+            )
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+        self.assertTrue(old_files_removed)
+        self.assertEqual(_assembly_count(self.session, carousel_id), 1)
+        self.assertNotEqual(replaced_refs, first_refs)
+        self.assertGreater(len(replaced_refs), 0)
+
 
 class _RaisingPublishAdapter:
     """Test double whose media publish always fails."""
@@ -1361,6 +1454,109 @@ def _fresh_assembled(session: Session, caption: str) -> uuid.UUID:
     )
 
     return assembled_id
+
+
+def _assemble_two_live_slides(
+    session: Session,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, list[str]]:
+    """Assemble a new carousel that has two live slides."""
+
+    suffix: str = uuid.uuid4().hex[:8]
+    created_skeleton = create_skeleton(
+        SkeletonCreateRequest(name=f"Guard skeleton {suffix}"),
+        session,
+        None,
+    )
+    created_carousel = create_carousel(
+        CarouselCreateRequest(
+            name=f"Guard carousel {suffix}",
+            skeleton_id=created_skeleton.id,
+        ),
+        session,
+        None,
+    )
+    create_slide(
+        created_carousel.id,
+        SlideWriteRequest(name="One"),
+        session,
+        None,
+    )
+    create_slide(
+        created_carousel.id,
+        SlideWriteRequest(name="Two"),
+        session,
+        None,
+    )
+    assembled = assemble_carousel(created_carousel.id, session, None)
+
+    if assembled.assembly is None or len(assembled.assembly.carousels) == 0:
+        raise AssertionError("Assemble did not store a carousel.")
+
+    assembly_id: uuid.UUID = assembled.assembly.id
+    group_id: uuid.UUID = assembled.assembly.carousels[0].id
+    frame_refs: list[str] = _frame_asset_refs(session, assembly_id)
+
+    return created_carousel.id, created_skeleton.id, assembly_id, group_id, frame_refs
+
+
+def _campaign_for_carousel(
+    session: Session,
+    skeleton_id: uuid.UUID,
+    carousel_id: uuid.UUID,
+) -> uuid.UUID:
+    """Bind a new campaign to a carousel that was just assembled."""
+
+    suffix: str = uuid.uuid4().hex[:8]
+    created_campaign = create_campaign(
+        CampaignCreateRequest(
+            name=f"Guard campaign {suffix}",
+            campaign_type=CampaignType.SPOTMU,
+            skeleton_id=skeleton_id,
+            carousel_id=carousel_id,
+            platforms=[Platform.INSTAGRAM],
+            account_ids=[CampaignPostPlacementTests.world.open_account_id],
+            interests=[],
+        ),
+        session,
+        None,
+    )
+
+    return created_campaign.id
+
+
+def _frame_asset_refs(session: Session, assembly_id: uuid.UUID) -> list[str]:
+    """Return the frame paths stored on one assembly, in position order."""
+
+    session.expire_all()
+    frames: list[AssembledCarouselFrame] = list(
+        session.scalars(
+            select(AssembledCarouselFrame)
+            .join(
+                AssembledCarousel,
+                AssembledCarouselFrame.assembled_carousel_id == AssembledCarousel.id,
+            )
+            .where(AssembledCarousel.assembly_id == assembly_id)
+            .order_by(AssembledCarousel.position, AssembledCarouselFrame.position),
+        ).all(),
+    )
+    asset_refs: list[str] = [frame.asset_ref for frame in frames]
+
+    return asset_refs
+
+
+def _assembly_count(session: Session, carousel_id: uuid.UUID) -> int:
+    """Return how many assembly rows belong to this carousel."""
+
+    stored_count: int | None = session.scalar(
+        select(func.count())
+        .select_from(CarouselAssembly)
+        .where(CarouselAssembly.carousel_id == carousel_id),
+    )
+
+    if stored_count is None:
+        return 0
+
+    return stored_count
 
 
 def _campaign_on_world_carousel(session: Session) -> uuid.UUID:
