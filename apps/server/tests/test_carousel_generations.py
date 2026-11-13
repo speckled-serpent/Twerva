@@ -6,6 +6,7 @@ import os
 import unittest
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("TWERVA_ENV", "test")
 
@@ -17,12 +18,20 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from app.api.v1.carousel_text import (
+    accept_slide_draft_batch,
+    discard_slide_draft_batch,
+    generate_slide_collection,
+)
 from app.api.v1.carousel_writes import (
     create_carousel,
+    create_slide,
     delete_carousel_album,
     delete_carousel_instruction,
     delete_carousel_research,
+    delete_slide,
     patch_carousel_instruction,
+    patch_slide,
     post_carousel_album,
     post_carousel_instruction,
     post_carousel_research,
@@ -30,6 +39,7 @@ from app.api.v1.carousel_writes import (
     put_carousel_instructions,
     put_carousel_research,
 )
+from app.api.v1.skeleton_elements import create_skeleton_element
 from app.api.v1.schemas import (
     CarouselAlbumAttachRequest,
     CarouselAlbumCreateRequest,
@@ -39,6 +49,9 @@ from app.api.v1.schemas import (
     CarouselInstructionPatchRequest,
     CarouselResearchAttachRequest,
     CarouselResearchOrderRequest,
+    SkeletonElementCreateRequest,
+    SlideElementTextWrite,
+    SlideWriteRequest,
 )
 from app.carousels.editing import new_row_id
 from app.carousels.generations import replace_current_generation_snapshot
@@ -342,6 +355,253 @@ class ReplaceCurrentGenerationSnapshotTests(unittest.TestCase):
             self.assertEqual(self._generation_number(session, created.id), 1)
             self._assert_older_generation(session, older.id)
             self.assertEqual(self._foreign_counts(session), before_counts)
+
+    def test_slide_writes_refresh_generation_one(self) -> None:
+        """Slide edits, a generated set, and a new text element update generation 1."""
+
+        previous_provider: str | None = os.environ.get("TEXT_GENERATION_PROVIDER")
+        os.environ["TEXT_GENERATION_PROVIDER"] = "fake"
+        clear_settings_cache()
+
+        try:
+            with Session(self.database_engine) as session:
+                element: SkeletonElement = self._text_element(session)
+                created = create_carousel(
+                    CarouselCreateRequest(name="Slides", skeleton_id=element.skeleton_id),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                first = create_slide(
+                    created.id,
+                    _slide_write(element.id, "Quay", "Reviewed line"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._assert_snapshot_slides(
+                    session,
+                    created.id,
+                    [("Quay", SlideTextStatus.LIVE, "Reviewed line", None)],
+                )
+                patch_slide(
+                    created.id,
+                    first.id,
+                    _slide_write(element.id, "Pier", "New line"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._assert_snapshot_slides(
+                    session,
+                    created.id,
+                    [("Pier", SlideTextStatus.LIVE, "New line", None)],
+                )
+                second = create_slide(
+                    created.id,
+                    _slide_write(element.id, "Dock", "Beside"),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                patch_slide(
+                    created.id,
+                    first.id,
+                    _slide_write(element.id, "Pier", "New line", [second.id]),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._assert_exclusion_pair(session, created.id, first.id, second.id)
+                delete_slide(
+                    created.id,
+                    second.id,
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._assert_snapshot_slides(
+                    session,
+                    created.id,
+                    [("Pier", SlideTextStatus.LIVE, "New line", None)],
+                )
+                post_carousel_instruction(
+                    created.id,
+                    CarouselInstructionCreateRequest(body=KEPT_BODY),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+
+                with patch(
+                    "app.carousels.slide_collection.slide_count_or_global_default",
+                    return_value=1,
+                ):
+                    generated = generate_slide_collection(
+                        created.id,
+                        session,  # type: ignore[arg-type]
+                        None,
+                    )
+
+                assert generated.pending_slide_draft_batch is not None
+                drafted_value: str = f"Claim. {KEPT_BODY}"
+                self._assert_snapshot_slides(
+                    session,
+                    created.id,
+                    [
+                        ("Pier", SlideTextStatus.LIVE, "New line", None),
+                        ("Drafted slide 1", SlideTextStatus.DRAFT, "", drafted_value),
+                    ],
+                )
+                self.assertEqual(self._batch_statuses(session, created.id), ["pending"])
+                accept_slide_draft_batch(
+                    created.id,
+                    generated.pending_slide_draft_batch.id,
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._assert_snapshot_slides(
+                    session,
+                    created.id,
+                    [
+                        ("Pier", SlideTextStatus.LIVE, "New line", None),
+                        ("Drafted slide 1", SlideTextStatus.LIVE, drafted_value, None),
+                    ],
+                )
+
+                with patch(
+                    "app.carousels.slide_collection.slide_count_or_global_default",
+                    return_value=1,
+                ):
+                    second_set = generate_slide_collection(
+                        created.id,
+                        session,  # type: ignore[arg-type]
+                        None,
+                    )
+
+                assert second_set.pending_slide_draft_batch is not None
+                discard_slide_draft_batch(
+                    created.id,
+                    second_set.pending_slide_draft_batch.id,
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._assert_snapshot_slides(
+                    session,
+                    created.id,
+                    [
+                        ("Pier", SlideTextStatus.LIVE, "New line", None),
+                        ("Drafted slide 1", SlideTextStatus.LIVE, drafted_value, None),
+                    ],
+                )
+                added: SkeletonElementReadResponse = create_skeleton_element(
+                    element.skeleton_id,
+                    SkeletonElementCreateRequest(
+                        name="Aside",
+                        band=SkeletonElementBand.BOTTOM,
+                        content_kind=SkeletonElementContentKind.TEXT,
+                        font_family="Georgia",
+                        font_size=24,
+                        font_color="#222222",
+                        alignment=SkeletonElementAlignment.LEFT,
+                    ),
+                    session,  # type: ignore[arg-type]
+                    None,
+                )
+                self._assert_empty_element_on_snapshot(session, created.id, added.id)
+                self.assertEqual(self._generation_number(session, created.id), 1)
+        finally:
+            if previous_provider is None:
+                os.environ.pop("TEXT_GENERATION_PROVIDER", None)
+            else:
+                os.environ["TEXT_GENERATION_PROVIDER"] = previous_provider
+
+            clear_settings_cache()
+
+    def _assert_snapshot_slides(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        expected: list[tuple[str, SlideTextStatus, str, str | None]],
+    ) -> None:
+        """The current snapshot slides match name, status, value, and draft."""
+
+        generation: CarouselGeneration = self._current_generation_for(session, carousel_id)
+        actual: list[tuple[str, SlideTextStatus, str, str | None]] = []
+
+        for slide in sorted(list(generation.slides), key=_position):
+            copied_texts: list[CarouselGenerationSlideText] = list(slide.texts)
+            value: str = ""
+            draft_value: str | None = None
+
+            for copied_text in copied_texts:
+
+                if copied_text.value != "" or copied_text.draft_value not in (None, ""):
+                    value = copied_text.value
+                    draft_value = copied_text.draft_value
+
+            if value == "" and draft_value in (None, "") and len(copied_texts) > 0:
+                value = copied_texts[0].value
+                draft_value = copied_texts[0].draft_value
+
+            actual.append((slide.name, slide.text_status, value, draft_value))
+
+        self.assertEqual(actual, expected)
+
+    def _assert_exclusion_pair(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        first_slide_id: uuid.UUID,
+        second_slide_id: uuid.UUID,
+    ) -> None:
+        """Both directions of the pair are on the current snapshot."""
+
+        generation: CarouselGeneration = self._current_generation_for(session, carousel_id)
+        pairs: set[tuple[uuid.UUID | None, uuid.UUID | None]] = set()
+
+        for slide in list(generation.slides):
+
+            for exclusion in list(slide.exclusions):
+                pairs.add((
+                    slide.source_slide_id,
+                    exclusion.excluded_generation_slide.source_slide_id,
+                ))
+
+        self.assertEqual(
+            pairs,
+            {
+                (first_slide_id, second_slide_id),
+                (second_slide_id, first_slide_id),
+            },
+        )
+
+    def _assert_empty_element_on_snapshot(
+        self,
+        session: Session,
+        carousel_id: uuid.UUID,
+        element_id: uuid.UUID,
+    ) -> None:
+        """Every current snapshot slide stores an empty value for the new element."""
+
+        generation: CarouselGeneration = self._current_generation_for(session, carousel_id)
+
+        self.assertGreater(len(list(generation.slides)), 0)
+
+        for slide in list(generation.slides):
+            matched: list[CarouselGenerationSlideText] = [
+                copied_text
+                for copied_text in list(slide.texts)
+                if copied_text.skeleton_element_id == element_id
+            ]
+
+            self.assertEqual(len(matched), 1)
+            self.assertEqual(matched[0].value, "")
+
+    def _batch_statuses(self, session: Session, carousel_id: uuid.UUID) -> list[str]:
+        """Return draft-batch statuses for one carousel."""
+
+        batches: list[SlideDraftBatch] = list(
+            session.scalars(
+                select(SlideDraftBatch).where(SlideDraftBatch.carousel_id == carousel_id),
+            ).all(),
+        )
+        statuses: list[str] = [batch.status for batch in batches]
+
+        return statuses
 
     def _assert_write_snapshot(
         self,
@@ -788,6 +1048,23 @@ def _album_image(album_id: uuid.UUID, position: int, relative_path: str) -> Albu
     )
 
     return image
+
+
+def _slide_write(
+    element_id: uuid.UUID,
+    name: str,
+    value: str,
+    excluded_slide_ids: list[uuid.UUID] | None = None,
+) -> SlideWriteRequest:
+    """Return a slide write for the one text element."""
+
+    request: SlideWriteRequest = SlideWriteRequest(
+        name=name,
+        texts=[SlideElementTextWrite(skeleton_element_id=element_id, value=value)],
+        excluded_slide_ids=[] if excluded_slide_ids is None else excluded_slide_ids,
+    )
+
+    return request
 
 
 def _slide(

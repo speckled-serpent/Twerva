@@ -67,7 +67,7 @@ Final already keys `carousel_assemblies` by `(carousel_id, generation_number)`. 
 
   Acceptance, in `test_carousel_generations.py`: creating a carousel stores generation 1 and no child rows. Saving an instruction body, attaching a research item, and attaching an album each show up on generation 1 and nowhere else. Clearing the album sets the snapshot `album_id` null and removes its image rows. Deleting the only instruction leaves no instruction rows. `generation_number` stays 1. An `artifacts` count and a `campaign_carousels` count stay put.
 
-- [ ] **8.4 Refresh the snapshot from slide writes**
+- [x] **8.4 Refresh the snapshot from slide writes**
 
   Call the same helper from `create_slide`, `patch_slide`, `delete_slide`, and `delete_slide_image` in `app/api/v1/carousel_writes.py`; from `generate_source_slide`, `generate_slide_text`, and `accept_slide_text` in `app/api/v1/carousel_text.py`; from `write_generated_slide_collection`, `accept_generated_slide_collection`, and `discard_generated_slide_collection` in `app/carousels/slide_collection.py`; and from `create_skeleton_element`, `delete_skeleton_element`, and the `sync_empty_texts_for_skeleton_element` branch of `patch_skeleton_element` in `app/api/v1/skeleton_elements.py`. The skeleton routes refresh the current generation of each carousel bound to that skeleton. A pending batch is not copied. The snapshot slide still stores `text_status`, `value`, and `draft_value`.
 

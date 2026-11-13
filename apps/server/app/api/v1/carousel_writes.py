@@ -5,9 +5,9 @@ chosen at create. Create stores generation 1 and opens on Basic.
 A slide image is an album image that already exists. Storing one
 does not create an album. Research is an ordered list and does not
 gate a step. Instruction documents are the carousel's own rows.
-Writing one does not change slides. Create, album, research, and
-instruction writes refresh the current generation snapshot in the
-same commit. Rename and the open step do not.
+Writing one does not change slides. Create, album, research,
+instruction, and slide writes refresh the current generation
+snapshot in the same commit. Rename and the open step do not.
 """
 
 from __future__ import annotations
@@ -853,6 +853,7 @@ def create_slide(
     _replace_texts(created_slide, stored_texts, our_database_session)
     our_database_session.add(created_slide)
     _store_exclusion_pairs(created_slide, excluded_ids, found_source, our_database_session)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",
@@ -916,6 +917,7 @@ def patch_slide(
 
     _replace_exclusion_pairs(found_slide, excluded_ids, found_source, our_database_session)
     _store_slide_image(found_slide, chosen_image)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",
@@ -948,6 +950,7 @@ def delete_slide(
     )
     _clear_exclusion_pairs(found_slide, found_source, our_database_session)
     our_database_session.delete(found_slide)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be deleted.",
@@ -991,6 +994,7 @@ def delete_slide_image(
     ]
     found_slide.images = []
     our_database_session.delete(found_image)
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Image could not be deleted.",

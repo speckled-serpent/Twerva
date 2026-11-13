@@ -30,7 +30,13 @@ from app.api.v1.carousel_writes import (
 )
 from app.api.v1.carousels import get_carousel
 from app.models.album import Album, AlbumImage
-from app.models.carousel import Carousel, CarouselInstruction, CarouselResearchItem, Slide
+from app.models.carousel import (
+    Carousel,
+    CarouselGeneration,
+    CarouselInstruction,
+    CarouselResearchItem,
+    Slide,
+)
 from app.models.research_item import ResearchItem
 from app.models.enums import (
     AdvertisementType,
@@ -126,10 +132,22 @@ class _MemoryCarouselSession:
         return
 
     def expire(self, row: object, attribute_names: list[str] | None = None) -> None:
-        """Leave in-memory collections loaded. There is no database to refresh."""
+        """Drop cached snapshot children. Working rows stay in memory.
 
-        _ = row
-        _ = attribute_names
+        A real session reloads a deleted snapshot from the database.
+        This stand-in empties a generation's child lists so the next
+        copy does not append onto rows that were just deleted.
+        """
+
+        if attribute_names is None or not isinstance(row, CarouselGeneration):
+
+            return
+
+        for attribute_name in attribute_names:
+            collection: object = getattr(row, attribute_name, None)
+
+            if isinstance(collection, list):
+                collection.clear()
 
     def refresh(self, row: object) -> None:
         persisted_at: datetime = datetime(2026, 10, 14, 12, 0, tzinfo=timezone.utc)

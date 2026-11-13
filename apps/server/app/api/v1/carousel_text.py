@@ -17,6 +17,7 @@ from app.api.v1.lookups import (
     fetch_skeleton_by_id_or_raise,
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
+from app.carousels.generations import replace_current_generation_snapshot
 from app.api.v1.schemas import (
     CarouselReadResponse,
     SlideAcceptTextRequest,
@@ -137,6 +138,7 @@ def generate_source_slide(
         _draft_pairs(found_skeleton, drafted_text),
         our_database_session,
     )
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",
@@ -283,6 +285,7 @@ def generate_slide_text(
         our_database_session,
     )
     found_slide.text_status = SlideTextStatus.DRAFT
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",
@@ -327,6 +330,7 @@ def accept_slide_text(
     )
     _replace_texts(found_slide, stored_texts, our_database_session)
     found_slide.text_status = SlideTextStatus.LIVE
+    replace_current_generation_snapshot(found_source.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slide could not be saved.",

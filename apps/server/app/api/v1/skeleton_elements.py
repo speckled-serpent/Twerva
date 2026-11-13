@@ -23,6 +23,7 @@ from app.models.enums import (
     SkeletonElementContentKind,
     SkeletonElementTextSource,
 )
+from app.carousels.generations import refresh_generation_snapshots_for_skeleton
 from app.carousels.slide_text_sync import sync_empty_texts_for_skeleton_element
 from app.skeletons.elements import (
     SKELETON_ELEMENT_BAND_REQUIRED_DETAIL,
@@ -115,6 +116,7 @@ def create_skeleton_element(
         skeleton_element_create_request.sort_order,
     )
     sync_empty_texts_for_skeleton_element(created_element, our_database_session)
+    refresh_generation_snapshots_for_skeleton(found_skeleton.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Skeleton element could not be saved (conflict).",
@@ -274,6 +276,7 @@ def patch_skeleton_element(
 
     if became_text:
         sync_empty_texts_for_skeleton_element(found_element, our_database_session)
+        refresh_generation_snapshots_for_skeleton(found_skeleton.id, our_database_session)
 
     commit_database_session_or_raise_conflict(
         our_database_session,
@@ -311,6 +314,7 @@ def delete_skeleton_element(
         None,
     )
     _store_band_order(our_database_session, remaining_members)
+    refresh_generation_snapshots_for_skeleton(found_skeleton.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Skeleton element could not be deleted (conflict).",

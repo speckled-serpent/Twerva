@@ -162,7 +162,7 @@ class CarouselAssemblyRouteTests(unittest.TestCase):
             carousel.assemblies[0].generation_id,
             carousel.generations[0].id,
         )
-        self.assertEqual(list(carousel.generations[0].slides), [])
+        self.assertEqual(len(list(carousel.generations[0].slides)), 6)
         self.assertEqual([len(group.frames) for group in second.assembly.carousels], [5, 1])
         written_files: list[Path] = [
             path for path in Path(self.storage.name).rglob("*") if path.is_file()

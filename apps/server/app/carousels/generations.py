@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import fetch_carousel_by_id_or_raise
@@ -98,6 +99,8 @@ def replace_current_generation_snapshot(
         carousel_id,
         our_database_session,
     )
+    our_database_session.flush()
+    _expire_working_rows(carousel, our_database_session)
     generation: CarouselGeneration = ensure_current_generation(
         carousel,
         our_database_session,
@@ -116,6 +119,48 @@ def replace_current_generation_snapshot(
     _copy_exclusions(carousel, copied_slides, our_database_session)
 
     return generation
+
+
+def refresh_generation_snapshots_for_skeleton(
+    skeleton_id: uuid.UUID,
+    our_database_session: Session,
+) -> None:
+    """Refresh the current snapshot of every carousel on this skeleton.
+
+    Pending slide writes are flushed first. Each carousel is refreshed
+    on its own current generation number. A skeleton with no carousels
+    changes nothing.
+
+    Args:
+        skeleton_id: The skeleton whose bound carousels are copied.
+        our_database_session: Open session. This function flushes and
+            does not commit.
+    """
+
+    our_database_session.flush()
+    carousel_id_rows: list[tuple[uuid.UUID]] = list(
+        our_database_session.execute(
+            select(Carousel.id).where(Carousel.skeleton_id == skeleton_id),
+        ).all(),
+    )
+
+    for carousel_id_row in carousel_id_rows:
+        replace_current_generation_snapshot(carousel_id_row[0], our_database_session)
+
+
+def _expire_working_rows(carousel: Carousel, our_database_session: Session) -> None:
+    """Drop cached working rows so the copy reads the flushed write."""
+
+    our_database_session.expire(
+        carousel,
+        ["slides", "instructions", "research_links", "album"],
+    )
+
+    for slide in list(carousel.slides):
+        our_database_session.expire(slide, ["element_texts", "exclusions"])
+
+    if carousel.album is not None:
+        our_database_session.expire(carousel.album, ["images"])
 
 
 def _delete_snapshot_children(

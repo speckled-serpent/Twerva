@@ -19,6 +19,7 @@ from app.api.v1.carousel_writes import (
     _store_draft_texts,
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
+from app.carousels.generations import replace_current_generation_snapshot
 from app.carousels.collection_generation import (
     DraftedCollectionSlide,
     DraftedSlideCollection,
@@ -132,6 +133,7 @@ def write_generated_slide_collection(
             slide_count,
             album_images,
         )
+        replace_current_generation_snapshot(carousel.id, our_database_session)
         commit_database_session_or_raise_conflict(
             our_database_session,
             conflict_detail="Slides could not be saved.",
@@ -186,6 +188,7 @@ def accept_generated_slide_collection(
         _accept_slide_text(slide)
 
     batch.status = ACCEPTED_BATCH_STATUS
+    replace_current_generation_snapshot(carousel.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slides could not be saved.",
@@ -215,6 +218,7 @@ def discard_generated_slide_collection(
         our_database_session.delete(slide)
 
     batch.status = DISCARDED_BATCH_STATUS
+    replace_current_generation_snapshot(carousel.id, our_database_session)
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slides could not be discarded.",
