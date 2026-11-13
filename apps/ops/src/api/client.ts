@@ -511,6 +511,22 @@ export async function assembleCarousel(
 }
 
 /**
+ * Start the next generation from the working rows.
+ *
+ * @param carouselId - Carousel UUID
+ * @returns The carousel detail at the new generation number
+ */
+export async function duplicateCarouselGeneration(
+  carouselId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/generations`,
+  );
+}
+
+/**
  * Same-origin URL for one frozen assembly frame.
  *
  * @param carouselId - Carousel UUID

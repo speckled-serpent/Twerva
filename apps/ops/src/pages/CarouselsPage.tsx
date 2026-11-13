@@ -4,6 +4,7 @@ import {
   acceptSlideText,
   createCarouselSlide,
   deleteCarousel,
+  duplicateCarouselGeneration,
   fetchTextGenerationStatus,
   generateCarouselSlide,
   generateSlideText,
@@ -45,6 +46,15 @@ import {
 } from "./carouselCollection";
 import { type InstructionDraft } from "./carouselInstructions";
 import { CarouselGeneration, CarouselSectionNav } from "./CarouselSectionNav";
+import {
+  DUPLICATE_GENERATION_BUSY_LABEL,
+  DUPLICATE_GENERATION_LABEL,
+  carouselAfterDuplicate,
+  duplicateGenerationAccessibleName,
+  duplicateGenerationEnabled,
+  duplicateGenerationShown,
+  type DuplicateGenerationState,
+} from "./carouselGeneration";
 import {
   carouselLabelFingerprint,
   carouselLabelReadiness,
@@ -357,6 +367,7 @@ export function CarouselsPage({
                 ...listedCarousel,
                 name: savedCarousel.name,
                 album_id: savedCarousel.album_id,
+                generation_number: savedCarousel.generation_number,
                 editor_step: savedCarousel.editor_step,
                 updated_at: savedCarousel.updated_at,
               };
@@ -566,6 +577,7 @@ function AlbumView({
   );
   const [saveError, setSaveError] = useState<unknown>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isDuplicating, setIsDuplicating] = useState<boolean>(false);
   const [instructionDraft, setInstructionDraft] = useState<InstructionDraft>({
     instructionId: null,
     body: "",
@@ -724,6 +736,45 @@ function AlbumView({
     });
   };
 
+  const duplicateEnabled: boolean = duplicateGenerationEnabled(canWrite);
+  const duplicateAccessibleName: string = duplicateGenerationAccessibleName(
+    canWrite,
+    isDuplicating,
+  );
+
+  const duplicateOpenGeneration = async (): Promise<void> => {
+
+    if (carousel === null || !duplicateEnabled) {
+      return;
+    }
+
+    setIsDuplicating(true);
+    setSaveError(null);
+
+    try {
+      const savedCarousel: CarouselReadResponse = await duplicateCarouselGeneration(carousel.id);
+      const nextState: DuplicateGenerationState<CarouselReadResponse> =
+        carouselAfterDuplicate(savedCarousel);
+      onCarouselSaved(nextState.carousel);
+      onStatusMessage(nextState.statusMessage);
+    } catch (caughtError: unknown) {
+      setSaveError(caughtError);
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
+  const handleDuplicateGeneration = (): void => {
+
+    if (carousel === null || !duplicateEnabled || isDuplicating) {
+      return;
+    }
+
+    leaveEditor((): void => {
+      void duplicateOpenGeneration();
+    });
+  };
+
   return (
     <section>
       <div className="page-header-row">
@@ -732,6 +783,17 @@ function AlbumView({
             <h1>{headingName}</h1>
             {carousel === null ? null : (
               <CarouselGeneration generationNumber={carousel.generation_number} />
+            )}
+            {carousel === null || !duplicateGenerationShown("carousel") ? null : (
+              <button
+                id="duplicate-generation"
+                type="button"
+                disabled={!duplicateEnabled || isDuplicating}
+                aria-label={duplicateAccessibleName}
+                onClick={handleDuplicateGeneration}
+              >
+                {isDuplicating ? DUPLICATE_GENERATION_BUSY_LABEL : DUPLICATE_GENERATION_LABEL}
+              </button>
             )}
           </div>
           <p className="lede">

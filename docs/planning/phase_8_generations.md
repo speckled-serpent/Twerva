@@ -99,7 +99,7 @@ Final already keys `carousel_assemblies` by `(carousel_id, generation_number)`. 
 
 ### Page
 
-- [ ] **8.8 Show Duplicate next to the generation pill**
+- [x] **8.8 Show Duplicate next to the generation pill**
 
   Add `#duplicate-generation` beside `#carousel-generation` on the open carousel in `CarouselsPage`. The label is `Duplicate`. It is absent on the slide editor; that header keeps the pill only. `duplicateGenerationEnabled` in `apps/ops/src/pages/carouselGeneration.ts` is true for an admin. A reader sees the button disabled. The disabled accessible name is `Duplicate. A reader cannot duplicate a generation.` The click flushes open edits through `flushOpenEdits` and `leaveAfterAutosave` before the request, the same way Generate does, so the saved instructions and the album are what the route reads. The client function is `duplicateCarouselGeneration` in `apps/ops/src/api/client.ts`: `POST /api/v1/carousels/{carouselId}/generations`, returning the carousel detail. While the request runs, the label is `Duplicating…` and the button is disabled. Success replaces the open carousel. The status line is `Duplicated. This is generation {n}.` A failure shows the API detail in `ErrorBanner`.
 

@@ -653,6 +653,17 @@ export interface CarouselAssemblyReadResponse {
   carousels: AssembledCarouselReadResponse[];
 }
 
+export interface CarouselGenerationSummaryResponse {
+  id: string;
+  generation_number: number;
+  album_id: string | null;
+  instruction_count: number;
+  research_count: number;
+  image_count: number;
+  slide_count: number;
+  has_assembly: boolean;
+}
+
 export interface CarouselReadResponse {
   id: string;
   skeleton_id: string;
@@ -670,6 +681,7 @@ export interface CarouselReadResponse {
   slides: SlideReadResponse[];
   pending_slide_draft_batch: PendingSlideDraftBatchResponse | null;
   assembly: CarouselAssemblyReadResponse | null;
+  generations: CarouselGenerationSummaryResponse[];
 }
 
 export interface AlbumImageReadResponse {
