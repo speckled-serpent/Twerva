@@ -9,11 +9,11 @@ from fastapi import HTTPException
 
 from app.api.v1.campaigns import (
     CAMPAIGN_ACCOUNTS_REQUIRED_DETAIL,
-    CAMPAIGN_INTERESTS_REQUIRED_DETAIL,
     CAMPAIGN_NAME_REQUIRED_DETAIL,
     CAMPAIGN_PLATFORMS_REQUIRED_DETAIL,
     create_campaign,
 )
+from app.models.campaign import CampaignInterest
 from app.api.v1.schemas import (
     CampaignCreateRequest,
     CampaignInterestWrite,
@@ -166,8 +166,8 @@ class CampaignCreateValidationTests(unittest.TestCase):
             CAMPAIGN_PLATFORMS_REQUIRED_DETAIL,
         )
 
-    def test_spotmu_test_empty_interests_are_rejected(self) -> None:
-        """Spotmu-test create with no interests returns HTTP 400."""
+    def test_spotmu_test_empty_interests_are_stored_as_none(self) -> None:
+        """Spotmu-test create with no interests persists an empty interest list."""
 
         fake_session: MagicMock = MagicMock()
         campaign_create_request: CampaignCreateRequest = _spotmu_create_request(
@@ -175,29 +175,34 @@ class CampaignCreateValidationTests(unittest.TestCase):
             account_ids=[],
             interests=[],
         )
-
-        self._assert_create_rejected(
+        campaign_read_response: CampaignReadResponse = _create_campaign_for_test(
             campaign_create_request,
             fake_session,
-            CAMPAIGN_INTERESTS_REQUIRED_DETAIL,
+            CampaignType.SPOTMU_TEST,
         )
 
-    def test_empty_interests_are_rejected(self) -> None:
-        """Spotmu create with no interests returns HTTP 400."""
+        self.assertEqual(campaign_read_response.interest_count, 0)
+        self.assertEqual(_added_interests(fake_session), [])
+
+    def test_empty_interests_are_stored_as_none(self) -> None:
+        """Spotmu create with no interests persists an empty interest list."""
 
         fake_session: MagicMock = MagicMock()
         campaign_create_request: CampaignCreateRequest = _spotmu_create_request(
             interests=[],
         )
-
-        self._assert_create_rejected(
+        campaign_read_response: CampaignReadResponse = _create_campaign_for_test(
             campaign_create_request,
             fake_session,
-            CAMPAIGN_INTERESTS_REQUIRED_DETAIL,
+            CampaignType.SPOTMU,
         )
 
-    def test_blank_interest_slugs_are_rejected_after_strip(self) -> None:
-        """Interests that become empty after strip/dedupe return HTTP 400."""
+        self.assertEqual(campaign_read_response.status, CampaignStatus.READY)
+        self.assertEqual(campaign_read_response.interest_count, 0)
+        self.assertEqual(_added_interests(fake_session), [])
+
+    def test_blank_interest_slugs_are_dropped(self) -> None:
+        """Interests that strip to empty are not stored."""
 
         fake_session: MagicMock = MagicMock()
         campaign_create_request: CampaignCreateRequest = _spotmu_create_request(
@@ -206,12 +211,14 @@ class CampaignCreateValidationTests(unittest.TestCase):
                 CampaignInterestWrite(slug="", title="Empty"),
             ],
         )
-
-        self._assert_create_rejected(
+        campaign_read_response: CampaignReadResponse = _create_campaign_for_test(
             campaign_create_request,
             fake_session,
-            CAMPAIGN_INTERESTS_REQUIRED_DETAIL,
+            CampaignType.SPOTMU,
         )
+
+        self.assertEqual(campaign_read_response.status, CampaignStatus.READY)
+        self.assertEqual(_added_interests(fake_session), [])
 
     def _assert_create_rejected(
         self,
@@ -266,6 +273,77 @@ def _spotmu_create_request(
     )
 
     return campaign_create_request
+
+
+def _create_campaign_for_test(
+    campaign_create_request: CampaignCreateRequest,
+    fake_session: MagicMock,
+    campaign_type: CampaignType,
+) -> CampaignReadResponse:
+    """Run create with the account load and commit patched out."""
+
+    linked_account: MagicMock = MagicMock()
+    linked_account.platform = Platform.INSTAGRAM
+    reloaded_campaign: MagicMock = _campaign_reload_double(
+        campaign_type,
+        campaign_create_request,
+    )
+    stored_interests: list[CampaignInterestWrite] = [
+        interest_write
+        for interest_write in campaign_create_request.interests
+        if interest_write.slug.strip() != ""
+    ]
+    reloaded_campaign.interest_links = [
+        _interest_link_double(interest_write) for interest_write in stored_interests
+    ]
+
+    with patch(
+        "app.api.v1.campaigns.fetch_account_by_id_or_raise",
+        return_value=linked_account,
+    ), patch(
+        "app.api.v1.campaigns.resolve_campaign_binding",
+        return_value=(MagicMock(), MagicMock()),
+    ), patch(
+        "app.api.v1.campaigns._load_taken_campaign_slugs",
+        return_value=set(),
+    ), patch(
+        "app.api.v1.campaigns.commit_database_session_or_raise_conflict",
+    ), patch(
+        "app.api.v1.campaigns._load_campaign_with_joins",
+        return_value=reloaded_campaign,
+    ):
+        campaign_read_response: CampaignReadResponse = create_campaign(
+            campaign_create_request,
+            fake_session,
+            None,
+        )
+
+    return campaign_read_response
+
+
+def _interest_link_double(interest_write: CampaignInterestWrite) -> MagicMock:
+    """Build one interest link the serializer can read."""
+
+    interest_link: MagicMock = MagicMock()
+    interest_link.spotmu_slug = interest_write.slug.strip()
+    interest_link.title = interest_write.title
+    interest_link.spotmu_interest_id = interest_write.spotmu_interest_id
+
+    return interest_link
+
+
+def _added_interests(fake_session: MagicMock) -> list[CampaignInterest]:
+    """Return CampaignInterest rows passed to ``session.add``."""
+
+    added_interests: list[CampaignInterest] = []
+
+    for add_call in fake_session.add.call_args_list:
+        added_row: object = add_call.args[0]
+
+        if isinstance(added_row, CampaignInterest):
+            added_interests.append(added_row)
+
+    return added_interests
 
 
 def _campaign_reload_double(

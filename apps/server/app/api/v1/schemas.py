@@ -51,10 +51,11 @@ class CampaignCreateRequest(BaseModel):
     Slug and hashtag are generated from ``name``. Status is always
     ``ready``. ``other`` campaign types are rejected by the handler.
     Spotmu and Spotmu-test require a non-empty name plus at least one
-    platform and interest after the handler strips and dedupes. Spotmu
-    also requires at least one account; Spotmu-test may send an empty
-    ``account_ids`` list. Empty lists stay allowed on the model so
-    ``other`` still parses. ``skeleton_id`` and ``carousel_id`` are required.
+    platform after the handler strips and dedupes. A Spotmu interest is
+    optional. Spotmu also requires at least one account; Spotmu-test may
+    send an empty ``account_ids`` list. Empty lists stay allowed on the
+    model so ``other`` still parses. ``skeleton_id`` and ``carousel_id``
+    are required.
     The carousel has to be bound to that skeleton.
     """
 
