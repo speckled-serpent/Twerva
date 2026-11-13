@@ -510,7 +510,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `test_slide_collection.py`: accepting a set of three makes those three `live`, copies the drafted strings onto `value`, clears `draft_value`, and returns a null `pending_slide_draft_batch`. An older draft slide on the same carousel stays `draft` with its old `draft_value` and its old `value`. A live hand-entered slide keeps its text. Accepting an accepted batch is 404. A reader is rejected.
 
-- [ ] **6.7 Discard the whole set**
+- [x] **6.7 Discard the whole set**
 
   `POST /api/v1/carousels/{carousel_id}/slide-draft-batches/{batch_id}/discard`, admin only, empty body, response `serialize_carousel`. The same 404 rule as accept. Delete each slide in the batch: clear its exclusion pairs with `_clear_exclusion_pairs`, then delete the row. Do not delete `album_images` rows or files, and do not call `_reject_when_paths_in_use`. Other slides keep their positions. Set the batch `status` to `discarded` and leave the row. `pending_slide_draft_batch` returns null. Slides outside the batch stay, including drafts that are not in the batch.
 

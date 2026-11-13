@@ -13,7 +13,11 @@ from collections.abc import Callable
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.v1.carousel_writes import _next_slide_position, _store_draft_texts
+from app.api.v1.carousel_writes import (
+    _clear_exclusion_pairs,
+    _next_slide_position,
+    _store_draft_texts,
+)
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.carousels.collection_generation import (
     DraftedCollectionSlide,
@@ -60,6 +64,7 @@ PENDING_BATCH_DETAIL: str = (
 )
 PENDING_BATCH_STATUS: str = "pending"
 ACCEPTED_BATCH_STATUS: str = "accepted"
+DISCARDED_BATCH_STATUS: str = "discarded"
 NO_TEXT_ELEMENTS_DETAIL: str = "This skeleton has no text elements to draft."
 EMPTY_BATCH_DETAIL: str = "This set has no slides to accept."
 BATCH_NOT_FOUND_DETAIL: str = "Slide draft batch not found."
@@ -184,6 +189,35 @@ def accept_generated_slide_collection(
     commit_database_session_or_raise_conflict(
         our_database_session,
         conflict_detail="Slides could not be saved.",
+    )
+
+
+def discard_generated_slide_collection(
+    our_database_session: Session,
+    carousel: Carousel,
+    batch_id: uuid.UUID,
+) -> None:
+    """Delete one pending set and keep the batch row as discarded.
+
+    Args:
+        our_database_session: Open session. One commit stores the discard.
+        carousel: The carousel that owns the batch, with slides loaded.
+        batch_id: The pending set to discard.
+
+    Raises:
+        HTTPException: The batch is not a pending set on this carousel.
+    """
+
+    batch: SlideDraftBatch = _pending_batch_or_raise(carousel, batch_id)
+
+    for slide in _slides_in_batch(carousel, batch.id):
+        _clear_exclusion_pairs(slide, carousel, our_database_session)
+        our_database_session.delete(slide)
+
+    batch.status = DISCARDED_BATCH_STATUS
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Slides could not be discarded.",
     )
 
 

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.carousel_text import (
     accept_slide_draft_batch,
+    discard_slide_draft_batch,
     generate_slide_collection,
 )
 from app.api.v1.carousel_writes import create_carousel, create_slide
@@ -52,6 +53,7 @@ from app.models.carousel import (
     Slide,
     SlideDraftBatch,
     SlideElementText,
+    SlideExclusion,
 )
 from app.models.enums import (
     BackgroundKind,
@@ -560,6 +562,165 @@ class SlideCollectionRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("read-only", response.json()["detail"].lower())
 
+    def test_discard_removes_the_set_and_the_next_generate_can_run(self) -> None:
+        """Discard deletes only the generated slides and keeps a discarded batch row."""
+
+        session: _MemoryCarouselSession = _MemoryCarouselSession()
+        text_element = _title_element(session.skeleton.id)
+        session.skeleton.elements = [text_element]
+        created: CarouselReadResponse = create_carousel(
+            CarouselCreateRequest(name="Discard set", skeleton_id=session.skeleton.id),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        carousel: Carousel | None = session.get(Carousel, created.id)  # type: ignore[assignment]
+        assert carousel is not None
+        image_paths: list[str] = [
+            image.relative_path for image in _album_images(session, carousel)
+        ]
+        _attach_instructions(carousel, ["Harbor fog"])
+        hand: SlideReadResponse = create_slide(
+            created.id,
+            SlideWriteRequest(
+                name="Hand",
+                texts=[
+                    SlideElementTextWrite(
+                        skeleton_element_id=text_element.id,
+                        value="Kept live",
+                    ),
+                ],
+            ),
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        _attach_older_draft(session, carousel, text_element.id, position=1)
+        hand_position: int = hand.position
+
+        with patch(
+            "app.carousels.slide_collection.slide_count_or_global_default",
+            return_value=3,
+        ):
+            drafted: CarouselReadResponse = generate_slide_collection(
+                created.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        assert drafted.pending_slide_draft_batch is not None
+        batch_id: uuid.UUID = drafted.pending_slide_draft_batch.id
+        generated_slide: Slide | None = next(
+            slide for slide in carousel.slides if slide.name == "Drafted slide 1"
+        )
+        hand_slide: Slide | None = next(
+            slide for slide in carousel.slides if slide.id == hand.id
+        )
+        assert generated_slide is not None
+        assert hand_slide is not None
+        _exclude_each_other(generated_slide, hand_slide)
+        earlier_before = next(slide for slide in drafted.slides if slide.name == "Earlier")
+
+        discarded: CarouselReadResponse = discard_slide_draft_batch(
+            created.id,
+            batch_id,
+            session,  # type: ignore[arg-type]
+            None,
+        )
+        remaining_names: list[str] = [slide.name for slide in discarded.slides]
+        kept_hand = next(slide for slide in discarded.slides if slide.id == hand.id)
+        kept_earlier = next(slide for slide in discarded.slides if slide.name == "Earlier")
+
+        self.assertEqual(remaining_names, ["Hand", "Earlier"])
+        self.assertIsNone(discarded.pending_slide_draft_batch)
+        self.assertEqual(kept_hand.position, hand_position)
+        self.assertEqual(kept_hand.text_status, SlideTextStatus.LIVE)
+        self.assertEqual(kept_hand.texts[0].value, "Kept live")
+        self.assertEqual(kept_hand.excluded_slide_ids, [])
+        self.assertEqual(kept_earlier.position, earlier_before.position)
+        self.assertEqual(kept_earlier.text_status, SlideTextStatus.DRAFT)
+        self.assertEqual(kept_earlier.texts[0].value, "Live leftover")
+        self.assertEqual(kept_earlier.draft_texts[0].value, "OLD DRAFT")
+        self.assertIsNone(kept_earlier.draft_batch_id)
+        self.assertEqual(
+            [image.relative_path for image in carousel.album.images],
+            image_paths,
+        )
+        self.assertEqual(carousel.album_id, carousel.album.id)
+        self.assertEqual(len(carousel.draft_batches), 1)
+        self.assertEqual(carousel.draft_batches[0].id, batch_id)
+        self.assertEqual(carousel.draft_batches[0].status, "discarded")
+
+        with patch(
+            "app.carousels.slide_collection.slide_count_or_global_default",
+            return_value=2,
+        ):
+            again: CarouselReadResponse = generate_slide_collection(
+                created.id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        assert again.pending_slide_draft_batch is not None
+        self.assertNotEqual(again.pending_slide_draft_batch.id, batch_id)
+        self.assertEqual(
+            [slide.name for slide in again.slides if slide.name.startswith("Drafted slide ")],
+            ["Drafted slide 1", "Drafted slide 2"],
+        )
+        self.assertEqual(
+            [batch.status for batch in carousel.draft_batches],
+            ["discarded", "pending"],
+        )
+
+        with self.assertRaises(HTTPException) as refused:
+            discard_slide_draft_batch(
+                created.id,
+                batch_id,
+                session,  # type: ignore[arg-type]
+                None,
+            )
+
+        self.assertEqual(refused.exception.status_code, 404)
+        self.assertEqual(
+            [slide.name for slide in get_carousel(created.id, session).slides],  # type: ignore[arg-type]
+            ["Hand", "Earlier", "Drafted slide 1", "Drafted slide 2"],
+        )
+
+    def test_a_reader_cannot_discard_a_set(self) -> None:
+        """A reader cannot discard a generated set."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        client: TestClient = _reader_client()
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": READER_PASSWORD},
+        )
+
+        try:
+            response = client.post(
+                f"/api/v1/carousels/{uuid.uuid4()}/slide-draft-batches/{uuid.uuid4()}/discard",
+            )
+        finally:
+            client.close()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("read-only", response.json()["detail"].lower())
+
     def _restore(self, name: str, previous: str | None) -> None:
         """Put one environment variable back."""
 
@@ -567,6 +728,37 @@ class SlideCollectionRouteTests(unittest.TestCase):
             os.environ.pop(name, None)
         else:
             os.environ[name] = previous
+
+
+def _album_images(
+    session: _MemoryCarouselSession,
+    carousel: Carousel,
+) -> list[AlbumImage]:
+    """Attach two images and return them in position order."""
+
+    image_ids: list[uuid.UUID] = _attach_album(session, carousel)
+    images: list[AlbumImage] = [
+        image for image in carousel.album.images if image.id in image_ids
+    ]
+
+    return images
+
+
+def _exclude_each_other(left: Slide, right: Slide) -> None:
+    """Store one exclusion in both directions."""
+
+    forward: SlideExclusion = SlideExclusion(
+        id=uuid.uuid4(),
+        slide_id=left.id,
+        excluded_slide_id=right.id,
+    )
+    backward: SlideExclusion = SlideExclusion(
+        id=uuid.uuid4(),
+        slide_id=right.id,
+        excluded_slide_id=left.id,
+    )
+    left.exclusions.append(forward)
+    right.exclusions.append(backward)
 
 
 def _attach_album(

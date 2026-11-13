@@ -78,6 +78,12 @@ def register_source_text_routes(carousels_router: APIRouter) -> None:
         response_model=CarouselReadResponse,
     )
     carousels_router.add_api_route(
+        "/{carousel_id}/slide-draft-batches/{batch_id}/discard",
+        discard_slide_draft_batch,
+        methods=["POST"],
+        response_model=CarouselReadResponse,
+    )
+    carousels_router.add_api_route(
         "/{carousel_id}/slides/{slide_id}/generate",
         generate_slide_text,
         methods=["POST"],
@@ -202,6 +208,41 @@ def accept_slide_draft_batch(
         our_database_session,
         found_source,
         found_skeleton,
+        batch_id,
+    )
+    our_database_session.refresh(found_source)
+
+    from app.api.v1.carousels import serialize_carousel
+
+    return serialize_carousel(found_source, found_skeleton)
+
+
+def discard_slide_draft_batch(
+    carousel_id: uuid.UUID,
+    batch_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CarouselReadResponse:
+    """Delete one pending set. The batch row stays, marked discarded.
+
+    The body is empty. Album files stay. Readers cannot call this.
+    """
+
+    _ = current_ops_operator
+    found_source: Carousel = fetch_carousel_by_id_or_raise(
+        carousel_id,
+        our_database_session,
+    )
+    found_skeleton: Skeleton = fetch_skeleton_by_id_or_raise(
+        found_source.skeleton_id,
+        our_database_session,
+    )
+
+    from app.carousels.slide_collection import discard_generated_slide_collection
+
+    discard_generated_slide_collection(
+        our_database_session,
+        found_source,
         batch_id,
     )
     our_database_session.refresh(found_source)
