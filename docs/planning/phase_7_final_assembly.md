@@ -44,7 +44,7 @@ Publish reads artifact files, not carousel slides. `publish_post_job` resolves `
 
 ### Grouping
 
-- [ ] **7.2 Group live slides under a size cap**
+- [x] **7.2 Group live slides under a size cap**
 
   Add `plan_final_groups` in `app/carousels/final_assembly.py`. It takes live slide ids in the order the caller gives, exclusion pairs as `(slide_id, excluded_slide_id)`, and `slide_count` (the cap, already chosen, at least 1). It does not read the database, does not draw, and does not parse instruction text.
 
