@@ -19,15 +19,18 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session, selectinload, sessionmaker
 
 from app.api.v1.accounts import create_account
 from app.api.v1.brands import create_brand
 from app.api.v1.campaign_posts import (
+    create_campaign_post_metric_snapshot,
+    create_campaign_post_stub_metric_snapshot,
     place_campaign_post_by_id,
     publish_campaign_post_by_id,
     remove_campaign_post_by_id,
     reschedule_campaign_post_by_id,
+    serialize_campaign_post,
 )
 from app.api.v1.campaigns import (
     create_campaign,
@@ -49,6 +52,7 @@ from app.api.v1.schemas import (
     CampaignPostRead,
     ClusterCreateRequest,
     PostJobCreateRequest,
+    PostJobMetricsCreateRequest,
     CarouselCreateRequest,
     SkeletonCreateRequest,
 )
@@ -65,7 +69,9 @@ from app.campaigns.posts import (
     CAMPAIGN_POST_ONLY_UPCOMING_DETAIL,
     CAMPAIGN_POST_STAYS_DETAIL,
 )
+from app.api.v1.campaign_posts import RECORD_RESULTS_AFTER_POST_DETAIL
 from app.db import get_our_database_session
+from app.metrics.service import append_metric_snapshot
 from app.models.artifact import Artifact
 from app.models.campaign import Campaign, CampaignPost
 from app.models.campaign import CampaignCarousel
@@ -83,6 +89,7 @@ from app.models.enums import (
     PostJobStatus,
 )
 from app.models.ops_user import OpsUser
+from app.models.metric_snapshot import MetricSnapshot
 from app.models.post_job import PostJob
 from app.settings import clear_settings_cache
 from tests.test_api_routes import _openapi_methods_by_path
@@ -753,6 +760,130 @@ class CampaignPostPlacementTests(unittest.TestCase):
 
             clear_settings_cache()
 
+    def test_a_posted_mock_keeps_result_history(self) -> None:
+        """The stub and a later manual count both stay, and results shows the later one."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+
+        try:
+            placed = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_assembled(self.session, self.world.carousel_name),
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+            _publish(self.session, self.world.campaign_id, placed.id)
+            create_campaign_post_stub_metric_snapshot(
+                self.world.campaign_id,
+                placed.id,
+                self.session,
+                None,
+            )
+            after_stub = _reload_post(self.session, placed.id)
+
+            self.assertIsNotNone(after_stub.results)
+            assert after_stub.results is not None
+            self.assertEqual(after_stub.results.views, 100)
+            self.assertEqual(after_stub.results.likes, 10)
+            self.assertEqual(after_stub.results.comments, 2)
+            self.assertEqual(after_stub.results.shares, 1)
+            self.assertEqual(after_stub.status, "posted")
+
+            later: datetime = datetime.now(timezone.utc) + timedelta(hours=3)
+            create_campaign_post_metric_snapshot(
+                self.world.campaign_id,
+                placed.id,
+                PostJobMetricsCreateRequest(
+                    views=7,
+                    likes=1,
+                    comments=0,
+                    shares=0,
+                    captured_at=later,
+                ),
+                self.session,
+                None,
+            )
+            after_manual = _reload_post(self.session, placed.id)
+
+            self.assertIsNotNone(after_manual.results)
+            assert after_manual.results is not None
+            self.assertEqual(after_manual.results.views, 7)
+            self.assertEqual(after_manual.results.likes, 1)
+            self.assertEqual(_snapshot_count(self.session, placed.id), 2)
+            self.assertEqual(after_manual.status, "posted")
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+    def test_results_wait_until_the_post_is_up(self) -> None:
+        """An upcoming post is 409 and stores no snapshot."""
+
+        placed = _place(
+            self.session,
+            self.world.campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+        )
+        before_snapshots: int = _row_count(self.session, MetricSnapshot)
+
+        with self.assertRaises(HTTPException) as raised_http:
+            create_campaign_post_stub_metric_snapshot(
+                self.world.campaign_id,
+                placed.id,
+                self.session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 409)
+        self.assertEqual(
+            raised_http.exception.detail,
+            RECORD_RESULTS_AFTER_POST_DETAIL,
+        )
+        self.assertEqual(_row_count(self.session, MetricSnapshot), before_snapshots)
+
+    def test_a_post_job_snapshot_stays_on_the_job(self) -> None:
+        """A post-job snapshot keeps its job id and a null campaign post id."""
+
+        created_job = create_post_job(
+            PostJobCreateRequest(
+                artifact_id=_artifact_id(self.session, self.world.brand_id),
+                account_id=self.world.open_account_id,
+                status=PostJobStatus.SCHEDULED,
+                scheduled_for=SCHEDULED_FOR,
+            ),
+            self.session,
+        )
+        stored_job: PostJob | None = self.session.get(PostJob, created_job.id)
+        assert stored_job is not None
+        snapshot: MetricSnapshot = append_metric_snapshot(
+            stored_job,
+            views=3,
+            likes=1,
+            comments=0,
+            shares=0,
+        )
+        self.session.add(snapshot)
+        self.session.commit()
+        stored_snapshot: MetricSnapshot | None = self.session.get(
+            MetricSnapshot,
+            snapshot.id,
+        )
+
+        self.assertIsNotNone(stored_snapshot)
+        assert stored_snapshot is not None
+        self.assertEqual(stored_snapshot.post_job_id, created_job.id)
+        self.assertIsNone(stored_snapshot.campaign_post_id)
+
 
 class _RaisingPublishAdapter:
     """Test double whose media publish always fails."""
@@ -958,6 +1089,46 @@ def _place_at(
     )
 
     return placed
+
+
+def _reload_post(session: Session, post_id: uuid.UUID) -> CampaignPostRead:
+    """Load one post with its snapshots and return the read model."""
+
+    stored_post: CampaignPost | None = session.scalars(
+        select(CampaignPost)
+        .where(CampaignPost.id == post_id)
+        .options(
+            selectinload(CampaignPost.metric_snapshots),
+            selectinload(CampaignPost.account),
+            selectinload(CampaignPost.assembled_carousel).selectinload(
+                AssembledCarousel.frames,
+            ),
+            selectinload(CampaignPost.assembled_carousel).selectinload(
+                AssembledCarousel.assembly,
+            ),
+        ),
+    ).first()
+
+    if stored_post is None:
+        raise AssertionError("Campaign post was not stored.")
+
+    reloaded: CampaignPostRead = serialize_campaign_post(stored_post)
+
+    return reloaded
+
+
+def _snapshot_count(session: Session, post_id: uuid.UUID) -> int:
+    """Return how many snapshots belong to one campaign post."""
+
+    snapshot_count: int = int(
+        session.scalar(
+            select(func.count())
+            .select_from(MetricSnapshot)
+            .where(MetricSnapshot.campaign_post_id == post_id),
+        ),
+    )
+
+    return snapshot_count
 
 
 def _publish(

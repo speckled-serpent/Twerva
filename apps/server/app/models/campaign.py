@@ -45,6 +45,7 @@ CAMPAIGN_POST_STATUS_CHECK_SQL: str = (
 if TYPE_CHECKING:
     from app.models.account import Account
     from app.models.carousel import AssembledCarousel, Carousel, Slide
+    from app.models.metric_snapshot import MetricSnapshot
     from app.models.ops_user import OpsUser
     from app.models.skeleton import Skeleton
 
@@ -332,3 +333,8 @@ class CampaignPost(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="campaign_posts",
     )
     account: Mapped["Account"] = relationship("Account")
+    metric_snapshots: Mapped[list["MetricSnapshot"]] = relationship(
+        "MetricSnapshot",
+        back_populates="campaign_post",
+        order_by="MetricSnapshot.captured_at",
+    )

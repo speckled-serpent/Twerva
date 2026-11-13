@@ -79,7 +79,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Results
 
-- [ ] **9.5 Record results on a posted carousel**
+- [x] **9.5 Record results on a posted carousel**
 
   Alembic revision `campaign_post_metrics`, down-revision `campaign_posts`. On `metric_snapshots`, make `post_job_id` nullable and add `campaign_post_id` (nullable UUID, foreign key to `campaign_posts.id`, `ON DELETE CASCADE`). Check that exactly one of `post_job_id` and `campaign_post_id` is set. Upgrade does not insert rows and does not change existing `post_job_id` values. Downgrade deletes rows whose `campaign_post_id` is set, drops that column, and sets `post_job_id` not null again. `append_metric_snapshot` and `append_stub_metric_snapshot` stay the post-job functions. A post job can still move to `measured`. A campaign post has no `measured` status.
 

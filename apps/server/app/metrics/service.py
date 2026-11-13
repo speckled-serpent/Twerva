@@ -12,13 +12,14 @@ from sqlalchemy.sql import Select
 from app.metrics.errors import StubMetricsNotAvailableError
 from app.metrics.median import calculate_median_of_numbers
 from app.metrics.stub import (
+    MOCK_PLATFORM_POST_ID_PREFIX,
     STUB_MOCK_COMMENTS,
     STUB_MOCK_LIKES,
     STUB_MOCK_SHARES,
     STUB_MOCK_VIEWS,
     post_job_is_mock_published,
 )
-from app.models import Account, MetricSnapshot, PostJob
+from app.models import Account, CampaignPost, MetricSnapshot, PostJob
 from app.models.enums import POST_JOB_STATUS_TRANSITIONS, PostJobStatus
 
 
@@ -94,6 +95,86 @@ def append_stub_metric_snapshot(post_job: PostJob) -> MetricSnapshot:
 
     stub_snapshot: MetricSnapshot = append_metric_snapshot(
         post_job,
+        views=STUB_MOCK_VIEWS,
+        likes=STUB_MOCK_LIKES,
+        comments=STUB_MOCK_COMMENTS,
+        shares=STUB_MOCK_SHARES,
+        captured_at=None,
+        raw={"source": "mock_stub"},
+    )
+
+    return stub_snapshot
+
+
+def append_campaign_post_metric(
+    campaign_post: CampaignPost,
+    views: int | None,
+    likes: int | None,
+    comments: int | None,
+    shares: int | None,
+    captured_at: datetime | None = None,
+    raw: dict[str, object] | list[object] | None = None,
+) -> MetricSnapshot:
+    """Build an uncommitted snapshot for a campaign post.
+
+    The campaign post status stays as it is. ``post_job_id`` is null.
+
+    Args:
+        campaign_post: Posted carousel the snapshot belongs to.
+        views: View count, or None.
+        likes: Like count, or None.
+        comments: Comment count, or None.
+        shares: Share count, or None.
+        captured_at: Override for tests; default is UTC now.
+        raw: Optional payload passthrough.
+
+    Returns:
+        The new MetricSnapshot instance (not yet added to a session).
+    """
+
+    resolved_captured_at: datetime = _resolve_captured_at(captured_at)
+    metric_snapshot: MetricSnapshot = MetricSnapshot(
+        post_job_id=None,
+        campaign_post_id=campaign_post.id,
+        captured_at=resolved_captured_at,
+        views=views,
+        likes=likes,
+        comments=comments,
+        shares=shares,
+        raw=raw,
+    )
+
+    return metric_snapshot
+
+
+def append_campaign_post_stub_metric(campaign_post: CampaignPost) -> MetricSnapshot:
+    """Copy documented mock views onto a mock-published campaign post.
+
+    Args:
+        campaign_post: Must have `platform_post_id` starting with `mock-`.
+
+    Returns:
+        Uncommitted snapshot with stub counts. The post status is unchanged.
+
+    Raises:
+        StubMetricsNotAvailableError: The platform id is not a mock id.
+    """
+
+    platform_post_id: str | None = campaign_post.platform_post_id
+    is_mock_published: bool = (
+        platform_post_id is not None
+        and platform_post_id.startswith(MOCK_PLATFORM_POST_ID_PREFIX)
+    )
+
+    if not is_mock_published:
+        raise StubMetricsNotAvailableError(
+            campaign_post.id,
+            platform_post_id,
+            campaign_post.status,
+        )
+
+    stub_snapshot: MetricSnapshot = append_campaign_post_metric(
+        campaign_post,
         views=STUB_MOCK_VIEWS,
         likes=STUB_MOCK_LIKES,
         comments=STUB_MOCK_COMMENTS,

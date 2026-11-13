@@ -117,6 +117,16 @@ class CampaignPostRescheduleRequest(BaseModel):
     scheduled_for: datetime
 
 
+class CampaignPostResultsRead(BaseModel):
+    """Latest recorded counts on one campaign post."""
+
+    captured_at: datetime
+    views: int | None
+    likes: int | None
+    comments: int | None
+    shares: int | None
+
+
 class CampaignPostFrameRead(BaseModel):
     """One frozen frame on a campaign post."""
 
@@ -148,6 +158,7 @@ class CampaignPostRead(BaseModel):
     cta_url: str | None
     blocked: bool
     frames: list[CampaignPostFrameRead]
+    results: CampaignPostResultsRead | None = None
 
 
 class CampaignReadResponse(BaseModel):
@@ -860,7 +871,8 @@ class MetricSnapshotReadResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    post_job_id: uuid.UUID
+    post_job_id: uuid.UUID | None = None
+    campaign_post_id: uuid.UUID | None = None
     captured_at: datetime
     views: int | None
     likes: int | None

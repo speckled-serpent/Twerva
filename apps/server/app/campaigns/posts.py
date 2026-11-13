@@ -432,6 +432,7 @@ def _load_campaign_post(
                 AssembledCarousel.assembly,
             ),
             selectinload(CampaignPost.account),
+            selectinload(CampaignPost.metric_snapshots),
         ),
     ).first()
 
