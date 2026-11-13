@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactElement } from "react";
 import { fetchSkeletonById } from "../api/client";
 import type { CarouselReadResponse, SkeletonReadResponse } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { carouselPageSection, type CarouselPageSection } from "./carouselPage";
 import { generationLabel } from "./carouselSteps";
 import type { CarouselLabelDraft } from "./carouselLabel";
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
@@ -18,13 +19,13 @@ export interface CarouselBasicStepProps {
 }
 
 /**
- * Step 0: generation, the locked skeleton, and the label.
+ * Basic: generation, the locked skeleton, and the label.
  *
  * The skeleton is text. There is no control to change it, including when
  * the carousel has no slides. Another skeleton means delete and create.
  *
  * @param props - The open carousel, the label draft, and the autosave status
- * @returns The Basic step
+ * @returns The Basic section
  */
 export function CarouselBasicStep({
   carousel,
@@ -71,9 +72,15 @@ export function CarouselBasicStep({
   }, [carousel.skeleton_id]);
 
   const skeletonName: string = skeletonNameText(skeleton, skeletonError);
+  const basicSection: CarouselPageSection = carouselPageSection("basic");
 
   return (
-    <section id="carousel-basic" className="carousel-basic stack-form" aria-label="Basic">
+    <section
+      id={basicSection.id}
+      className="carousel-page-section carousel-basic stack-form"
+      aria-labelledby="carousel-basic-heading"
+    >
+      <h2 id="carousel-basic-heading">{basicSection.label}</h2>
       <p id="carousel-basic-generation" className="carousel-basic-generation">
         {generationLabel(carousel.generation_number)}
       </p>

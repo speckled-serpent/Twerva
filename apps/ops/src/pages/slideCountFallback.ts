@@ -1,5 +1,4 @@
 import type { CarouselStepState } from "../api/types";
-import { CAROUSEL_STEP_SLIDES } from "./carouselSteps.ts";
 
 /**
  * Inclusive bounds of the global slide-count default.
@@ -13,7 +12,7 @@ export const SLIDE_COUNT_DEFAULT_LOW: number = 5;
 export const SLIDE_COUNT_DEFAULT_HIGH: number = 8;
 
 /**
- * The one hint on the open Slides step.
+ * The hint in the Slides section.
  *
  * It names the global default. It does not add or remove slides.
  */
@@ -21,27 +20,18 @@ export const SLIDE_COUNT_FALLBACK_HINT: string =
   `The global slide-count default is a random value from ${SLIDE_COUNT_DEFAULT_LOW} to ${SLIDE_COUNT_DEFAULT_HIGH}, used when a later phase needs a count and this carousel has no guidance. That default lives in global settings.`;
 
 /**
- * Hint shown while Slides is the open step.
+ * Hint shown in the Slides section.
  *
- * Basic, Instructions, Content, and Final return null. Locked Slides
- * keeps the album hint and does not add this one.
+ * Locked Slides keeps the album note and does not add this one.
  *
- * @param editorStep - The step on screen
  * @param slidesState - Derived state of Slides
- * @returns The fallback hint, or null when this step should not show it
+ * @returns The fallback hint, or null while Slides is explaining the album rule
  */
 export function slideCountFallbackHint(
-  editorStep: number,
   slidesState: CarouselStepState,
 ): string | null {
 
-  if (editorStep !== CAROUSEL_STEP_SLIDES) {
-
-    return null;
-  }
-
   if (slidesState === "locked") {
-
     return null;
   }
 

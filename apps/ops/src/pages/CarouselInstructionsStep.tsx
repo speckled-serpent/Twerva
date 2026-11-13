@@ -11,17 +11,15 @@ import type {
   CarouselReadResponse,
 } from "../api/types";
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
+import { carouselPageSection, type CarouselPageSection } from "./carouselPage";
 import {
   INSTRUCTION_ADD_BODY,
-  INSTRUCTIONS_GENERATE_HINT,
   instructionBodyForSave,
   instructionDocumentIds,
   instructionDocumentLabel,
   instructionDraftFingerprint,
   instructionDraftFromDocument,
   instructionDraftReadiness,
-  instructionsAfterGenerateClick,
-  instructionsGenerateAccessibleName,
   instructionsGenerateEnabled,
   moveInstructionDocuments,
   type InstructionDraft,
@@ -49,24 +47,28 @@ export interface CarouselInstructionsStepProps {
   canWrite: boolean;
   onCarouselSaved: (savedCarousel: CarouselReadResponse) => void;
   onActions?: (actions: InstructionEditorActions | null) => void;
+  onGenerateEnabled?: (enabled: boolean) => void;
 }
 
 /**
- * Step 1: edit the selected instruction document, and add, remove, or reorder.
+ * Instructions: edit the selected document, and add, remove, or reorder.
  *
  * The textarea starts empty. The sample is only the placeholder. The
  * first typed text POSTs a document. A later edit PATCHes that row.
  * Add stores an empty document and selects it. Remove and switching
  * flush a pending edit first. A reader can look and cannot change the list.
+ * Generate sits below Content, and this section reports whether it can
+ * be pressed.
  *
  * @param props - The open carousel and the write callback
- * @returns The Instructions step
+ * @returns The Instructions section
  */
 export function CarouselInstructionsStep({
   carousel,
   canWrite,
   onCarouselSaved,
   onActions,
+  onGenerateEnabled,
 }: CarouselInstructionsStepProps): ReactElement {
 
   const documents: CarouselInstructionReadResponse[] = orderedInstructionDocuments(
@@ -83,9 +85,12 @@ export function CarouselInstructionsStep({
     useRef(onCarouselSaved);
   const onActionsRef: { current: ((actions: InstructionEditorActions | null) => void) | undefined } =
     useRef(onActions);
+  const onGenerateEnabledRef: { current: ((enabled: boolean) => void) | undefined } =
+    useRef(onGenerateEnabled);
   carouselRef.current = carousel;
   onCarouselSavedRef.current = onCarouselSaved;
   onActionsRef.current = onActions;
+  onGenerateEnabledRef.current = onGenerateEnabled;
 
   if (carousel.id !== trackedCarouselId) {
     const loadedDraft: InstructionDraft = instructionDraftFromDocument(
@@ -317,13 +322,19 @@ export function CarouselInstructionsStep({
     canWrite,
     INSTRUCTION_SAMPLE_TEMPLATE,
   );
+  const instructionsSection: CarouselPageSection = carouselPageSection("instructions");
+
+  useEffect((): void => {
+    onGenerateEnabledRef.current?.(generateEnabled);
+  }, [generateEnabled]);
 
   return (
     <section
-      id="carousel-instructions"
-      className="stack-form"
-      aria-label="Instructions"
+      id={instructionsSection.id}
+      className="carousel-page-section stack-form"
+      aria-labelledby="carousel-instructions-heading"
     >
+      <h2 id="carousel-instructions-heading">{instructionsSection.label}</h2>
       {documents.length === 0 ? null : (
         <ol className="instruction-documents" aria-label="Instruction documents">
           {documents.map((
@@ -430,22 +441,6 @@ export function CarouselInstructionsStep({
         />
       ) : null}
       <InstructionMarkdownPreview source={previewSource} isSample={previewIsSample} />
-      <div className="button-row">
-        <button
-          id="generate-instructions"
-          type="button"
-          disabled={!generateEnabled}
-          aria-label={instructionsGenerateAccessibleName(generateEnabled)}
-          onClick={(): void => {
-            instructionsAfterGenerateClick(carouselRef.current);
-          }}
-        >
-          Generate
-        </button>
-      </div>
-      <p className="field-hint" id="generate-instructions-hint">
-        {INSTRUCTIONS_GENERATE_HINT}
-      </p>
     </section>
   );
 }

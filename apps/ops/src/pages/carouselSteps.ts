@@ -1,6 +1,6 @@
 import type { CarouselStepState, CarouselStepsResponse } from "../api/types";
 
-/** Stored and displayed step numbers. Final is never stored. */
+/** Stored step numbers. The page does not use these to hide a section. */
 export const CAROUSEL_STEP_BASIC: number = 0;
 export const CAROUSEL_STEP_INSTRUCTIONS: number = 1;
 export const CAROUSEL_STEP_CONTENT: number = 2;
@@ -8,7 +8,9 @@ export const CAROUSEL_STEP_SLIDES: number = 3;
 export const CAROUSEL_STEP_FINAL: number = 4;
 
 /**
- * One step on the carousel stepper, in display order.
+ * One named part of a carousel, in display order.
+ *
+ * The index is the stored `editor_step` value. Final is never stored.
  */
 export interface CarouselStepDefinition {
   index: number;
@@ -17,7 +19,7 @@ export interface CarouselStepDefinition {
 }
 
 /**
- * The five steps, labeled with their index: 0 Basic through 4 Final.
+ * Basic through Final, in the order the page stacks them.
  */
 export const CAROUSEL_STEPS: readonly CarouselStepDefinition[] = [
   { index: CAROUSEL_STEP_BASIC, key: "basic", label: "Basic" },
@@ -25,20 +27,6 @@ export const CAROUSEL_STEPS: readonly CarouselStepDefinition[] = [
   { index: CAROUSEL_STEP_CONTENT, key: "content", label: "Content" },
   { index: CAROUSEL_STEP_SLIDES, key: "slides", label: "Slides" },
   { index: CAROUSEL_STEP_FINAL, key: "final", label: "Final" },
-];
-
-/**
- * Steps the operator can open in this phase.
- *
- * Basic is the label and the locked skeleton. Instructions shows the
- * documents. Content chooses an album. Slides is the editor. Final
- * stays closed.
- */
-export const OPENABLE_EDITOR_STEPS: readonly number[] = [
-  CAROUSEL_STEP_BASIC,
-  CAROUSEL_STEP_INSTRUCTIONS,
-  CAROUSEL_STEP_CONTENT,
-  CAROUSEL_STEP_SLIDES,
 ];
 
 /**
@@ -53,7 +41,7 @@ export function generationLabel(generationNumber: number): string {
 }
 
 /**
- * Find the step definition for a stored editor step.
+ * Find the definition for a stored editor step.
  *
  * @param stepIndex - 0 Basic through 4 Final
  * @returns That step, or null when the number is not a step
@@ -72,9 +60,11 @@ export function carouselStepByIndex(stepIndex: number): CarouselStepDefinition |
 }
 
 /**
- * Visible label, including the step index.
+ * Label that includes the stored step index.
  *
- * @param step - A stepper step
+ * The page headings use `label` alone. This form stays for the stored number.
+ *
+ * @param step - A carousel section
  * @returns Text such as "3 Slides"
  */
 export function carouselStepLabel(step: CarouselStepDefinition): string {
@@ -83,113 +73,29 @@ export function carouselStepLabel(step: CarouselStepDefinition): string {
 }
 
 /**
- * Why Slides stays closed.
+ * Why a picture carousel with no album cannot choose a slide image yet.
  *
  * The album rule fails when the skeleton needs a picture and no album
- * is attached. Research does not open Slides.
+ * is attached. Research does not change this.
  */
 export const SLIDES_ALBUM_REQUIRED_DETAIL: string =
   "Attach an album on Content first.";
 
 /**
- * Why Final stays closed.
+ * Why Final has no assembly controls.
  *
- * Phase 7 assembles the slides. This phase keeps the control locked.
- * It does not call the template generate route and it does not write
- * campaign-run rows. Final is not stored.
+ * Phase 7 assembles the slides. This page keeps the heading and this
+ * sentence. It does not call the template generate route and it does
+ * not write campaign-run rows. Final is not stored.
  */
 export const FINAL_CLOSED_DETAIL: string =
   "Final assembly is a later phase.";
 
 /**
- * Accessible name, including locked or done when that is the derived state.
- *
- * An available step stays unmarked. A done step says done. Final stays
- * closed for an admin and a reader. Its name says final assembly is a
- * later phase. Locked Slides says to attach an album on Content first.
- * Available Instructions stays unmarked. Done Instructions says done.
- *
- * @param step - A stepper step
- * @param stepState - Derived state from `steps`
- * @returns The button's accessible name
- */
-export function carouselStepAccessibleName(
-  step: CarouselStepDefinition,
-  stepState: CarouselStepState,
-): string {
-
-  const label: string = carouselStepLabel(step);
-
-  if (step.index === CAROUSEL_STEP_FINAL) {
-    return `${label}, locked. ${FINAL_CLOSED_DETAIL}`;
-  }
-
-  if (step.index === CAROUSEL_STEP_SLIDES && stepState === "locked") {
-    return `${label}, locked. ${SLIDES_ALBUM_REQUIRED_DETAIL}`;
-  }
-
-  if (stepState === "locked") {
-    return `${label}, locked`;
-  }
-
-  if (stepState === "done") {
-    return `${label}, done`;
-  }
-
-  return label;
-}
-
-/**
- * Tooltip for a closed step that names why it stays shut.
- *
- * Final always shows its later-phase sentence, for an admin and a
- * reader. Locked Slides names the album rule. An open step, including
- * Instructions, has no tooltip. The title is the accessible name.
- *
- * @param step - A stepper step
- * @param stepState - Derived state from `steps`
- * @returns The accessible name, or undefined when the control needs no reason
- */
-export function carouselStepTitle(
-  step: CarouselStepDefinition,
-  stepState: CarouselStepState,
-): string | undefined {
-
-  const closedForLaterPhase: boolean = step.index === CAROUSEL_STEP_FINAL;
-  const slidesNeedAlbum: boolean = step.index === CAROUSEL_STEP_SLIDES
-    && stepState === "locked";
-
-  if (!closedForLaterPhase && !slidesNeedAlbum) {
-    return undefined;
-  }
-
-  const title: string = carouselStepAccessibleName(step, stepState);
-
-  return title;
-}
-
-/**
- * Lede sentence naming the stored open step.
- *
- * @param editorStep - `carousels.editor_step`
- * @returns A sentence such as "This carousel opens on Slides."
- */
-export function openStepSentence(editorStep: number): string {
-
-  const openStep: CarouselStepDefinition | null = carouselStepByIndex(editorStep);
-
-  if (openStep === null) {
-    return "This carousel opens on its stored step.";
-  }
-
-  return `This carousel opens on ${openStep.label}.`;
-}
-
-/**
- * Derived state for one step.
+ * Derived state for one section.
  *
  * @param steps - The five states from the carousel detail
- * @param step - The step to read
+ * @param step - The section to read
  * @returns locked, available, or done
  */
 export function stepStateFor(
@@ -198,176 +104,4 @@ export function stepStateFor(
 ): CarouselStepState {
 
   return steps[step.key];
-}
-
-/**
- * Whether this phase lets the operator open the step.
- *
- * Basic, Instructions, Content, and Slides open when they are available
- * or done. A locked step stays closed. Final stays closed.
- *
- * @param step - The step control
- * @param stepState - Derived state for that step
- * @returns True when the control can be selected
- */
-export function canOpenCarouselStep(
-  step: CarouselStepDefinition,
-  stepState: CarouselStepState,
-): boolean {
-
-  if (!OPENABLE_EDITOR_STEPS.includes(step.index)) {
-    return false;
-  }
-
-  if (stepState === "locked") {
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Whether clicking the step writes `editor_step`.
- *
- * An available step that can be opened always calls the step PATCH.
- * A done step calls it only when it is not already the open step.
- * A reader does not write. A locked step does not write.
- *
- * @param step - The clicked step
- * @param stepState - Derived state for that step
- * @param editorStep - The stored open step
- * @param canWrite - True for an admin
- * @returns True when the click should PATCH
- */
-export function stepClickStoresEditorStep(
-  step: CarouselStepDefinition,
-  stepState: CarouselStepState,
-  editorStep: number,
-  canWrite: boolean,
-): boolean {
-
-  if (!canWrite) {
-    return false;
-  }
-
-  if (!canOpenCarouselStep(step, stepState)) {
-    return false;
-  }
-
-  if (stepState === "available") {
-    return true;
-  }
-
-  return editorStep !== step.index;
-}
-
-/**
- * Mark drawn on the control. Available stays unmarked.
- *
- * @param stepState - Derived state from `steps`
- * @returns Locked, Done, or null while the step is still open
- */
-export function carouselStepMark(stepState: CarouselStepState): string | null {
-
-  if (stepState === "locked") {
-    return "Locked";
-  }
-
-  if (stepState === "done") {
-    return "Done";
-  }
-
-  return null;
-}
-
-/**
- * Classes for one step control.
- *
- * The open step uses the teal primary. A done step uses the success
- * color. A locked step uses the stone disabled treatment. Available
- * adds neither done nor locked.
- *
- * @param stepState - Derived state from `steps`
- * @param isCurrent - True when this step is the one on screen
- * @returns Space-separated class names
- */
-export function carouselStepClassName(
-  stepState: CarouselStepState,
-  isCurrent: boolean,
-): string {
-
-  const classNames: string[] = ["carousel-step"];
-
-  if (isCurrent) {
-    classNames.push("is-current");
-  }
-
-  if (stepState === "done") {
-    classNames.push("is-done");
-  }
-
-  if (stepState === "locked") {
-    classNames.push("is-locked");
-  }
-
-  return classNames.join(" ");
-}
-
-/**
- * Step the shell may show.
- *
- * Slides stays closed while `steps.slides` is locked. The shell shows
- * Content, where the album is attached, and does not write
- * `editor_step`. Any other stored step is shown as it is.
- *
- * @param editorStep - The stored step, or a step a reader is looking at
- * @param steps - The five states from the carousel detail
- * @returns The step whose panel is visible
- */
-export function shellEditorStep(
-  editorStep: number,
-  steps: CarouselStepsResponse,
-): number {
-
-  if (editorStep !== CAROUSEL_STEP_SLIDES) {
-    return editorStep;
-  }
-
-  const slidesStep: CarouselStepDefinition | null = carouselStepByIndex(
-    CAROUSEL_STEP_SLIDES,
-  );
-
-  if (slidesStep === null) {
-    return editorStep;
-  }
-
-  if (stepStateFor(steps, slidesStep) === "locked") {
-    return CAROUSEL_STEP_CONTENT;
-  }
-
-  return editorStep;
-}
-
-/**
- * Step the shell shows.
- *
- * An admin follows the stored step. A reader can look at another open
- * step without writing `editor_step`.
- *
- * @param storedStep - `carousels.editor_step`
- * @param viewedStep - Step a reader opened locally, or null
- * @param canWrite - True for an admin
- * @returns The step whose panel is visible
- */
-export function displayedEditorStep(
-  storedStep: number,
-  viewedStep: number | null,
-  canWrite: boolean,
-): number {
-
-  if (canWrite || viewedStep === null) {
-    return storedStep;
-  }
-
-  return viewedStep;
 }
