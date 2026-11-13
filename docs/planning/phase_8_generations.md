@@ -55,7 +55,7 @@ Final already keys `carousel_assemblies` by `(carousel_id, generation_number)`. 
 
 ### Snapshot
 
-- [ ] **8.2 Replace one generation's snapshot from the working rows**
+- [x] **8.2 Replace one generation's snapshot from the working rows**
 
   Add `replace_current_generation_snapshot` in `app/carousels/generations.py`. It loads the carousel, calls `ensure_current_generation`, sets that header's `album_id` from `carousel.album_id`, deletes that generation's instruction, research, image, slide, text, and exclusion rows, and inserts them again from the working rows. The copy rules are the backfill rules in task 8.1. It does not update any other generation. It does not insert or delete working slides, instructions, research links, or album images. It does not write `carousel_assemblies`, `slide_draft_batches`, `campaign_carousels`, or `artifacts`. It does not change `generation_number`. One transaction is the caller's.
 
