@@ -510,6 +510,28 @@ export async function generateCarouselCollection(
   );
 }
 
+export async function acceptSlideDraftBatch(
+  carouselId: string,
+  batchId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/slide-draft-batches/${batchId}/accept`,
+  );
+}
+
+export async function discardSlideDraftBatch(
+  carouselId: string,
+  batchId: string,
+): Promise<CarouselReadResponse> {
+
+  return requestJson<CarouselReadResponse>(
+    "POST",
+    `/api/v1/carousels/${carouselId}/slide-draft-batches/${batchId}/discard`,
+  );
+}
+
 export async function generateCarouselSlide(sourceId: string): Promise<SlideReadResponse> {
 
   return requestJson<SlideReadResponse>(

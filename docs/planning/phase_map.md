@@ -526,7 +526,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
   Acceptance, in `apps/ops/carouselCollection.test.ts` and an updated `carouselInstructions.test.ts`: an empty draft is disabled, one non-blank document is enabled, a reader is disabled, provider off is disabled, and a pending batch is disabled. The old later-phase hint is gone. The click helper that returned the carousel unchanged is gone.
 
-- [ ] **6.9 Review the set on the Slides section**
+- [x] **6.9 Review the set on the Slides section**
 
   When `pending_slide_draft_batch` is set, the Slides section shows a review block above the slide grid: `Review this generated set. It stays off Final until you accept it.` Accept set is `#accept-slide-draft-batch`. Discard set is `#discard-slide-draft-batch`. Accept calls `acceptSlideDraftBatch`. Discard calls `discardSlideDraftBatch`. Both return the carousel detail and replace the open carousel. Accept's status line is `Accepted the set. These slides are live.` Discard's is `Discarded the set.` A reader sees the sentence and both buttons disabled. The block is absent when the pending batch is null. This PR does not add a route and does not move the operator to another page. Final stays the locked heading.
 

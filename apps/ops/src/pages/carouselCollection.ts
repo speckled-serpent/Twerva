@@ -1,4 +1,7 @@
-import type { CarouselInstructionReadResponse } from "../api/types";
+import type {
+  CarouselInstructionReadResponse,
+  PendingSlideDraftBatchResponse,
+} from "../api/types";
 import {
   instructionsGenerateEnabled,
   type InstructionDraft,
@@ -100,4 +103,76 @@ export function collectionGenerateAccessibleName(
 export function collectionGenerateStatusMessage(slideCount: number): string {
 
   return `Drafted a set of ${slideCount} slides. Accept the set to make them live.`;
+}
+
+/** Sentence above the slide grid while a generated set is waiting. */
+export const COLLECTION_REVIEW_NOTICE: string =
+  "Review this generated set. It stays off Final until you accept it.";
+
+/** Status line after Accept set. */
+export const COLLECTION_ACCEPT_STATUS: string =
+  "Accepted the set. These slides are live.";
+
+/** Status line after Discard set. */
+export const COLLECTION_DISCARD_STATUS: string = "Discarded the set.";
+
+export interface CollectionReviewState {
+  pendingBatch: PendingSlideDraftBatchResponse | null;
+  reviewVisible: boolean;
+  canAccept: boolean;
+  canDiscard: boolean;
+  notice: string | null;
+}
+
+/**
+ * Whether the Slides section shows Accept and Discard.
+ *
+ * The block is present only while a set is pending. A reader sees it
+ * and cannot press either button.
+ *
+ * @param pendingBatch - The waiting set, or null
+ * @param canWrite - True for an admin
+ * @returns The review block state
+ */
+export function collectionReviewState(
+  pendingBatch: PendingSlideDraftBatchResponse | null,
+  canWrite: boolean,
+): CollectionReviewState {
+
+  if (pendingBatch === null) {
+    const hiddenReview: CollectionReviewState = {
+      pendingBatch: null,
+      reviewVisible: false,
+      canAccept: false,
+      canDiscard: false,
+      notice: null,
+    };
+
+    return hiddenReview;
+  }
+
+  const visibleReview: CollectionReviewState = {
+    pendingBatch,
+    reviewVisible: true,
+    canAccept: canWrite,
+    canDiscard: canWrite,
+    notice: COLLECTION_REVIEW_NOTICE,
+  };
+
+  return visibleReview;
+}
+
+/**
+ * The carousel state after Accept set succeeds.
+ *
+ * The pending batch is gone. Live count is whatever the saved detail says.
+ *
+ * @param savedCarouselPendingBatch - The pending field on the accepted detail
+ * @returns The next review state
+ */
+export function collectionReviewAfterAccept(
+  savedCarouselPendingBatch: PendingSlideDraftBatchResponse | null,
+): CollectionReviewState {
+
+  return collectionReviewState(savedCarouselPendingBatch, true);
 }

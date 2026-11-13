@@ -36,6 +36,7 @@ import {
 } from "./CarouselInstructionsStep";
 import { SkeletonAutosaveStatus } from "./SkeletonAutosaveStatus";
 import type { AlbumEditorActions } from "./AlbumImagesEditor";
+import { CarouselCollectionReview } from "./CarouselCollectionReview";
 import { CarouselGenerateControl } from "./CarouselGenerateControl";
 import { type InstructionDraft } from "./carouselInstructions";
 import { CarouselGeneration, CarouselSectionNav } from "./CarouselSectionNav";
@@ -844,6 +845,13 @@ function AlbumView({
                 {textGeneration.detail}
               </p>
             )}
+            <CarouselCollectionReview
+              carousel={carousel}
+              canWrite={canWrite}
+              onCarouselSaved={onCarouselSaved}
+              onStatusMessage={onStatusMessage}
+              onError={setSaveError}
+            />
             {carousel.slides.length === 0 ? (
               <p>No slides yet.</p>
             ) : (
