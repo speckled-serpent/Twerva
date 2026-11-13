@@ -21,6 +21,10 @@ A draft is generated text that is not live until a person accepts it.
 ``carousel_instructions`` stores the current instruction documents:
 a body and a position, with no title and no version. The draft comes
 from those documents.
+``slide_draft_batches`` is the review state for one press of Generate.
+A slide may point at that batch. Deleting the batch does not delete
+the slide. It is not the phase 8 snapshot, and it is not
+``campaign_carousels``.
 ``album_images`` holds the files. A slide points at most one of them.
 A carousel may point at the album those images came from.
 ``research_items`` is one text document: a title, a slug, and a body.
@@ -63,6 +67,7 @@ from app.models.carousel import (
     CarouselInstruction,
     CarouselResearchItem,
     Slide,
+    SlideDraftBatch,
     SlideElementText,
     SlideExclusion,
 )
@@ -180,6 +185,7 @@ __all__ = [
     "SourceItem",
     "SourceType",
     "Slide",
+    "SlideDraftBatch",
     "SlideElementText",
     "SlideExclusion",
     "SlideImageIntake",

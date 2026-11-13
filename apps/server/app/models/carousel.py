@@ -12,6 +12,10 @@ an ordered list in ``carousel_research_items``. There is no
 ``research_id`` column. Instruction documents live in
 ``carousel_instructions``: the current body and a position, with no
 title and no version. Drafted slide text comes from those documents.
+``slide_draft_batches`` is the review state for one press of Generate.
+A slide may point at that batch. Deleting the batch does not delete
+the slide. The table is not the phase 8 snapshot, and it is not
+``campaign_carousels``.
 
 Skeletons still store a concrete image path. They do not reference
 these rows.
@@ -21,7 +25,15 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -52,6 +64,10 @@ CAROUSEL_INSTRUCTION_BODY_CHECK_SQL: str = (
 SLIDE_POSITION_CHECK_SQL: str = "position >= 0"
 SLIDE_NAME_CHECK_SQL: str = "btrim(name) <> ''"
 SLIDE_FIELD_TEXT_CHECK_SQL: str = "btrim(label) <> '' AND btrim(value) <> ''"
+SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL: str = (
+    "status IN ('pending', 'accepted', 'discarded')"
+)
+SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL: str = "slide_count >= 1"
 
 
 class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -65,7 +81,9 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     is attached.
     Default stays on Slides. The skeleton stays the one chosen at create.
     ``instructions`` is the current documents, ordered by position.
-    Drafted slide text comes from those documents.
+    Drafted slide text comes from those documents. ``draft_batches``
+    records each press of Generate: pending review, accepted, or
+    discarded. One carousel holds one pending set.
     """
 
     __tablename__ = "carousels"
@@ -122,10 +140,63 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="CarouselInstruction.position",
     )
+    draft_batches: Mapped[list["SlideDraftBatch"]] = relationship(
+        "SlideDraftBatch",
+        back_populates="carousel",
+        cascade="all, delete-orphan",
+    )
+
+
+class SlideDraftBatch(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One generated set, waiting for review or already settled.
+
+    ``status`` is ``pending``, ``accepted``, or ``discarded``. One
+    carousel holds one pending row. ``slide_count`` is the count that
+    press asked for. Deleting the carousel removes the row. Deleting
+    the row does not delete the slides that point at it. This is the
+    review state for one press of Generate. It is not the phase 8
+    snapshot, and it is not ``campaign_carousels``.
+    """
+
+    __tablename__ = "slide_draft_batches"
+    __table_args__ = (
+        CheckConstraint(SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL, name="status"),
+        CheckConstraint(SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL, name="slide_count"),
+        Index(
+            "uq_slide_draft_batches_one_pending_carousel",
+            "carousel_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    carousel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("carousels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    slide_count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    carousel: Mapped[Carousel] = relationship(
+        "Carousel",
+        back_populates="draft_batches",
+    )
+    slides: Mapped[list["Slide"]] = relationship(
+        "Slide",
+        back_populates="draft_batch",
+    )
 
 
 class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
-    """One piece of content inside a carousel. The id stays; the name is set."""
+    """One piece of content inside a carousel. The id stays; the name is set.
+
+    ``draft_batch_id`` points at the generated set from one press of
+    Generate, when this slide belongs to that set. Clearing the batch
+    leaves the slide. ``text_status`` stays ``draft`` or ``live``, and
+    the server default stays ``live``.
+    """
 
     __tablename__ = "slides"
     __table_args__ = (
@@ -158,8 +229,18 @@ class Slide(Base, UuidPrimaryKeyMixin, TimestampMixin):
         nullable=True,
         index=True,
     )
+    draft_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("slide_draft_batches.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     carousel: Mapped[Carousel] = relationship("Carousel", back_populates="slides")
+    draft_batch: Mapped[SlideDraftBatch | None] = relationship(
+        "SlideDraftBatch",
+        back_populates="slides",
+    )
     element_texts: Mapped[list["SlideElementText"]] = relationship(
         "SlideElementText",
         back_populates="slide",

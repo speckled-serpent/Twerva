@@ -2,7 +2,7 @@
 
 import unittest
 
-from sqlalchemy import CheckConstraint, ForeignKey, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.sql.schema import Column, Table
 
 from app.models import (
@@ -38,6 +38,7 @@ from app.models import (
     SkeletonElementContentKind,
     SkeletonElementTextSource,
     SkeletonStatus,
+    SlideDraftBatch as ExportedSlideDraftBatch,
     ResearchItem,
     BackgroundKind,
     cluster_source_items,
@@ -51,9 +52,14 @@ from app.models.carousel import (
     CAROUSEL_INSTRUCTION_POSITION_CHECK_SQL,
     CAROUSEL_RESEARCH_POSITION_CHECK_SQL,
     INSTRUCTION_BODY_MAX_CHARACTERS,
+    SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL,
+    SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL,
     Carousel,
     CarouselInstruction,
     CarouselResearchItem,
+    Slide,
+    SlideDraftBatch,
+    SlideElementText,
 )
 from app.models.research_item import RESEARCH_BODY_MAX_CHARACTERS
 from app.models.skeleton_element import (
@@ -583,6 +589,74 @@ class DomainEnumTests(unittest.TestCase):
         self.assertEqual(len(order_by), 1)
         self.assertEqual(order_by[0].name, "position")
         self.assertEqual(order_by[0].table.name, "carousel_instructions")
+
+    def test_slide_draft_batch_is_one_pending_set(self) -> None:
+        """A batch is the review state for one Generate. Deleting it keeps the slide."""
+
+        column_names: set[str] = set(SlideDraftBatch.__table__.columns.keys())
+        status_column: Column[str] = SlideDraftBatch.__table__.c.status
+        slide_count_column: Column[int] = SlideDraftBatch.__table__.c.slide_count
+        pointer_column: Column[object] = Slide.__table__.c.draft_batch_id
+        check_names: dict[str, str] = {
+            constraint.name: str(constraint.sqltext)
+            for constraint in SlideDraftBatch.__table__.constraints
+            if isinstance(constraint, CheckConstraint) and constraint.name is not None
+        }
+        batch_delete_actions: dict[str, str | None] = {
+            foreign_key.parent.name: foreign_key.ondelete
+            for foreign_key in SlideDraftBatch.__table__.foreign_keys
+        }
+        slide_delete_actions: dict[str, str | None] = {
+            foreign_key.parent.name: foreign_key.ondelete
+            for foreign_key in Slide.__table__.foreign_keys
+        }
+        pending_index: Index = next(
+            index
+            for index in SlideDraftBatch.__table__.indexes
+            if index.name == "uq_slide_draft_batches_one_pending_carousel"
+        )
+        pending_where: str = str(pending_index.dialect_options["postgresql"]["where"])
+
+        self.assertEqual(SlideDraftBatch.__tablename__, "slide_draft_batches")
+        self.assertIn("slide_draft_batches", set(Base.metadata.tables.keys()))
+        self.assertIs(ExportedSlideDraftBatch, SlideDraftBatch)
+        self.assertEqual(
+            column_names,
+            {"id", "carousel_id", "status", "slide_count", "created_at", "updated_at"},
+        )
+        self.assertFalse(status_column.nullable)
+        self.assertFalse(slide_count_column.nullable)
+        self.assertIsNone(status_column.server_default)
+        self.assertIsNone(slide_count_column.server_default)
+        self.assertEqual(
+            check_names["ck_slide_draft_batches_status"],
+            SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL,
+        )
+        self.assertEqual(
+            check_names["ck_slide_draft_batches_slide_count"],
+            SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL,
+        )
+        self.assertEqual(
+            SLIDE_DRAFT_BATCH_STATUS_CHECK_SQL,
+            "status IN ('pending', 'accepted', 'discarded')",
+        )
+        self.assertEqual(SLIDE_DRAFT_BATCH_SLIDE_COUNT_CHECK_SQL, "slide_count >= 1")
+        self.assertTrue(pending_index.unique)
+        self.assertEqual([column.name for column in pending_index.columns], ["carousel_id"])
+        self.assertIn("status = 'pending'", pending_where)
+        self.assertEqual(batch_delete_actions["carousel_id"], "CASCADE")
+        self.assertTrue(pointer_column.nullable)
+        self.assertIsNone(pointer_column.server_default)
+        self.assertEqual(slide_delete_actions["draft_batch_id"], "SET NULL")
+        self.assertIn("draft_batch_id", _indexed_column_names(Slide.__table__))
+        self.assertEqual(Carousel.draft_batches.property.back_populates, "carousel")
+        self.assertEqual(Slide.draft_batch.property.back_populates, "slides")
+        self.assertIs(Carousel.draft_batches.property.mapper.class_, SlideDraftBatch)
+        self.assertIs(Slide.draft_batch.property.mapper.class_, SlideDraftBatch)
+        self.assertNotIn("delete", str(SlideDraftBatch.slides.property.cascade))
+        self.assertIn("draft_value", set(SlideElementText.__table__.columns.keys()))
+        self.assertTrue(SlideElementText.__table__.c.draft_value.nullable)
+        self.assertIn("live", str(Slide.__table__.c.text_status.server_default.arg))
 
 
 def _unique_column_tuples(table: Table) -> list[tuple[str, ...]]:

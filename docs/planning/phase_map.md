@@ -442,7 +442,7 @@ The choices below that a task has to name — the count, a second Generate, the 
 
 ### Data model
 
-- [ ] **6.1 Add a slide draft batch**
+- [x] **6.1 Add a slide draft batch**
 
   Alembic revision `slide_draft_batches`, down-revision `carousel_instructions_drop_guidance`. New table `slide_draft_batches`: `id`, `carousel_id` (cascade on carousel delete), `status` (text, not null, check `status IN ('pending', 'accepted', 'discarded')`), `slide_count` (integer, not null, check `slide_count >= 1`), and the timestamp columns from `TimestampMixin`. A partial unique index `uq_slide_draft_batches_one_pending_carousel` on `carousel_id` where `status = 'pending'`. One carousel can hold one pending set.
 
