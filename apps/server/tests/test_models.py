@@ -66,6 +66,8 @@ from app.models.carousel import (
     AssembledCarouselFrame,
     Carousel,
     CarouselAssembly,
+    CarouselGeneration,
+    CarouselGenerationSlideText,
     CarouselInstruction,
     CarouselResearchItem,
     Slide,
@@ -695,6 +697,7 @@ class DomainEnumTests(unittest.TestCase):
                 "id",
                 "carousel_id",
                 "generation_number",
+                "generation_id",
                 "slide_count",
                 "created_at",
                 "updated_at",
@@ -761,6 +764,9 @@ class DomainEnumTests(unittest.TestCase):
         self.assertIn(("carousel_id", "generation_number"), _unique_column_tuples(
             CarouselAssembly.__table__,
         ))
+        self.assertIn(("generation_id",), _unique_column_tuples(CarouselAssembly.__table__))
+        self.assertEqual(assembly_deletes["generation_id"], "RESTRICT")
+        self.assertFalse(CarouselAssembly.__table__.c.generation_id.nullable)
         self.assertIn(("assembly_id", "position"), _unique_column_tuples(
             AssembledCarousel.__table__,
         ))
@@ -778,6 +784,26 @@ class DomainEnumTests(unittest.TestCase):
         self.assertIn("delete-orphan", str(Carousel.assemblies.property.cascade))
         self.assertNotIn("delete", str(Slide.assembled_frames.property.cascade))
         self.assertIn("editor_step IN (0, 1, 2, 3)", CAROUSEL_EDITOR_STEP_CHECK_SQL)
+
+    def test_carousel_generation_is_the_snapshot(self) -> None:
+        """The snapshot copies bodies and slides. Element ids are not foreign keys."""
+
+        text_foreign_keys: set[str] = {
+            foreign_key.parent.name
+            for foreign_key in CarouselGenerationSlideText.__table__.foreign_keys
+        }
+
+        self.assertEqual(CarouselGeneration.__tablename__, "carousel_generations")
+        self.assertIn("carousel_generations", set(Base.metadata.tables.keys()))
+        self.assertIs(Carousel.generations.property.mapper.class_, CarouselGeneration)
+        self.assertEqual(Carousel.generations.property.back_populates, "carousel")
+        self.assertIn("delete-orphan", str(Carousel.generations.property.cascade))
+        self.assertNotIn("skeleton_element_id", text_foreign_keys)
+        self.assertIn("generation_slide_id", text_foreign_keys)
+        self.assertIn(
+            ("carousel_id", "generation_number"),
+            _unique_column_tuples(CarouselGeneration.__table__),
+        )
 
 
 def _check_sql(table: Table) -> dict[str, str]:

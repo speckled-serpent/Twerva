@@ -15,10 +15,14 @@ title and no version. Drafted slide text comes from those documents.
 ``slide_draft_batches`` is the review state for one press of Generate.
 A slide may point at that batch. Deleting the batch does not delete
 the slide. The table is not the phase 8 snapshot, and it is not
-``campaign_carousels``. ``carousel_assemblies`` is one Final assembly
-for a carousel and generation. Its child rows are the reviewed
-carousels and the frozen frames. Deleting a slide or an album image
-clears the frame pointer and leaves the frame.
+``campaign_carousels``. ``carousel_generations`` is that snapshot:
+the instruction bodies, the album and the image ids it held, the
+research title and body, and the slides. ``carousel_assemblies`` is
+one Final assembly for a carousel and generation. It hangs on the
+snapshot through ``generation_id`` and is not the snapshot itself.
+Its child rows are the reviewed carousels and the frozen frames.
+Deleting a slide or an album image clears the frame pointer and
+leaves the frame.
 
 Skeletons still store a concrete image path. They do not reference
 these rows.
@@ -47,7 +51,11 @@ from app.models.enums import (
     SLIDE_TEXT_STATUS_ENUM,
     SlideTextStatus,
 )
-from app.models.research_item import RESEARCH_BODY_MAX_CHARACTERS, ResearchItem
+from app.models.research_item import (
+    RESEARCH_BODY_CHECK_SQL,
+    RESEARCH_BODY_MAX_CHARACTERS,
+    ResearchItem,
+)
 
 
 CAROUSEL_NAME_CHECK_SQL: str = (
@@ -80,6 +88,11 @@ ASSEMBLED_FRAME_BLOCK_REASON_CHECK_SQL: str = (
     "block_reason IS NULL OR block_reason IN "
     "('overlap', 'missing_asset', 'measure_error')"
 )
+CAROUSEL_GENERATION_POSITION_CHECK_SQL: str = "position >= 0"
+CAROUSEL_GENERATION_SLIDE_NAME_CHECK_SQL: str = "btrim(name) <> ''"
+CAROUSEL_GENERATION_EXCLUSION_NOT_SELF_CHECK_SQL: str = (
+    "generation_slide_id <> excluded_generation_slide_id"
+)
 
 
 class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -95,8 +108,9 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
     ``instructions`` is the current documents, ordered by position.
     Drafted slide text comes from those documents. ``draft_batches``
     records each press of Generate: pending review, accepted, or
-    discarded. One carousel holds one pending set. ``assemblies`` is
-    the Final assembly for each generation. One generation holds one.
+    discarded. One carousel holds one pending set. ``generations`` is
+    the snapshot of each generation. ``assemblies`` is the Final
+    assembly for each generation. One generation holds one assembly.
     """
 
     __tablename__ = "carousels"
@@ -163,6 +177,12 @@ class Carousel(Base, UuidPrimaryKeyMixin, TimestampMixin):
         back_populates="carousel",
         cascade="all, delete-orphan",
     )
+    generations: Mapped[list["CarouselGeneration"]] = relationship(
+        "CarouselGeneration",
+        back_populates="carousel",
+        cascade="all, delete-orphan",
+        order_by="CarouselGeneration.generation_number",
+    )
 
 
 class SlideDraftBatch(Base, UuidPrimaryKeyMixin, TimestampMixin):
@@ -211,10 +231,13 @@ class CarouselAssembly(Base, UuidPrimaryKeyMixin, TimestampMixin):
     """One Final assembly for a carousel and generation.
 
     ``generation_number`` is the carousel's generation at assemble time.
-    One carousel holds one row per generation, so phase 8 can attach
-    this row without copying frames. ``slide_count`` is the cap drawn
-    for that assemble. Deleting the carousel removes the row. This is
-    not a generation snapshot, and it is not ``campaign_carousels``.
+    ``generation_id`` hangs this row on that generation's snapshot.
+    One carousel holds one row per generation, so a later generation
+    can keep this row without copying frames. ``slide_count`` is the
+    cap drawn for that assemble. Deleting the carousel removes the row.
+    Deleting the generation is refused while this row still points at
+    it. This is not a generation snapshot, and it is not
+    ``campaign_carousels``.
     """
 
     __tablename__ = "carousel_assemblies"
@@ -241,17 +264,445 @@ class CarouselAssembly(Base, UuidPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     generation_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    generation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generations.id",
+            name="fk_carousel_assemblies_generation_id_carousel_generations",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+        unique=True,
+    )
     slide_count: Mapped[int] = mapped_column(Integer, nullable=False)
 
     carousel: Mapped[Carousel] = relationship(
         "Carousel",
         back_populates="assemblies",
     )
+    generation: Mapped["CarouselGeneration"] = relationship(
+        "CarouselGeneration",
+        back_populates="assembly",
+    )
     assembled_carousels: Mapped[list["AssembledCarousel"]] = relationship(
         "AssembledCarousel",
         back_populates="assembly",
         cascade="all, delete-orphan",
         order_by="AssembledCarousel.position",
+    )
+
+
+class CarouselGeneration(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One snapshot of a carousel generation.
+
+    ``generation_number`` matches ``carousels.generation_number`` for
+    the generation this row froze. ``album_id`` is the album attached
+    then. Image ids, instruction bodies, research copies, and slides
+    live on the child tables. Deleting the carousel removes this row.
+    An assembly that still points here refuses that delete.
+    """
+
+    __tablename__ = "carousel_generations"
+    __table_args__ = (
+        UniqueConstraint(
+            "carousel_id",
+            "generation_number",
+            name="uq_carousel_generations_carousel_id_generation_number",
+        ),
+        CheckConstraint(
+            CAROUSEL_ASSEMBLY_GENERATION_CHECK_SQL,
+            name="generation_number",
+        ),
+    )
+
+    carousel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousels.id",
+            name="fk_carousel_generations_carousel_id_carousels",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+    generation_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    album_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "albums.id",
+            name="fk_carousel_generations_album_id_albums",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    carousel: Mapped[Carousel] = relationship(
+        "Carousel",
+        back_populates="generations",
+    )
+    instructions: Mapped[list["CarouselGenerationInstruction"]] = relationship(
+        "CarouselGenerationInstruction",
+        back_populates="generation",
+        cascade="all, delete-orphan",
+        order_by="CarouselGenerationInstruction.position",
+    )
+    research_items: Mapped[list["CarouselGenerationResearch"]] = relationship(
+        "CarouselGenerationResearch",
+        back_populates="generation",
+        cascade="all, delete-orphan",
+        order_by="CarouselGenerationResearch.position",
+    )
+    images: Mapped[list["CarouselGenerationImage"]] = relationship(
+        "CarouselGenerationImage",
+        back_populates="generation",
+        cascade="all, delete-orphan",
+        order_by="CarouselGenerationImage.position",
+    )
+    slides: Mapped[list["CarouselGenerationSlide"]] = relationship(
+        "CarouselGenerationSlide",
+        back_populates="generation",
+        cascade="all, delete-orphan",
+        order_by="CarouselGenerationSlide.position",
+    )
+    assembly: Mapped["CarouselAssembly | None"] = relationship(
+        "CarouselAssembly",
+        back_populates="generation",
+        uselist=False,
+    )
+
+
+class CarouselGenerationInstruction(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One copied instruction body on a generation.
+
+    ``body`` is the text at snapshot time, including an empty string.
+    There is no title and no version. Deleting the generation removes
+    this row.
+    """
+
+    __tablename__ = "carousel_generation_instructions"
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_id",
+            "position",
+            name="uq_carousel_generation_instructions_generation_id_position",
+        ),
+        CheckConstraint(
+            CAROUSEL_GENERATION_POSITION_CHECK_SQL,
+            name="position",
+        ),
+        CheckConstraint(
+            CAROUSEL_INSTRUCTION_BODY_CHECK_SQL,
+            name="body",
+        ),
+    )
+
+    generation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generations.id",
+            name="fk_cgen_instructions_generation_id_cgen",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    body: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+    )
+
+    generation: Mapped[CarouselGeneration] = relationship(
+        "CarouselGeneration",
+        back_populates="instructions",
+    )
+
+
+class CarouselGenerationResearch(Base, UuidPrimaryKeyMixin):
+    """One copied research document on a generation.
+
+    ``title`` and ``body`` are the library text at snapshot time.
+    ``research_item_id`` clears when that library row is deleted, and
+    the copied title and body stay. Deleting the generation removes
+    this row.
+    """
+
+    __tablename__ = "carousel_generation_research"
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_id",
+            "position",
+            name="uq_carousel_generation_research_generation_id_position",
+        ),
+        CheckConstraint(
+            CAROUSEL_GENERATION_POSITION_CHECK_SQL,
+            name="position",
+        ),
+        CheckConstraint(RESEARCH_BODY_CHECK_SQL, name="body"),
+    )
+
+    generation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generations.id",
+            name="fk_cgen_research_generation_id_cgen",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    research_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "research_items.id",
+            name="fk_cgen_research_research_item_id_research_items",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+
+    generation: Mapped[CarouselGeneration] = relationship(
+        "CarouselGeneration",
+        back_populates="research_items",
+    )
+
+
+class CarouselGenerationImage(Base, UuidPrimaryKeyMixin):
+    """One album image id copied onto a generation.
+
+    The bytes stay on the album. Deleting the image clears
+    ``album_image_id`` and leaves this position. Deleting the
+    generation removes this row.
+    """
+
+    __tablename__ = "carousel_generation_images"
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_id",
+            "position",
+            name="uq_carousel_generation_images_generation_id_position",
+        ),
+        CheckConstraint(
+            CAROUSEL_GENERATION_POSITION_CHECK_SQL,
+            name="position",
+        ),
+    )
+
+    generation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generations.id",
+            name="fk_cgen_images_generation_id_cgen",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    album_image_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "album_images.id",
+            name="fk_cgen_images_album_image_id_album_images",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    generation: Mapped[CarouselGeneration] = relationship(
+        "CarouselGeneration",
+        back_populates="images",
+    )
+
+
+class CarouselGenerationSlide(Base, UuidPrimaryKeyMixin, TimestampMixin):
+    """One copied slide on a generation.
+
+    ``source_slide_id`` is the working slide this row was copied from.
+    Deleting that slide clears the pointer and leaves this row.
+    ``text_status`` is ``draft`` or ``live``. There is no
+    ``draft_batch_id``. Deleting the generation removes this row.
+    """
+
+    __tablename__ = "carousel_generation_slides"
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_id",
+            "position",
+            name="uq_carousel_generation_slides_generation_id_position",
+        ),
+        CheckConstraint(
+            CAROUSEL_GENERATION_POSITION_CHECK_SQL,
+            name="position",
+        ),
+        CheckConstraint(
+            CAROUSEL_GENERATION_SLIDE_NAME_CHECK_SQL,
+            name="name",
+        ),
+    )
+
+    generation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generations.id",
+            name="fk_cgen_slides_generation_id_cgen",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    text_status: Mapped[SlideTextStatus] = mapped_column(
+        SLIDE_TEXT_STATUS_ENUM,
+        nullable=False,
+    )
+    album_image_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "album_images.id",
+            name="fk_cgen_slides_album_image_id_album_images",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+    source_slide_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "slides.id",
+            name="fk_cgen_slides_source_slide_id_slides",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+
+    generation: Mapped[CarouselGeneration] = relationship(
+        "CarouselGeneration",
+        back_populates="slides",
+    )
+    texts: Mapped[list["CarouselGenerationSlideText"]] = relationship(
+        "CarouselGenerationSlideText",
+        back_populates="generation_slide",
+        cascade="all, delete-orphan",
+    )
+    exclusions: Mapped[list["CarouselGenerationSlideExclusion"]] = relationship(
+        "CarouselGenerationSlideExclusion",
+        foreign_keys="CarouselGenerationSlideExclusion.generation_slide_id",
+        back_populates="generation_slide",
+        cascade="all, delete-orphan",
+    )
+
+
+class CarouselGenerationSlideText(Base, UuidPrimaryKeyMixin):
+    """Copied text for one skeleton element on a generation slide.
+
+    ``skeleton_element_id`` is stored without a foreign key, so
+    deleting the element does not remove a previous generation's text.
+    ``value`` is the live copy. ``draft_value`` is the unaccepted copy.
+    """
+
+    __tablename__ = "carousel_generation_slide_texts"
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_slide_id",
+            "skeleton_element_id",
+            name="uq_cgen_slide_texts_slide_id_element_id",
+        ),
+    )
+
+    generation_slide_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generation_slides.id",
+            name="fk_cgen_slide_texts_generation_slide_id_cgen_slides",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
+    )
+    skeleton_element_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=False,
+    )
+    value: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+    )
+    draft_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    generation_slide: Mapped[CarouselGenerationSlide] = relationship(
+        "CarouselGenerationSlide",
+        back_populates="texts",
+    )
+
+
+class CarouselGenerationSlideExclusion(Base, UuidPrimaryKeyMixin):
+    """One other generation slide this snapshot slide cannot be shown with.
+
+    The pair is stored in both directions. Deleting either snapshot
+    slide removes both rows.
+    """
+
+    __tablename__ = "carousel_generation_slide_exclusions"
+    __table_args__ = (
+        UniqueConstraint(
+            "generation_slide_id",
+            "excluded_generation_slide_id",
+            name="uq_cgen_slide_exclusions_pair",
+        ),
+        CheckConstraint(
+            CAROUSEL_GENERATION_EXCLUSION_NOT_SELF_CHECK_SQL,
+            name="not_self",
+        ),
+        Index(
+            "ix_cgen_slide_exclusions_generation_slide_id",
+            "generation_slide_id",
+        ),
+        Index(
+            "ix_cgen_slide_exclusions_excluded_slide_id",
+            "excluded_generation_slide_id",
+        ),
+    )
+
+    generation_slide_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generation_slides.id",
+            name="fk_cgen_slide_exclusions_generation_slide_id_cgen_slides",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+    excluded_generation_slide_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey(
+            "carousel_generation_slides.id",
+            name="fk_cgen_slide_exclusions_excluded_slide_id_cgen_slides",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+    )
+
+    generation_slide: Mapped[CarouselGenerationSlide] = relationship(
+        "CarouselGenerationSlide",
+        foreign_keys=[generation_slide_id],
+        back_populates="exclusions",
+    )
+    excluded_generation_slide: Mapped[CarouselGenerationSlide] = relationship(
+        "CarouselGenerationSlide",
+        foreign_keys=[excluded_generation_slide_id],
     )
 
 

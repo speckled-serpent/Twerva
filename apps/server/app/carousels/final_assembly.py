@@ -22,6 +22,7 @@ from app.api.v1.lookups import (
 )
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.carousels.editing import new_row_id
+from app.carousels.generations import ensure_current_generation
 from app.carousels.final_render import (
     AssembledFrameRender,
     assembled_frame_relative_path,
@@ -35,6 +36,7 @@ from app.models.carousel import (
     AssembledCarouselFrame,
     Carousel,
     CarouselAssembly,
+    CarouselGeneration,
     Slide,
 )
 from app.models.skeleton import Skeleton
@@ -252,17 +254,27 @@ def _store_groups(
     assembled_carousels: list[AssembledCarousel],
     our_database_session: Session,
 ) -> CarouselAssembly:
-    """Replace the generation's children, creating the parent on the first call."""
+    """Replace the generation's children, creating the parent on the first call.
+
+    The first call hangs the new row on the current generation's
+    snapshot header. A later call keeps that ``generation_id``.
+    """
 
     assembly: CarouselAssembly
+    current_generation: CarouselGeneration = ensure_current_generation(
+        carousel,
+        our_database_session,
+    )
 
     if existing_assembly is None:
         assembly = CarouselAssembly(
             id=assembly_id,
             carousel_id=carousel.id,
+            generation_id=current_generation.id,
             generation_number=carousel.generation_number,
             slide_count=slide_count,
         )
+        current_generation.assembly = assembly
         carousel.assemblies.append(assembly)
         our_database_session.add(assembly)
     else:

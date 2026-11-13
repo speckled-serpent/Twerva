@@ -27,7 +27,7 @@ Final already keys `carousel_assemblies` by `(carousel_id, generation_number)`. 
 
 ### Data model
 
-- [ ] **8.1 Add the generation tables and backfill generation 1**
+- [x] **8.1 Add the generation tables and backfill generation 1**
 
   Alembic revision `carousel_generations`, down-revision `carousel_final_assembly`. The revision id is 20 characters. Upgrade backfills one generation per carousel. It does not change `generation_number`, slide rows, instruction rows, research links, album files, `artifacts`, or `campaign_carousels`. It does not copy PNG files. Downgrade drops `carousel_assemblies.generation_id` first, then the snapshot tables in child-to-parent order. Assemblies, frames, and the carousel's `generation_number` stay. Downgrade does not set that number back to 1.
 
