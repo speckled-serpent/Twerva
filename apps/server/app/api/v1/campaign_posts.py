@@ -13,9 +13,16 @@ from app.api.v1.schemas import (
     CampaignPostCreateRequest,
     CampaignPostFrameRead,
     CampaignPostRead,
+    CampaignPostRescheduleRequest,
 )
 from app.auth.dependencies import require_admin_ops_operator
-from app.campaigns.posts import assembly_for_post, ordered_frames, place_campaign_post
+from app.campaigns.posts import (
+    assembly_for_post,
+    ordered_frames,
+    place_campaign_post,
+    remove_campaign_post,
+    reschedule_campaign_post,
+)
 from app.db import get_our_database_session
 from app.models.campaign import Campaign, CampaignPost
 from app.models.carousel import AssembledCarouselFrame, CarouselAssembly
@@ -36,6 +43,18 @@ def register_campaign_post_routes(campaigns_router: APIRouter) -> None:
         methods=["POST"],
         response_model=CampaignPostRead,
         status_code=status.HTTP_201_CREATED,
+    )
+    campaigns_router.add_api_route(
+        "/{campaign_id}/posts/{post_id}",
+        reschedule_campaign_post_by_id,
+        methods=["PATCH"],
+        response_model=CampaignPostRead,
+    )
+    campaigns_router.add_api_route(
+        "/{campaign_id}/posts/{post_id}",
+        remove_campaign_post_by_id,
+        methods=["DELETE"],
+        status_code=status.HTTP_204_NO_CONTENT,
     )
 
 
@@ -78,6 +97,64 @@ def place_campaign_post_by_id(
     campaign_post_read: CampaignPostRead = serialize_campaign_post(created_post)
 
     return campaign_post_read
+
+
+def reschedule_campaign_post_by_id(
+    campaign_id: uuid.UUID,
+    post_id: uuid.UUID,
+    campaign_post_reschedule_request: CampaignPostRescheduleRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> CampaignPostRead:
+    """Move an upcoming post. Readers cannot call this."""
+
+    _ = current_ops_operator
+    found_campaign: Campaign = fetch_campaign_by_id_or_raise(
+        campaign_id,
+        our_database_session,
+    )
+    moved_post: CampaignPost
+
+    try:
+        moved_post = reschedule_campaign_post(
+            found_campaign,
+            post_id,
+            campaign_post_reschedule_request.scheduled_for,
+            our_database_session,
+        )
+    except CadenceCapExceededError as cadence_error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(cadence_error),
+        ) from cadence_error
+
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Campaign post could not be saved.",
+    )
+    campaign_post_read: CampaignPostRead = serialize_campaign_post(moved_post)
+
+    return campaign_post_read
+
+
+def remove_campaign_post_by_id(
+    campaign_id: uuid.UUID,
+    post_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> None:
+    """Take an upcoming post off the timeline. Readers cannot call this."""
+
+    _ = current_ops_operator
+    found_campaign: Campaign = fetch_campaign_by_id_or_raise(
+        campaign_id,
+        our_database_session,
+    )
+    remove_campaign_post(found_campaign, post_id, our_database_session)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Campaign post could not be removed.",
+    )
 
 
 def serialize_campaign_post(post: CampaignPost) -> CampaignPostRead:

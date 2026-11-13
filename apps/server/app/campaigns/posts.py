@@ -31,6 +31,11 @@ CAMPAIGN_POST_DUPLICATE_DETAIL: str = (
     "This carousel is already scheduled on that account."
 )
 ASSEMBLED_CAROUSEL_NOT_FOUND_DETAIL: str = "Assembled carousel not found."
+CAMPAIGN_POST_NOT_FOUND_DETAIL: str = "Campaign post not found."
+CAMPAIGN_POST_ONLY_UPCOMING_DETAIL: str = (
+    "Only an upcoming post can change its time."
+)
+CAMPAIGN_POST_STAYS_DETAIL: str = "This post stays on the timeline."
 
 
 def place_campaign_post(
@@ -147,6 +152,122 @@ def place_campaign_post(
     )
 
     return loaded_post
+
+
+def reschedule_campaign_post(
+    campaign: Campaign,
+    campaign_post_id: uuid.UUID,
+    scheduled_for: datetime,
+    our_database_session: Session,
+) -> CampaignPost:
+    """Move an upcoming post to a new time.
+
+    The post's own row is left out of the cadence count, so a later
+    hour on the same day still fits a cap of one. Caption, frames,
+    account, and status stay. The caller commits.
+
+    Args:
+        campaign: Campaign that must own the post.
+        campaign_post_id: Post to move.
+        scheduled_for: New clock time.
+        our_database_session: Open SQLAlchemy session.
+
+    Returns:
+        The post after the time is stored.
+
+    Raises:
+        HTTPException: The post is missing, belongs to another campaign,
+            or is not upcoming.
+        CadenceCapExceededError: The new UTC day is already at the cap.
+            ``scheduled_for`` is left unchanged.
+    """
+
+    stored_post: CampaignPost = _require_upcoming_post(
+        campaign,
+        campaign_post_id,
+        our_database_session,
+        CAMPAIGN_POST_ONLY_UPCOMING_DETAIL,
+    )
+    linked_account: Account | None = our_database_session.get(
+        Account,
+        stored_post.account_id,
+    )
+
+    if linked_account is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=CAMPAIGN_POST_ACCOUNT_DETAIL,
+        )
+
+    raise_if_cadence_cap_exceeded(
+        linked_account,
+        scheduled_for,
+        our_database_session,
+        stored_post.id,
+    )
+    stored_post.scheduled_for = scheduled_for
+    our_database_session.flush()
+    loaded_post: CampaignPost = _load_campaign_post(
+        stored_post.id,
+        our_database_session,
+    )
+
+    return loaded_post
+
+
+def remove_campaign_post(
+    campaign: Campaign,
+    campaign_post_id: uuid.UUID,
+    our_database_session: Session,
+) -> None:
+    """Delete an upcoming post. The assembled carousel and frames stay.
+
+    Args:
+        campaign: Campaign that must own the post.
+        campaign_post_id: Post to remove.
+        our_database_session: Open SQLAlchemy session.
+
+    Raises:
+        HTTPException: The post is missing, belongs to another campaign,
+            or is already posted or failed.
+    """
+
+    stored_post: CampaignPost = _require_upcoming_post(
+        campaign,
+        campaign_post_id,
+        our_database_session,
+        CAMPAIGN_POST_STAYS_DETAIL,
+    )
+    our_database_session.delete(stored_post)
+    our_database_session.flush()
+
+
+def _require_upcoming_post(
+    campaign: Campaign,
+    campaign_post_id: uuid.UUID,
+    our_database_session: Session,
+    blocked_status_detail: str,
+) -> CampaignPost:
+    """Return the upcoming post, or raise 404 or 409."""
+
+    stored_post: CampaignPost | None = our_database_session.get(
+        CampaignPost,
+        campaign_post_id,
+    )
+
+    if stored_post is None or stored_post.campaign_id != campaign.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=CAMPAIGN_POST_NOT_FOUND_DETAIL,
+        )
+
+    if stored_post.status != CAMPAIGN_POST_UPCOMING_STATUS:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=blocked_status_detail,
+        )
+
+    return stored_post
 
 
 def _assembled_carousel_is_blocked(assembled_carousel: AssembledCarousel) -> bool:

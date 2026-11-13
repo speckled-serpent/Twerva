@@ -5,7 +5,7 @@ import unittest
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 os.environ.setdefault("TWERVA_ENV", "test")
@@ -21,7 +21,11 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.v1.accounts import create_account
 from app.api.v1.brands import create_brand
-from app.api.v1.campaign_posts import place_campaign_post_by_id
+from app.api.v1.campaign_posts import (
+    place_campaign_post_by_id,
+    remove_campaign_post_by_id,
+    reschedule_campaign_post_by_id,
+)
 from app.api.v1.campaigns import (
     create_campaign,
     pause_campaign_by_id,
@@ -38,6 +42,7 @@ from app.api.v1.schemas import (
     BrandCreateRequest,
     CampaignCreateRequest,
     CampaignPostCreateRequest,
+    CampaignPostRescheduleRequest,
     CampaignPostRead,
     ClusterCreateRequest,
     PostJobCreateRequest,
@@ -52,6 +57,9 @@ from app.campaigns.posts import (
     CAMPAIGN_POST_BLOCKED_DETAIL,
     CAMPAIGN_POST_DUPLICATE_DETAIL,
     CAMPAIGN_POST_NEEDS_CAROUSEL_DETAIL,
+    CAMPAIGN_POST_NOT_FOUND_DETAIL,
+    CAMPAIGN_POST_ONLY_UPCOMING_DETAIL,
+    CAMPAIGN_POST_STAYS_DETAIL,
 )
 from app.db import get_our_database_session
 from app.models.artifact import Artifact
@@ -137,6 +145,7 @@ class CampaignPostPlacementTests(unittest.TestCase):
     engine: Engine
     database_name: str
     world: _TimelineWorld
+    next_position: int
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -177,6 +186,7 @@ class CampaignPostPlacementTests(unittest.TestCase):
             session.close()
 
         cls.admin_engine = admin_engine
+        cls.next_position = 20
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -446,6 +456,205 @@ class CampaignPostPlacementTests(unittest.TestCase):
         self.assertEqual(paused.status.value, "paused")
         self.assertEqual(placed.status, "upcoming")
 
+    def test_moving_later_the_same_day_keeps_the_post(self) -> None:
+        """Cap 1 still allows a later hour, because this post is not counted twice."""
+
+        account_id: uuid.UUID = _extra_capped_account(self.session)
+        _link_account(self.session, self.world.campaign_id, account_id)
+        assembled_id: uuid.UUID = _fresh_assembled(self.session, self.world.carousel_name)
+        placed = _place(
+            self.session,
+            self.world.campaign_id,
+            assembled_id,
+            account_id,
+        )
+        later: datetime = SCHEDULED_FOR.replace(hour=18)
+        moved = reschedule_campaign_post_by_id(
+            self.world.campaign_id,
+            placed.id,
+            CampaignPostRescheduleRequest(scheduled_for=later),
+            self.session,
+            None,
+        )
+
+        self.assertEqual(moved.status, "upcoming")
+        self.assertEqual(moved.scheduled_for, later)
+        self.assertEqual(moved.account_id, account_id)
+        self.assertEqual(moved.caption, self.world.carousel_name)
+        self.assertEqual(moved.frames[0].id, placed.frames[0].id)
+
+    def test_moving_onto_a_full_day_keeps_the_old_time(self) -> None:
+        """A day that already holds another post refuses the move."""
+
+        account_id: uuid.UUID = _extra_capped_account(self.session)
+        _link_account(self.session, self.world.campaign_id, account_id)
+        first_id: uuid.UUID = _fresh_assembled(self.session, self.world.carousel_name)
+        second_id: uuid.UUID = _fresh_assembled(self.session, self.world.carousel_name)
+        placed = _place(
+            self.session,
+            self.world.campaign_id,
+            first_id,
+            account_id,
+        )
+        next_day: datetime = SCHEDULED_FOR + timedelta(days=1)
+        _place_at(
+            self.session,
+            self.world.campaign_id,
+            second_id,
+            account_id,
+            next_day,
+        )
+
+        with self.assertRaises(HTTPException) as raised_http:
+            reschedule_campaign_post_by_id(
+                self.world.campaign_id,
+                placed.id,
+                CampaignPostRescheduleRequest(scheduled_for=next_day),
+                self.session,
+                None,
+            )
+
+        stored_post: CampaignPost | None = self.session.get(CampaignPost, placed.id)
+
+        self.assertEqual(raised_http.exception.status_code, 409)
+        self.assertIn("Cadence cap exceeded", str(raised_http.exception.detail))
+        self.assertIsNotNone(stored_post)
+        assert stored_post is not None
+        self.assertEqual(stored_post.scheduled_for, SCHEDULED_FOR)
+        self.assertEqual(stored_post.status, "upcoming")
+
+    def test_a_posted_row_cannot_change_its_time(self) -> None:
+        """Posted and the time stay when the post is no longer upcoming."""
+
+        placed = _place(
+            self.session,
+            self.world.campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+        )
+        stored_post: CampaignPost | None = self.session.get(CampaignPost, placed.id)
+        assert stored_post is not None
+        stored_post.status = "posted"
+        self.session.commit()
+
+        with self.assertRaises(HTTPException) as raised_http:
+            reschedule_campaign_post_by_id(
+                self.world.campaign_id,
+                placed.id,
+                CampaignPostRescheduleRequest(
+                    scheduled_for=SCHEDULED_FOR.replace(hour=18),
+                ),
+                self.session,
+                None,
+            )
+
+        self.session.refresh(stored_post)
+        self.assertEqual(raised_http.exception.status_code, 409)
+        self.assertEqual(
+            raised_http.exception.detail,
+            CAMPAIGN_POST_ONLY_UPCOMING_DETAIL,
+        )
+        self.assertEqual(stored_post.status, "posted")
+        self.assertEqual(stored_post.scheduled_for, SCHEDULED_FOR)
+
+    def test_delete_removes_an_upcoming_post_and_leaves_the_assembly(self) -> None:
+        """The assembled carousel and its frames stay after the post is removed."""
+
+        placed = _place(
+            self.session,
+            self.world.campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+        )
+        frame_ids: list[uuid.UUID] = [frame.id for frame in placed.frames]
+        remove_campaign_post_by_id(
+            self.world.campaign_id,
+            placed.id,
+            self.session,
+            None,
+        )
+        remaining_frames: list[AssembledCarouselFrame] = list(
+            self.session.scalars(
+                select(AssembledCarouselFrame).where(
+                    AssembledCarouselFrame.id.in_(frame_ids),
+                ),
+            ).all(),
+        )
+
+        self.assertIsNone(self.session.get(CampaignPost, placed.id))
+        self.assertIsNotNone(
+            self.session.get(AssembledCarousel, placed.assembled_carousel_id),
+        )
+        self.assertEqual(
+            {frame.id for frame in remaining_frames},
+            set(frame_ids),
+        )
+
+    def test_delete_of_a_posted_row_is_rejected(self) -> None:
+        """A posted carousel stays on the timeline."""
+
+        placed = _place(
+            self.session,
+            self.world.campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+        )
+        stored_post: CampaignPost | None = self.session.get(CampaignPost, placed.id)
+        assert stored_post is not None
+        stored_post.status = "posted"
+        self.session.commit()
+
+        with self.assertRaises(HTTPException) as raised_http:
+            remove_campaign_post_by_id(
+                self.world.campaign_id,
+                placed.id,
+                self.session,
+                None,
+            )
+
+        self.assertEqual(raised_http.exception.status_code, 409)
+        self.assertEqual(raised_http.exception.detail, CAMPAIGN_POST_STAYS_DETAIL)
+        self.assertIsNotNone(self.session.get(CampaignPost, placed.id))
+
+    def test_a_post_on_another_campaign_is_not_found(self) -> None:
+        """Patch and delete through a different campaign id are 404."""
+
+        placed = _place(
+            self.session,
+            self.world.campaign_id,
+            _fresh_assembled(self.session, self.world.carousel_name),
+            self.world.open_account_id,
+        )
+        other_campaign_id: uuid.UUID = _second_campaign(
+            self.session,
+            self.world.open_account_id,
+        )
+
+        with self.assertRaises(HTTPException) as patch_error:
+            reschedule_campaign_post_by_id(
+                other_campaign_id,
+                placed.id,
+                CampaignPostRescheduleRequest(
+                    scheduled_for=SCHEDULED_FOR.replace(hour=18),
+                ),
+                self.session,
+                None,
+            )
+
+        with self.assertRaises(HTTPException) as delete_error:
+            remove_campaign_post_by_id(
+                other_campaign_id,
+                placed.id,
+                self.session,
+                None,
+            )
+
+        self.assertEqual(patch_error.exception.status_code, 404)
+        self.assertEqual(patch_error.exception.detail, CAMPAIGN_POST_NOT_FOUND_DETAIL)
+        self.assertEqual(delete_error.exception.status_code, 404)
+        self.assertEqual(delete_error.exception.detail, CAMPAIGN_POST_NOT_FOUND_DETAIL)
+        self.assertIsNotNone(self.session.get(CampaignPost, placed.id))
+
 
 class CampaignPostRouteTests(unittest.TestCase):
     """The new route stays on the API, and a reader cannot call it."""
@@ -457,6 +666,14 @@ class CampaignPostRouteTests(unittest.TestCase):
 
         self.assertIn("post", methods_by_path["/api/v1/generate/carousel"])
         self.assertIn("post", methods_by_path["/api/v1/campaigns/{campaign_id}/posts"])
+        self.assertIn(
+            "patch",
+            methods_by_path["/api/v1/campaigns/{campaign_id}/posts/{post_id}"],
+        )
+        self.assertIn(
+            "delete",
+            methods_by_path["/api/v1/campaigns/{campaign_id}/posts/{post_id}"],
+        )
 
     def test_a_reader_is_rejected(self) -> None:
         """A reader cannot place a post."""
@@ -500,6 +717,48 @@ class CampaignPostRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("read-only", response.json()["detail"].lower())
 
+    def test_a_reader_cannot_move_or_remove_a_post(self) -> None:
+        """Patch and delete are refused for a reader."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        client: TestClient = _reader_client()
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": READER_PASSWORD},
+        )
+        post_path: str = f"/api/v1/campaigns/{uuid.uuid4()}/posts/{uuid.uuid4()}"
+
+        try:
+            patch_response = client.patch(
+                post_path,
+                json={"scheduled_for": "2026-11-13T18:00:00Z"},
+            )
+            delete_response = client.delete(post_path)
+        finally:
+            client.close()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(patch_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        self.assertIn("read-only", patch_response.json()["detail"].lower())
+        self.assertIn("read-only", delete_response.json()["detail"].lower())
+
 
 def _place(
     session: Session,
@@ -507,20 +766,98 @@ def _place(
     assembled_carousel_id: uuid.UUID,
     account_id: uuid.UUID,
 ) -> CampaignPostRead:
+    """Call the place route at the shared afternoon time."""
+
+    placed: CampaignPostRead = _place_at(
+        session,
+        campaign_id,
+        assembled_carousel_id,
+        account_id,
+        SCHEDULED_FOR,
+    )
+
+    return placed
+
+
+def _place_at(
+    session: Session,
+    campaign_id: uuid.UUID,
+    assembled_carousel_id: uuid.UUID,
+    account_id: uuid.UUID,
+    scheduled_for: datetime,
+) -> CampaignPostRead:
     """Call the place route and return the read model."""
 
-    placed = place_campaign_post_by_id(
+    placed: CampaignPostRead = place_campaign_post_by_id(
         campaign_id,
         CampaignPostCreateRequest(
             assembled_carousel_id=assembled_carousel_id,
             account_id=account_id,
-            scheduled_for=SCHEDULED_FOR,
+            scheduled_for=scheduled_for,
         ),
         session,
         None,
     )
 
     return placed
+
+
+def _fresh_assembled(session: Session, caption: str) -> uuid.UUID:
+    """Add one more group on the seeded assembly."""
+
+    seeded: AssembledCarousel | None = session.get(
+        AssembledCarousel,
+        CampaignPostPlacementTests.world.happy_assembled_id,
+    )
+
+    if seeded is None:
+        raise AssertionError("Assembly group was not stored.")
+
+    position: int = CampaignPostPlacementTests.next_position
+    CampaignPostPlacementTests.next_position = position + 1
+    assembled_id: uuid.UUID = _store_group(
+        session,
+        seeded.assembly_id,
+        position,
+        caption,
+        [(uuid.uuid4(), 0, False)],
+    )
+
+    return assembled_id
+
+
+def _second_campaign(session: Session, account_id: uuid.UUID) -> uuid.UUID:
+    """Create another campaign that does not own the seeded posts."""
+
+    suffix: str = uuid.uuid4().hex[:8]
+    created_skeleton = create_skeleton(
+        SkeletonCreateRequest(name=f"Other skeleton {suffix}"),
+        session,
+        None,
+    )
+    created_carousel = create_carousel(
+        CarouselCreateRequest(
+            name=f"Other bound carousel {suffix}",
+            skeleton_id=created_skeleton.id,
+        ),
+        session,
+        None,
+    )
+    created_campaign = create_campaign(
+        CampaignCreateRequest(
+            name=f"Other campaign {suffix}",
+            campaign_type=CampaignType.SPOTMU,
+            skeleton_id=created_skeleton.id,
+            carousel_id=created_carousel.id,
+            platforms=[Platform.INSTAGRAM],
+            account_ids=[account_id],
+            interests=[],
+        ),
+        session,
+        None,
+    )
+
+    return created_campaign.id
 
 
 def _row_count(session: Session, model: type[object]) -> int:

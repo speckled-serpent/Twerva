@@ -111,6 +111,12 @@ class CampaignPostCreateRequest(BaseModel):
     scheduled_for: datetime
 
 
+class CampaignPostRescheduleRequest(BaseModel):
+    """Body for `PATCH /api/v1/campaigns/{campaign_id}/posts/{post_id}`."""
+
+    scheduled_for: datetime
+
+
 class CampaignPostFrameRead(BaseModel):
     """One frozen frame on a campaign post."""
 

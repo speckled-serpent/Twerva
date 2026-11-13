@@ -57,7 +57,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
   Acceptance, in `apps/server/tests/test_campaign_posts.py`: an admin places an unblocked assembled carousel on a linked account and reads `upcoming`, the carousel name as `caption`, a null `cta_url`, and the frame ids in position order. A reader is rejected. A blocked assembly is 400 and stores nothing. A second post for that pair is 409. An account that is not linked is 400. With `cadence_cap_per_day` 1, a non-failed `post_jobs` row on that UTC day makes the new post 409, and a second campaign post on that day is 409. A null cap allows both. An `artifacts` count, a `post_jobs` count, and a `campaign_carousels` count are unchanged. `POST /api/v1/generate/carousel` is still registered.
 
-- [ ] **9.3 Move an upcoming post, or take it off the timeline**
+- [x] **9.3 Move an upcoming post, or take it off the timeline**
 
   `PATCH /api/v1/campaigns/{campaign_id}/posts/{post_id}` with `{scheduled_for}`, admin only, response `CampaignPostRead`. The helper is `reschedule_campaign_post` in `app/campaigns/posts.py`. The post has to be `upcoming` and on this campaign. Otherwise a missing post is 404, and `posted` or `failed` is 409, detail `Only an upcoming post can change its time.` The cadence check runs again with this post's id as `ignored_campaign_post_id`, so a cap of 1 still allows a later hour on the same UTC day. A day that is already at the cap is 409 and the stored `scheduled_for` stays. Caption, frames, account, and status stay.
 
