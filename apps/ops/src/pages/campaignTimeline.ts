@@ -32,7 +32,7 @@ export interface CampaignPostCarouselOption {
 /**
  * Build a datetime-local value one hour from now.
  *
- * Copied from Schedule so that page can be removed later.
+ * The old Schedule page used this same one-hour default.
  *
  * @returns A local datetime string for an input
  */

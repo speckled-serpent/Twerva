@@ -320,6 +320,23 @@ export interface CampaignPostRescheduleRequest {
   scheduled_for: string;
 }
 
+export type TimelinePostOrigin = "campaign_post" | "post_job";
+
+export interface TimelinePostRead {
+  origin: TimelinePostOrigin;
+  id: string;
+  status: string;
+  scheduled_for: string | null;
+  published_at: string | null;
+  campaign_id: string | null;
+  campaign_name: string | null;
+  account_id: string;
+  platform: Platform;
+  handle: string;
+  caption: string | null;
+  results: CampaignPostResultsRead | null;
+}
+
 export interface CampaignReadResponse {
   id: string;
   name: string;

@@ -28,9 +28,7 @@ import { NewResearchPage } from "./pages/NewResearchPage";
 import { NewCampaignPage } from "./pages/NewCampaignPage";
 import { NewCarouselPage } from "./pages/NewCarouselPage";
 import { NewSkeletonPage } from "./pages/NewSkeletonPage";
-import { QueuePage } from "./pages/QueuePage";
-import { ResultsPage } from "./pages/ResultsPage";
-import { SchedulePage } from "./pages/SchedulePage";
+import { PostsPage } from "./pages/PostsPage";
 import { CarouselsPage, type CarouselsOpenRequest } from "./pages/CarouselsPage";
 import { SkeletonsPage } from "./pages/SkeletonsPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -389,12 +387,8 @@ function renderActivePage(
     );
   }
 
-  if (activePageId === "queue") {
-    return <QueuePage />;
-  }
-
-  if (activePageId === "schedule") {
-    return <SchedulePage />;
+  if (activePageId === "posts") {
+    return <PostsPage />;
   }
 
   if (activePageId === "accounts") {
@@ -405,9 +399,5 @@ function renderActivePage(
     return <AccountPage />;
   }
 
-  if (activePageId === "users") {
-    return <UsersPage />;
-  }
-
-  return <ResultsPage />;
+  return <UsersPage />;
 }

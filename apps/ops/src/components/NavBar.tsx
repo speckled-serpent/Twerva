@@ -1,6 +1,7 @@
 import { useState, type ReactElement } from "react";
 
 import type { OpsUserRole } from "../api/types";
+import { RUN_NAV_ITEMS } from "../pages/postsPage";
 
 export type OpsPageId =
   | "campaigns"
@@ -13,10 +14,8 @@ export type OpsPageId =
   | "new-album"
   | "research"
   | "new-research"
-  | "queue"
-  | "schedule"
+  | "posts"
   | "accounts"
-  | "results"
   | "account"
   | "users";
 
@@ -59,11 +58,7 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Run",
-    items: [
-      { pageId: "queue", label: "Queue" },
-      { pageId: "schedule", label: "Schedule" },
-      { pageId: "results", label: "Results" },
-    ],
+    items: RUN_NAV_ITEMS,
   },
   {
     label: "Setup",

@@ -123,7 +123,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Run rail
 
-- [ ] **9.9 Fold Queue, Schedule, and Results into one Posts list**
+- [x] **9.9 Fold Queue, Schedule, and Results into one Posts list**
 
   The Run group in `NAV_GROUPS` (`apps/ops/src/components/NavBar.tsx`) becomes one item, `{ pageId: "posts", label: "Posts" }`. Drop `queue`, `schedule`, and `results` from `OpsPageId`. `App.tsx` renders `PostsPage` for `posts` and drops the three old branches. Delete `apps/ops/src/pages/QueuePage.tsx`, `SchedulePage.tsx`, and `ResultsPage.tsx`. Leave the artifact, schedule, publish, and post-job metric functions in `apps/ops/src/api/client.ts`. The server routes they call stay registered.
 

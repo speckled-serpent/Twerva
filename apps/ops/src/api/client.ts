@@ -13,6 +13,7 @@ import type {
   CampaignPostRead,
   CampaignPostRescheduleRequest,
   CampaignReadResponse,
+  TimelinePostRead,
   SkeletonCreateRequest,
   SkeletonElementCreateRequest,
   SkeletonElementPatchRequest,
@@ -284,6 +285,11 @@ export async function createCampaignPostStubMetrics(
     "POST",
     `/api/v1/campaigns/${campaignId}/posts/${postId}/metrics/stub`,
   );
+}
+
+export async function listTimelinePosts(): Promise<TimelinePostRead[]> {
+
+  return requestJson<TimelinePostRead[]>("GET", "/api/v1/posts");
 }
 
 export async function listCarousels(): Promise<CarouselListItemResponse[]> {
