@@ -45,7 +45,7 @@ There is no `campaign_posts` table. An assembled carousel cannot be given a time
 
 ### Timeline
 
-- [ ] **9.2 Place one assembled carousel on the timeline**
+- [x] **9.2 Place one assembled carousel on the timeline**
 
   `POST /api/v1/campaigns/{campaign_id}/posts` with `{assembled_carousel_id, account_id, scheduled_for}`. Admin only, same as `run_campaign`. Register it from `register_campaign_post_routes` in `app/api/v1/campaign_posts.py`, called at the end of `app/api/v1/campaigns.py`. The response is one post, `CampaignPostRead`: `{id, campaign_id, carousel_id, generation_number, assembled_carousel_id, account_id, platform, handle, status, scheduled_for, published_at, platform_post_id, platform_post_url, last_error, caption, cta_url, blocked, frames}`. A frame is `{id, position, blocked, block_reason, block_detail}`. `caption` and `cta_url` are the assembled carousel's. `blocked` is true when any frame is blocked. The write helper is `place_campaign_post` in `app/campaigns/posts.py`.
 

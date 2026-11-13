@@ -755,3 +755,9 @@ def _optional_stripped_text(raw_value: str | None) -> str | None:
         return None
 
     return stripped_value
+
+
+from app.api.v1.campaign_posts import register_campaign_post_routes
+
+
+register_campaign_post_routes(campaigns_router)

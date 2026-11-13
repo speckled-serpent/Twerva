@@ -103,6 +103,47 @@ class CampaignCarouselRead(BaseModel):
     slides: list[CampaignCarouselSlideRead] = Field(default_factory=list)
 
 
+class CampaignPostCreateRequest(BaseModel):
+    """Body for `POST /api/v1/campaigns/{campaign_id}/posts`."""
+
+    assembled_carousel_id: uuid.UUID
+    account_id: uuid.UUID
+    scheduled_for: datetime
+
+
+class CampaignPostFrameRead(BaseModel):
+    """One frozen frame on a campaign post."""
+
+    id: uuid.UUID
+    position: int
+    blocked: bool
+    block_reason: str | None
+    block_detail: str | None
+
+
+class CampaignPostRead(BaseModel):
+    """One assembled carousel placed on a campaign timeline."""
+
+    id: uuid.UUID
+    campaign_id: uuid.UUID
+    carousel_id: uuid.UUID
+    generation_number: int
+    assembled_carousel_id: uuid.UUID
+    account_id: uuid.UUID
+    platform: Platform
+    handle: str
+    status: str
+    scheduled_for: datetime
+    published_at: datetime | None
+    platform_post_id: str | None
+    platform_post_url: str | None
+    last_error: str | None
+    caption: str | None
+    cta_url: str | None
+    blocked: bool
+    frames: list[CampaignPostFrameRead]
+
+
 class CampaignReadResponse(BaseModel):
     """Serialized Campaign plus join counts and snapshots."""
 
