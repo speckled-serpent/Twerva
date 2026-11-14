@@ -88,9 +88,13 @@ Mode **600**. **Never** commit, print, or paste these files.
 
 | Path | Role |
 |---|---|
-| `/opt/twerva/database_url.env` | `DATABASE_URL` for the API and Alembic. May also hold ops auth vars if systemd only loads this file. |
-| `/opt/twerva/ops_auth.env` | Optional split file: `OPS_ADMIN_USERNAME`, `OPS_ADMIN_PASSWORD`, `SESSION_SECRET`, `SESSION_COOKIE_SECURE=true`. Mode 600. Add `EnvironmentFile=` on `twerva-api` if used. |
+| `/opt/twerva/database_url.env` | `DATABASE_URL` for the API and Alembic. May also hold ops auth vars if systemd only loads this file. May hold `AYRSHARE_API_KEY` as one line in this file. |
+| `/opt/twerva/ops_auth.env` | Optional split file: `OPS_ADMIN_USERNAME`, `OPS_ADMIN_PASSWORD`, `SESSION_SECRET`, `SESSION_COOKIE_SECURE=true`. May hold `AYRSHARE_API_KEY` as one line in this file instead of `database_url.env`. Mode 600. Add `EnvironmentFile=` on `twerva-api` if used. |
 | `/opt/twerva/postgres.env` | Docker Postgres credentials |
+
+`AYRSHARE_API_KEY` is a line in one of those two files. It is not a new
+file and not a git secret. `OPENAI_API_KEY` stays the text-generation
+key. The two keys are not interchangeable. Do not print the file.
 
 ### Phase 1.3 env vars (Spotmu ingest)
 
@@ -287,13 +291,36 @@ so they can `POST /api/v1/auth/login`.
 
 ### Phase 1.6 (publish adapter)
 
-No new host deps or Alembic revision. Default `PUBLISH_ADAPTER=mock`
-(CI-safe, no vendor keys). Optional `AYRSHARE_API_KEY` is unused until
-live HTTP is wired — do **not** switch the adapter to `ayrshare` on the
-box yet. Sync the app tree and `sudo systemctl restart twerva-api`.
-Optional loopback smoke: `tools/smoke_1_6_publish.sh` (seed/generate/
-approve/schedule/mock publish; no Spotmu, no vendor signup). Smokes need
-ops login env as above.
+No new host deps. There is no Alembic revision in this phase. The
+application default stays `PUBLISH_ADAPTER=mock`. CI and a box that
+does not set the adapter stay on mock and do not call Ayrshare.
+`OPENAI_API_KEY` stays the text-generation key. `AYRSHARE_API_KEY` is
+the publish key. The two keys are not interchangeable.
+
+The app does not open the env file itself. systemd loads
+`/opt/twerva/database_url.env` or `/opt/twerva/ops_auth.env` as
+`EnvironmentFile=`. `get_settings` caches the first load, so the
+restart is what picks up the new values. Do not print the file.
+
+On `twerva-server`, switch in two steps. Do not set
+`PUBLISH_ADAPTER=ayrshare` before the connection check.
+
+1. Put `AYRSHARE_API_KEY` in an `EnvironmentFile` `twerva-api` already
+   loads (`/opt/twerva/database_url.env` or `/opt/twerva/ops_auth.env`),
+   mode 600. Leave `PUBLISH_ADAPTER=mock`. Then
+   `sudo systemctl restart twerva-api`.
+2. The operator runs Check connection from Accounts. Only after that
+   check names the expected profile, set `PUBLISH_ADAPTER=ayrshare` in
+   the same file and restart again.
+
+Rollback is setting `PUBLISH_ADAPTER=mock` and restarting. The key may
+stay in the file. Rollback does not delete posts and does not need a
+downgrade.
+
+Sync the app tree when shipping code. Optional loopback smoke:
+`tools/smoke_1_6_publish.sh` (seed/generate/approve/schedule/mock
+publish; no Spotmu, no vendor signup). Smokes need ops login env as
+above.
 
 ### Phase 1.7 (measure & steer)
 

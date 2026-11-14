@@ -133,7 +133,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Runbook
 
-- [ ] **10.8 Document the production switch, with mock as the rollback**
+- [x] **10.8 Document the production switch, with mock as the rollback**
 
   Update the Phase 1.6 section of `docs/ops/deploy.md`. That section currently says not to switch the box to `ayrshare`. Replace that warning with the phase 10 order. Do not invent AWS console steps. Do not paste a real key.
 
