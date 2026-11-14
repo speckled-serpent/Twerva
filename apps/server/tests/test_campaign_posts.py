@@ -1121,11 +1121,15 @@ class _RaisingPublishAdapter:
         post_id: uuid.UUID,
         account: object,
         media_paths: list[Path],
+        caption: str = "",
+        media_urls: list[str] | None = None,
     ) -> None:
 
         _ = post_id
         _ = account
         _ = media_paths
+        _ = caption
+        _ = media_urls
 
         raise RuntimeError("adapter broke")
 

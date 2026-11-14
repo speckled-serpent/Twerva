@@ -27,6 +27,7 @@ import {
   campaignPostCanChangeTime,
   campaignPostCarouselChoices,
   campaignPostCarouselOptions,
+  campaignPostFailureDetail,
   campaignPostOffersPublish,
   campaignPostOffersStubMetrics,
   campaignTimelineAfterAdd,
@@ -415,10 +416,12 @@ function CampaignTimelineRow({
   const offersPublish: boolean = campaignPostOffersPublish(post.status);
   const offersStub: boolean = campaignPostOffersStubMetrics(post.status, post.platform_post_id);
   const isPublishing: boolean = isBusy && busyAction === "publish";
+  const failureDetail: string | null = campaignPostFailureDetail(post);
 
   return (
     <li>
       <p>{post.status}</p>
+      {failureDetail === null ? null : <p className="field-error">{failureDetail}</p>}
       <p className="mono">{formatCampaignTimestamp(post.scheduled_for)}</p>
       <p>
         {post.handle} ({post.platform})

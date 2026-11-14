@@ -11,6 +11,7 @@ import {
   CAMPAIGN_POSTS_EMPTY,
   campaignPostAddEnabled,
   campaignPostCarouselChoices,
+  campaignPostFailureDetail,
   campaignPostOffersPublish,
   campaignTimelineAfterAdd,
 } from "./src/pages/campaignTimeline.ts";
@@ -117,3 +118,24 @@ assert.equal(nextCampaign.posts[0].caption, "Harbor");
 assert.equal(campaignPostOffersPublish("posted"), false);
 assert.equal(campaignPostOffersPublish("upcoming"), true);
 assert.equal(campaignPostOffersPublish("failed"), true);
+
+const failureSentence: string = "Ayrshare post failed with HTTP 400: Instagram is not linked.";
+const failedPost: CampaignPostRead = {
+  ...placedPost,
+  status: "failed",
+  last_error: failureSentence,
+};
+const postedWithStaleError: CampaignPostRead = {
+  ...placedPost,
+  status: "posted",
+  last_error: failureSentence,
+};
+const failedWithoutError: CampaignPostRead = {
+  ...placedPost,
+  status: "failed",
+  last_error: null,
+};
+
+assert.equal(campaignPostFailureDetail(failedPost), failureSentence);
+assert.equal(campaignPostFailureDetail(postedWithStaleError), null);
+assert.equal(campaignPostFailureDetail(failedWithoutError), null);

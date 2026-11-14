@@ -82,20 +82,6 @@ class PublishAdapterNotConfiguredError(PublishError):
         self.missing_setting_name: str = missing_setting_name
 
 
-class AyrshareLivePublishNotWiredError(PublishError):
-    """Ayrshare is selected but 1.6 does not send live HTTP."""
-
-    def __init__(self) -> None:
-
-        super().__init__(
-            (
-                "Ayrshare live HTTP is not wired in Phase 1.6. "
-                "Set PUBLISH_ADAPTER=mock, or wait for the follow-up once "
-                "AYRSHARE_API_KEY and connected accounts exist."
-            ),
-        )
-
-
 class PublishMediaMissingError(PublishError):
     """A slide `asset_ref` does not exist under ARTIFACT_STORAGE_DIR."""
 

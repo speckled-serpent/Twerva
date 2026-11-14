@@ -32,6 +32,7 @@ class PublishAdapter(ABC):
         artifact: Artifact,
         account: Account,
         media_paths: list[Path],
+        media_urls: list[str] | None = None,
     ) -> PublishResult:
         """Publish one PostJob's artifact to the account's platform.
 
@@ -40,6 +41,8 @@ class PublishAdapter(ABC):
             artifact: Caption, CTA, and slide plan for the job.
             account: Target platform identity (`platform`, `handle`).
             media_paths: Absolute PNG (or other) files from `asset_ref`.
+            media_urls: Public URLs in slide order. Paths are not rewritten
+                into URLs.
 
         Returns:
             Fake or vendor platform post id and permalink URL.
@@ -51,6 +54,8 @@ class PublishAdapter(ABC):
         post_id: uuid.UUID,
         account: Account,
         media_paths: list[Path],
+        caption: str,
+        media_urls: list[str] | None = None,
     ) -> PublishResult:
         """Publish one campaign post's frame files to the account's platform.
 
@@ -58,6 +63,8 @@ class PublishAdapter(ABC):
             post_id: Campaign post being published.
             account: Target platform identity (`platform`, `handle`).
             media_paths: Absolute frame files, in position order.
+            caption: Caption sent to the platform. Mock ignores it.
+            media_urls: Public URLs in frame order, when the caller has them.
 
         Returns:
             Fake or vendor platform post id and permalink URL.

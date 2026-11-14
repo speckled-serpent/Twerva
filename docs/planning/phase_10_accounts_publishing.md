@@ -39,7 +39,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Live HTTP
 
-- [ ] **10.1 Post through Ayrshare from both adapter methods**
+- [x] **10.1 Post through Ayrshare from both adapter methods**
 
   Replace the raise in `AyrsharePublishAdapter.publish` and `publish_media` with one HTTP call. Keep `AYRSHARE_POST_ENDPOINT`. The constructor still takes the API key and gains an optional `httpx.Client`. The factory passes no client, so production builds a normal client. Tests pass `httpx.Client(transport=httpx.MockTransport(...))`. Do not add `respx`. A test that forgets the transport must not be able to reach the network: the methods that talk HTTP take the client the constructor stored, and every test in this phase passes a mock transport. No test skips when offline.
 

@@ -25,6 +25,7 @@ from app.models.carousel import AssembledCarousel, AssembledCarouselFrame, Carou
 from app.models.enums import PostJobStatus
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.post_job import PostJob
+from app.publish.adapter import PublishResult
 from app.publish.errors import PublishMediaMissingError
 from app.publish.factory import get_publish_adapter
 from app.publish.media import resolve_asset_reference_path
@@ -302,10 +303,12 @@ def publish_campaign_post(
 
     try:
         media_paths: list[Path] = _frame_media_paths(stored_post)
-        publish_result = get_publish_adapter().publish_media(
+        # The assembled caption is sent in a later step. This call sends none.
+        publish_result: PublishResult = get_publish_adapter().publish_media(
             stored_post.id,
             linked_account,
             media_paths,
+            "",
         )
     except Exception as publish_error:
         stored_post.status = CAMPAIGN_POST_FAILED_STATUS

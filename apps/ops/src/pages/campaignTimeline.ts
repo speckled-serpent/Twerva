@@ -261,6 +261,24 @@ export function campaignPostOffersPublish(status: string): boolean {
 }
 
 /**
+ * The failure sentence shown under a failed post's status.
+ *
+ * A posted row can still carry an old last_error. That sentence stays
+ * off the row. Only a failed row with a stored sentence shows it.
+ *
+ * @param post - One campaign timeline row
+ * @returns The sentence, or null when the row should not show one
+ */
+export function campaignPostFailureDetail(post: CampaignPostRead): string | null {
+
+  if (post.status !== "failed" || post.last_error === null) {
+    return null;
+  }
+
+  return post.last_error;
+}
+
+/**
  * Whether the row can change its time or be removed.
  *
  * @param status - Stored campaign post status

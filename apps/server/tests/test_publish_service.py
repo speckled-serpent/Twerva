@@ -53,11 +53,15 @@ class FailingPublishAdapter(PublishAdapter):
         post_id: uuid.UUID,
         account: Account,
         media_paths: list[Path],
+        caption: str,
+        media_urls: list[str] | None = None,
     ) -> PublishResult:
 
         _ = post_id
         _ = account
         _ = media_paths
+        _ = caption
+        _ = media_urls
 
         raise RuntimeError("forced adapter failure")
 
