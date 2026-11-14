@@ -1,6 +1,6 @@
 # Twerva — Phase map
 
-*Last updated: 2026-11-13*  
+*Last updated: 2026-11-14*  
 *Status: What's left to implement, after the redesign agreed with Mu. Strategy: `docs/prompts/project.md`. Product design: `docs/prompts/product.md`.*
 
 This list replaces the previous one. A Skeleton is the structure of a carousel: the background and the named elements. A Carousel is what an operator builds, in steps. A Slide is one frame of content inside it. Albums and Research are shared libraries. A generation is a snapshot of one carousel. The campaign is the timeline of posts.
@@ -609,6 +609,8 @@ These are the choices this sheet made so a task could name a file. The tasks abo
 **Migration.** None for carousels or generations. Do not add the login to the account row as it stands. That row has no token columns on purpose.
 
 **Open questions.** Which Spotmu account is the first connection, and who owns the login? Official API, or a scheduler we already trust? What does the operator see when a post does not go out?
+
+**Task sheet.** The checklist is `docs/planning/phase_10_accounts_publishing.md`.
 
 ## 11. Measurement
 
