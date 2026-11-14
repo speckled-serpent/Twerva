@@ -18,6 +18,15 @@ class PublishResult:
     platform_post_url: str | None
 
 
+@dataclass(frozen=True)
+class ConnectionCheck:
+    """Result of reading a publish account without posting."""
+
+    adapter: str
+    ok: bool
+    detail: str
+
+
 class PublishAdapter(ABC):
     """Vendor-agnostic pipe: media + caption → platform id/URL.
 
@@ -64,8 +73,17 @@ class PublishAdapter(ABC):
             account: Target platform identity (`platform`, `handle`).
             media_paths: Absolute frame files, in position order.
             caption: Caption sent to the platform. Mock ignores it.
-            media_urls: Public URLs in frame order, when the caller has them.
-
         Returns:
             Fake or vendor platform post id and permalink URL.
+        """
+
+    @abstractmethod
+    def check_connection(self, account: Account) -> ConnectionCheck:
+        """Read whether the account can publish. Do not post.
+
+        Args:
+            account: Target account. The profile key is optional.
+
+        Returns:
+            Adapter name, whether the check succeeded, and a short sentence.
         """

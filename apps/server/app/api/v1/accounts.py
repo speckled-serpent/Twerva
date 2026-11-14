@@ -3,18 +3,23 @@
 import uuid
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import fetch_account_by_id_or_raise, fetch_cluster_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
 from app.api.v1.schemas import (
+    AccountConnectionReadResponse,
     AccountCreateRequest,
     AccountProfileKeyPatchRequest,
     AccountReadResponse,
 )
+from app.auth.dependencies import require_admin_ops_operator
 from app.db import get_our_database_session
-from app.models import Account
+from app.models import Account, OpsUser
+from app.publish.errors import PublishAdapterNotConfiguredError, PublishError
+from app.publish.factory import get_publish_adapter
 
 
 accounts_router: APIRouter = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -102,6 +107,66 @@ def _stored_profile_key(raw_profile_key: str | None) -> str | None:
         return None
 
     return stripped_profile_key
+
+
+ACCOUNT_CONNECTION_NOT_CONFIGURED_DETAIL: str = (
+    "The Ayrshare adapter is not configured. Leave the publish adapter on mock."
+)
+
+
+@accounts_router.get(
+    "/{account_id}/connection",
+    response_model=AccountConnectionReadResponse,
+)
+def read_account_connection(
+    account_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_admin_ops_operator),
+) -> AccountConnectionReadResponse | JSONResponse:
+    """Read the linked platforms. This does not post or change the account.
+
+    A missing adapter key is HTTP 409 with ``ok`` false. A vendor refusal
+    is ``ok`` false and the error sentence. Neither response includes the
+    API key or the profile key.
+    """
+
+    _ = current_ops_operator
+    found_account: Account = fetch_account_by_id_or_raise(
+        account_id,
+        our_database_session,
+    )
+
+    try:
+        connection_check = get_publish_adapter().check_connection(found_account)
+    except PublishAdapterNotConfiguredError:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "adapter": "ayrshare",
+                "ok": False,
+                "detail": ACCOUNT_CONNECTION_NOT_CONFIGURED_DETAIL,
+            },
+        )
+    except PublishError as publish_error:
+        safe_detail: str = str(publish_error).replace(
+            "AYRSHARE_API_KEY",
+            "the server API key setting",
+        )
+        connection_read = AccountConnectionReadResponse(
+            adapter="ayrshare",
+            ok=False,
+            detail=safe_detail,
+        )
+
+        return connection_read
+
+    connection_read = AccountConnectionReadResponse(
+        adapter=connection_check.adapter,
+        ok=connection_check.ok,
+        detail=connection_check.detail,
+    )
+
+    return connection_read
 
 
 @accounts_router.get("", response_model=list[AccountReadResponse])

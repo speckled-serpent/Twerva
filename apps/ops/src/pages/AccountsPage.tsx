@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import {
   createAccount,
   createCluster,
+  fetchAccountConnection,
   listAccounts,
   listBrands,
   listClusters,
@@ -22,6 +23,8 @@ import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import {
   AYRSHARE_PROFILE_KEY_LABEL,
+  accountConnectionCheckEnabled,
+  accountConnectionStatusLine,
   accountCreateRequestFromDraft,
   accountProfileKeyPatchValue,
   accountProfileKeySaveEnabled,
@@ -228,6 +231,22 @@ export function AccountsPage(): ReactElement {
     }
   };
 
+  const handleCheckConnection = async (account: AccountReadResponse): Promise<void> => {
+
+    setIsBusy(true);
+    setActionError(null);
+    setStatusMessage("");
+
+    try {
+      const connection = await fetchAccountConnection(account.id);
+      setStatusMessage(accountConnectionStatusLine(connection.detail));
+    } catch (caughtError: unknown) {
+      setActionError(caughtError);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleSteer = async (action: SteerActionName): Promise<void> => {
 
     setIsBusy(true);
@@ -376,6 +395,16 @@ export function AccountsPage(): ReactElement {
                       disabled={!accountProfileKeySaveEnabled(canWrite, isBusy)}
                     />
                   </label>
+                  <button
+                    id="check-account-connection"
+                    type="button"
+                    disabled={!accountConnectionCheckEnabled(canWrite, isBusy)}
+                    onClick={(): void => {
+                      void handleCheckConnection(account);
+                    }}
+                  >
+                    Check connection
+                  </button>
                   <button
                     type="button"
                     disabled={!accountProfileKeySaveEnabled(canWrite, isBusy)}

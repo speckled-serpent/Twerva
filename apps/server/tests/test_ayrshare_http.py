@@ -29,6 +29,7 @@ from app.publish.ayrshare import (
     AYRSHARE_POST_ENDPOINT,
     AYRSHARE_PROFILE_KEY_HEADER,
     AYRSHARE_PUBLISH_LOGGER_NAME,
+    AYRSHARE_USER_ENDPOINT,
     AyrsharePublishAdapter,
 )
 from app.publish.errors import PublishError
@@ -974,6 +975,62 @@ class AyrshareHttpTests(unittest.TestCase):
         self.assertEqual(transport.requests, [])
         self.assertIn("35", message)
         self.assertIn("36", message)
+
+    def test_check_connection_gets_the_user_and_does_not_post(self) -> None:
+        """One GET to /api/user. The detail names platforms and neither secret."""
+
+        recorded_requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+
+            recorded_requests.append(request)
+
+            return httpx.Response(
+                200,
+                json={
+                    "activeSocialAccounts": ["instagram", "tiktok"],
+                    "displayNames": [
+                        {
+                            "platform": "instagram",
+                            "username": AYRSHARE_TEST_PROFILE_KEY,
+                        },
+                    ],
+                },
+            )
+
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+        connection = adapter.check_connection(
+            _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
+        )
+        post_requests: list[httpx.Request] = [
+            request for request in recorded_requests if request.method == "POST"
+        ]
+        request_body: str = recorded_requests[0].content.decode("utf-8")
+
+        self.assertEqual(len(recorded_requests), 1)
+        self.assertEqual(post_requests, [])
+        self.assertEqual(recorded_requests[0].method, "GET")
+        self.assertEqual(str(recorded_requests[0].url), AYRSHARE_USER_ENDPOINT)
+        self.assertEqual(
+            recorded_requests[0].headers["Authorization"],
+            f"Bearer {AYRSHARE_TEST_API_KEY}",
+        )
+        self.assertEqual(
+            recorded_requests[0].headers[AYRSHARE_PROFILE_KEY_HEADER],
+            AYRSHARE_TEST_PROFILE_KEY,
+        )
+        self.assertNotIn("mediaUrls", request_body)
+        self.assertNotIn('"post"', request_body)
+        self.assertTrue(connection.ok)
+        self.assertEqual(connection.adapter, "ayrshare")
+        self.assertIn("instagram", connection.detail)
+        self.assertIn("tiktok", connection.detail)
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, connection.detail)
+        self.assertNotIn(AYRSHARE_TEST_PROFILE_KEY, connection.detail)
+        self.assertNotIn("AYRSHARE_API_KEY", connection.detail)
 
     def test_mock_publish_media_ignores_caption_and_opens_no_client(self) -> None:
         """Mock still returns the fake id and does not take an HTTP client."""

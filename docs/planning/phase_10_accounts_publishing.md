@@ -121,7 +121,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Connection check
 
-- [ ] **10.7 Check the key and the profile without posting**
+- [x] **10.7 Check the key and the profile without posting**
 
   Add a read on the ayrshare adapter, separate from `publish` and `publish_media`. It sends one GET with the Bearer key and, when the account's `external_account_id` is set, the same profile-key header. It does not send `post` or `mediaUrls`. Verify the path against Ayrshare's docs. The spelling to confirm first is `GET https://api.ayrshare.com/api/user`. If the docs say a profile is read from a different path, use that path. Parse the connected platforms or handles the docs return. A transport error or a non-success status raises `PublishError` with the same rule as task 10.1: status plus a short vendor message, and neither secret in the message.
 

@@ -77,3 +77,28 @@ export function accountProfileKeySaveEnabled(canWrite: boolean, isBusy: boolean)
 
   return canWrite && !isBusy;
 }
+
+/**
+ * Whether Check connection can be pressed.
+ *
+ * A reader sees the button disabled. The button does not publish.
+ *
+ * @param canWrite - True for an admin
+ * @param isBusy - True while a request is in flight
+ * @returns True when an admin can check the connection
+ */
+export function accountConnectionCheckEnabled(canWrite: boolean, isBusy: boolean): boolean {
+
+  return canWrite && !isBusy;
+}
+
+/**
+ * Status line for a connection check. The sentence is the API detail.
+ *
+ * @param detail - Sentence from the connection response
+ * @returns The same sentence, shown under the page status
+ */
+export function accountConnectionStatusLine(detail: string): string {
+
+  return detail;
+}

@@ -729,6 +729,14 @@ class AccountProfileKeyPatchRequest(BaseModel):
     external_account_id: str | None
 
 
+class AccountConnectionReadResponse(BaseModel):
+    """Result of checking an account without posting."""
+
+    adapter: str
+    ok: bool
+    detail: str
+
+
 class AccountReadResponse(BaseModel):
     """Serialized Account row."""
 

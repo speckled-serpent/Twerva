@@ -7,11 +7,12 @@ import uuid
 from pathlib import Path
 
 from app.models import Account, Artifact, PostJob
-from app.publish.adapter import PublishAdapter, PublishResult
+from app.publish.adapter import ConnectionCheck, PublishAdapter, PublishResult
 
 
 MOCK_PUBLISH_LOGGER_NAME: str = "app.publish.mock"
 EXAMPLE_INVALID_HOST: str = "example.invalid"
+MOCK_CONNECTION_DETAIL: str = "The mock adapter does not call Ayrshare."
 
 
 class MockPublishAdapter(PublishAdapter):
@@ -111,3 +112,22 @@ class MockPublishAdapter(PublishAdapter):
         )
 
         return publish_result
+
+    def check_connection(self, account: Account) -> ConnectionCheck:
+        """Report that mock publish does not call Ayrshare.
+
+        Args:
+            account: Unused. The mock check does not read the profile key.
+
+        Returns:
+            ``adapter`` ``mock``, ``ok`` true, and a sentence that names no secret.
+        """
+
+        _ = account
+        connection_check: ConnectionCheck = ConnectionCheck(
+            adapter="mock",
+            ok=True,
+            detail=MOCK_CONNECTION_DETAIL,
+        )
+
+        return connection_check

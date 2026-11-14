@@ -16,11 +16,12 @@ from pathlib import Path
 import httpx
 
 from app.models import Account, Artifact, PostJob
-from app.publish.adapter import PublishAdapter, PublishResult
+from app.publish.adapter import ConnectionCheck, PublishAdapter, PublishResult
 from app.publish.errors import PublishError
 
 
 AYRSHARE_POST_ENDPOINT: str = "https://api.ayrshare.com/api/post"
+AYRSHARE_USER_ENDPOINT: str = "https://api.ayrshare.com/api/user"
 AYRSHARE_MEDIA_UPLOAD_ENDPOINT: str = "https://api.ayrshare.com/api/media/upload"
 AYRSHARE_MEDIA_UPLOAD_FILE_FIELD: str = "file"
 AYRSHARE_MEDIA_UPLOAD_FILE_NAME_FIELD: str = "fileName"
@@ -232,6 +233,61 @@ class AyrsharePublishAdapter(PublishAdapter):
         )
 
         return publish_result
+
+    def check_connection(self, account: Account) -> ConnectionCheck:
+        """GET the Ayrshare user profile. Do not post.
+
+        The path is ``GET /api/user``. ``activeSocialAccounts`` lists the
+        connected platforms. ``Profile-Key`` is sent when the account has one.
+
+        Args:
+            account: Supplies the optional profile key.
+
+        Returns:
+            ``ok`` true and a sentence naming the connected platforms.
+
+        Raises:
+            PublishError: The call failed. The message has no API key or profile key.
+        """
+
+        request_headers: dict[str, str] = build_ayrshare_auth_headers(
+            self._api_key,
+            account.external_account_id,
+        )
+        http_client: httpx.Client
+        close_after_request: bool
+        http_client, close_after_request = self._http_client_for_request()
+        response: httpx.Response
+        profile_key: str = _stripped_profile_key(account.external_account_id)
+
+        try:
+            try:
+                response = http_client.get(
+                    AYRSHARE_USER_ENDPOINT,
+                    headers=request_headers,
+                    timeout=AYRSHARE_HTTP_TIMEOUT_SECONDS,
+                )
+            except httpx.TimeoutException as timeout_error:
+                raise PublishError(AYRSHARE_TIMEOUT_DETAIL) from timeout_error
+            except httpx.HTTPError as transport_error:
+                raise PublishError(AYRSHARE_TRANSPORT_ERROR_DETAIL) from transport_error
+        finally:
+
+            if close_after_request:
+                http_client.close()
+
+        self._logger.info(
+            "AyrsharePublishAdapter connection account=%s http_status=%s",
+            str(account.id),
+            response.status_code,
+        )
+        connection_check: ConnectionCheck = _connection_check_from_response(
+            response,
+            self._api_key,
+            profile_key,
+        )
+
+        return connection_check
 
     def _publish_with_public_urls(
         self,
@@ -481,6 +537,95 @@ class AyrsharePublishAdapter(PublishAdapter):
             media_index,
             http_status,
         )
+
+
+def _connection_check_from_response(
+    response: httpx.Response,
+    api_key: str,
+    profile_key: str,
+) -> ConnectionCheck:
+    """Read connected platforms, or raise PublishError."""
+
+    parsed_body: object | None = _parsed_json_body(response)
+    vendor_message: str | None = None
+
+    if parsed_body is not None:
+        vendor_message = _first_vendor_message(parsed_body)
+    elif response.status_code >= 400:
+        vendor_message = "response was not JSON"
+
+    if response.status_code >= 400 or not isinstance(parsed_body, dict):
+        failure_detail: str | None = vendor_message
+
+        if failure_detail is None:
+            failure_detail = "response was not JSON"
+
+        raise PublishError(
+            _http_failure_message(
+                response.status_code,
+                failure_detail,
+                api_key,
+                profile_key,
+                "connection check",
+            ),
+        )
+
+    connected_platforms: list[str] = _connected_platform_names(parsed_body)
+    detail: str = _connected_platforms_sentence(connected_platforms)
+    redacted_detail: str = _redact_secrets(detail, api_key, profile_key)
+    connection_check: ConnectionCheck = ConnectionCheck(
+        adapter="ayrshare",
+        ok=True,
+        detail=redacted_detail,
+    )
+
+    return connection_check
+
+
+def _connected_platform_names(body: dict[str, object]) -> list[str]:
+    """Return platform names from ``activeSocialAccounts`` or ``displayNames``."""
+
+    active_accounts: object = body.get("activeSocialAccounts")
+    platform_names: list[str] = []
+
+    if isinstance(active_accounts, list):
+
+        for platform_name in active_accounts:
+
+            if isinstance(platform_name, str) and platform_name.strip() != "":
+                platform_names.append(platform_name.strip())
+
+        if len(platform_names) > 0:
+
+            return platform_names
+
+    display_names: object = body.get("displayNames")
+
+    if isinstance(display_names, list):
+
+        for display_entry in display_names:
+
+            if not isinstance(display_entry, dict):
+                continue
+
+            platform_value: object = display_entry.get("platform")
+
+            if isinstance(platform_value, str) and platform_value.strip() != "":
+                platform_names.append(platform_value.strip())
+
+    return platform_names
+
+
+def _connected_platforms_sentence(platform_names: list[str]) -> str:
+    """Name the connected platforms, without handles or secrets."""
+
+    if len(platform_names) == 0:
+
+        return "No social accounts are linked."
+
+    joined_platforms: str = ", ".join(platform_names)
+
+    return f"Connected platforms: {joined_platforms}."
 
 
 def _raise_if_media_count_exceeds_platform_cap(

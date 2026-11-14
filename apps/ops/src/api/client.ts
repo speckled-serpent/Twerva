@@ -1,4 +1,5 @@
 import type {
+  AccountConnectionReadResponse,
   AccountCreateRequest,
   AccountProfileKeyPatchRequest,
   AccountReadResponse,
@@ -1255,6 +1256,16 @@ export async function createAccount(
     "POST",
     "/api/v1/accounts",
     accountCreateRequest,
+  );
+}
+
+export async function fetchAccountConnection(
+  accountId: string,
+): Promise<AccountConnectionReadResponse> {
+
+  return requestJson<AccountConnectionReadResponse>(
+    "GET",
+    `/api/v1/accounts/${accountId}/connection`,
   );
 }
 

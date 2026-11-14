@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 import unittest
 import uuid
 from collections.abc import Generator
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("TWERVA_ENV", "test")
 os.environ.setdefault("SESSION_SECRET", "test-session-secret-not-for-production")
@@ -18,12 +20,19 @@ from alembic.config import Config
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+import httpx
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.v1.accounts import create_account, patch_account_profile_key
+from app.api.v1.accounts import (
+    create_account,
+    patch_account_profile_key,
+    read_account_connection,
+)
+from app.publish.ayrshare import AyrsharePublishAdapter
+from app.publish.mock import MOCK_CONNECTION_DETAIL
 from app.api.v1.brands import create_brand
 from app.api.v1.clusters import create_cluster
 from app.api.v1.router import api_v1_router
@@ -47,6 +56,7 @@ ADMIN_DATABASE_URL: str = "postgresql+psycopg://twerva:twerva@127.0.0.1:5432/pos
 READER_USERNAME: str = "reader-agent"
 READER_PASSWORD: str = "correct-horse-battery"
 PROFILE_KEY: str = "ayrshare-profile-key-1"
+AYRSHARE_TEST_API_KEY: str = "test-ayrshare-api-key"
 
 
 def _postgres_available() -> bool:
@@ -233,6 +243,107 @@ class AccountProfileKeyTests(unittest.TestCase):
                 },
             )
 
+    def test_mock_connection_check_does_not_call_ayrshare(self) -> None:
+        """The mock adapter returns ok and does not change the profile key."""
+
+        previous_adapter: str | None = os.environ.get("PUBLISH_ADAPTER")
+        os.environ["PUBLISH_ADAPTER"] = "mock"
+        clear_settings_cache()
+        created: AccountReadResponse = _create_account(self.session, "mock_check", PROFILE_KEY)
+
+        try:
+            connection = read_account_connection(created.id, self.session, None)
+            stored: Account | None = self.session.get(Account, created.id)
+        finally:
+
+            if previous_adapter is None:
+                os.environ.pop("PUBLISH_ADAPTER", None)
+            else:
+                os.environ["PUBLISH_ADAPTER"] = previous_adapter
+
+            clear_settings_cache()
+
+        self.assertEqual(connection.adapter, "mock")
+        self.assertTrue(connection.ok)
+        self.assertEqual(connection.detail, MOCK_CONNECTION_DETAIL)
+        self.assertNotIn(PROFILE_KEY, connection.detail)
+        self.assertNotIn("AYRSHARE_API_KEY", connection.detail)
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(stored.external_account_id, PROFILE_KEY)
+
+    def test_a_vendor_401_returns_ok_false_and_keeps_the_profile_key(self) -> None:
+        """Ayrshare 401 is ok false. The stored profile key is unchanged."""
+
+        created: AccountReadResponse = _create_account(self.session, "vendor_401", PROFILE_KEY)
+        recorded_requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+
+            recorded_requests.append(request)
+
+            return httpx.Response(
+                401,
+                json={"message": f"bad {AYRSHARE_TEST_API_KEY} for {PROFILE_KEY}"},
+            )
+
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+
+        with patch("app.api.v1.accounts.get_publish_adapter", return_value=adapter):
+            connection = read_account_connection(created.id, self.session, None)
+
+        stored: Account | None = self.session.get(Account, created.id)
+        post_requests: list[httpx.Request] = [
+            request for request in recorded_requests if request.method == "POST"
+        ]
+
+        self.assertFalse(connection.ok)
+        self.assertEqual(connection.adapter, "ayrshare")
+        self.assertEqual(len(recorded_requests), 1)
+        self.assertEqual(recorded_requests[0].method, "GET")
+        self.assertEqual(post_requests, [])
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, connection.detail)
+        self.assertNotIn(PROFILE_KEY, connection.detail)
+        self.assertNotIn("AYRSHARE_API_KEY", connection.detail)
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(stored.external_account_id, PROFILE_KEY)
+
+    def test_a_blank_api_key_is_409_and_ok_false(self) -> None:
+        """Selecting ayrshare without a key does not post."""
+
+        created: AccountReadResponse = _create_account(self.session, "blank_api_key")
+        previous_adapter: str | None = os.environ.get("PUBLISH_ADAPTER")
+        previous_key: str | None = os.environ.get("AYRSHARE_API_KEY")
+        os.environ["PUBLISH_ADAPTER"] = "ayrshare"
+        os.environ["AYRSHARE_API_KEY"] = ""
+        clear_settings_cache()
+
+        try:
+            response = read_account_connection(created.id, self.session, None)
+        finally:
+
+            if previous_adapter is None:
+                os.environ.pop("PUBLISH_ADAPTER", None)
+            else:
+                os.environ["PUBLISH_ADAPTER"] = previous_adapter
+
+            if previous_key is None:
+                os.environ.pop("AYRSHARE_API_KEY", None)
+            else:
+                os.environ["AYRSHARE_API_KEY"] = previous_key
+
+            clear_settings_cache()
+
+        self.assertEqual(response.status_code, 409)
+        body: dict[str, object] = json.loads(response.body)
+        self.assertEqual(body["ok"], False)
+        self.assertNotIn("AYRSHARE_API_KEY", response.body.decode("utf-8"))
+        self.assertNotIn(PROFILE_KEY, response.body.decode("utf-8"))
+
 
 class AccountProfileKeyRouteTests(unittest.TestCase):
     """A reader cannot PATCH. The check is the existing cookie rule."""
@@ -274,6 +385,42 @@ class AccountProfileKeyRouteTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200)
         self.assertEqual(response.status_code, 403)
         self.assertIn("read-only", response.json()["detail"].lower())
+        self.assertNotIn(PROFILE_KEY, response.text)
+
+    def test_a_reader_cannot_check_the_connection(self) -> None:
+        """A reader GET of the connection route is rejected."""
+
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        client: TestClient = _reader_client()
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": READER_USERNAME, "password": READER_PASSWORD},
+        )
+
+        try:
+            response = client.get(f"/api/v1/accounts/{uuid.uuid4()}/connection")
+        finally:
+            client.close()
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        self.assertEqual(login.status_code, 200)
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("AYRSHARE_API_KEY", response.text)
         self.assertNotIn(PROFILE_KEY, response.text)
 
 
