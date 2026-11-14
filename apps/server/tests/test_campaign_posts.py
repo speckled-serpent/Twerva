@@ -11,6 +11,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 os.environ.setdefault("TWERVA_ENV", "test")
 
@@ -929,7 +930,18 @@ class CampaignPostPlacementTests(unittest.TestCase):
                 if isinstance(address_host, str):
                     host_name = address_host
 
-            if "ayrshare.com" in host_name:
+            parsed_host: str | None = urlparse(f"//{host_name}").hostname
+            normalized_host: str = ""
+
+            if parsed_host is not None:
+                normalized_host = parsed_host.lower().rstrip(".")
+
+            host_is_ayrshare: bool = (
+                normalized_host == "ayrshare.com"
+                or normalized_host.endswith(".ayrshare.com")
+            )
+
+            if host_is_ayrshare:
                 raise AssertionError("The dry-run test opened a socket to Ayrshare.")
 
             opened_socket: socket.socket = original_create_connection(
