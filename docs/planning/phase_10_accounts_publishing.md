@@ -71,7 +71,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Caption
 
-- [ ] **10.3 Send the assembled caption**
+- [x] **10.3 Send the assembled caption**
 
   `publish_campaign_post` passes `stored_post.assembled_carousel.caption` into `publish_media`. Null becomes `""`. The string is whatever assemble stored. This task does not read `campaigns.hashtag`, does not call `build_carousel_caption`, and does not append `DEFAULT_HASHTAGS`. It does not add a column and does not add an editor on the timeline. The caption line already on the row is the string that is sent.
 

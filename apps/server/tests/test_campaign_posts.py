@@ -1,5 +1,6 @@
 """Place an assembled carousel on a campaign timeline."""
 
+import json
 import os
 import tempfile
 import unittest
@@ -12,6 +13,7 @@ from pathlib import Path
 
 os.environ.setdefault("TWERVA_ENV", "test")
 
+import httpx
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI, HTTPException
@@ -77,6 +79,7 @@ from app.campaigns.posts import (
 )
 from app.api.v1.campaign_posts import RECORD_RESULTS_AFTER_POST_DETAIL
 from app.db import get_our_database_session
+from app.generate.carousel import DEFAULT_HASHTAGS
 from app.metrics.service import append_metric_snapshot
 from app.models.artifact import Artifact
 from app.models.campaign import Campaign, CampaignPost
@@ -97,6 +100,7 @@ from app.models.enums import (
 from app.models.ops_user import OpsUser
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.post_job import PostJob
+from app.publish.ayrshare import AyrsharePublishAdapter
 from app.settings import clear_settings_cache
 from tests.test_api_routes import _openapi_methods_by_path
 
@@ -704,6 +708,7 @@ class CampaignPostPlacementTests(unittest.TestCase):
                 posted.platform_post_id,
                 f"mock-instagram-{placed.id}",
             )
+            self.assertNotIn(self.world.carousel_name, posted.platform_post_id)
             self.assertIsNotNone(posted.platform_post_url)
             assert posted.platform_post_url is not None
             self.assertIn("example.invalid", posted.platform_post_url)
@@ -720,6 +725,84 @@ class CampaignPostPlacementTests(unittest.TestCase):
                 raised_http.exception.detail,
                 CAMPAIGN_POST_ALREADY_UP_DETAIL,
             )
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+    def test_publish_sends_the_assembled_caption(self) -> None:
+        """The Ayrshare post field is the assembled caption, with no hashtags added."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        named_adapter, named_requests = _recording_ayrshare_adapter()
+        empty_adapter, empty_requests = _recording_ayrshare_adapter()
+
+        try:
+            named = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_assembled(self.session, self.world.carousel_name),
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, named.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=named_adapter,
+            ):
+                posted = _publish(self.session, self.world.campaign_id, named.id)
+
+            named_body: dict[str, object] = _ayrshare_post_body(named_requests)
+            campaign: Campaign | None = self.session.get(Campaign, self.world.campaign_id)
+
+            self.assertEqual(posted.status, "posted")
+            self.assertEqual(named_body["post"], self.world.carousel_name)
+            self.assertIsNotNone(campaign)
+            assert campaign is not None
+            self.assertNotIn(campaign.hashtag, str(named_body["post"]))
+
+            for hashtag in DEFAULT_HASHTAGS:
+                self.assertNotIn(hashtag, str(named_body["post"]))
+
+            empty_group_id: uuid.UUID = _fresh_assembled(
+                self.session,
+                self.world.carousel_name,
+            )
+            empty_group: AssembledCarousel | None = self.session.get(
+                AssembledCarousel,
+                empty_group_id,
+            )
+            self.assertIsNotNone(empty_group)
+            assert empty_group is not None
+            empty_group.caption = None
+            self.session.commit()
+            empty = _place(
+                self.session,
+                self.world.campaign_id,
+                empty_group_id,
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, empty.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=empty_adapter,
+            ):
+                empty_posted = _publish(self.session, self.world.campaign_id, empty.id)
+
+            empty_body: dict[str, object] = _ayrshare_post_body(empty_requests)
+
+            self.assertEqual(empty_posted.status, "posted")
+            self.assertEqual(empty_body["post"], "")
+            self.assertEqual(len(empty_requests), 2)
         finally:
             storage.cleanup()
 
@@ -1397,6 +1480,75 @@ def _snapshot_count(session: Session, post_id: uuid.UUID) -> int:
     )
 
     return snapshot_count
+
+
+def _recording_ayrshare_adapter() -> tuple[AyrsharePublishAdapter, list[httpx.Request]]:
+    """An Ayrshare adapter whose HTTP client never leaves the process."""
+
+    recorded_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+
+        recorded_requests.append(request)
+
+        if str(request.url).endswith("/api/media/upload"):
+            upload_response: httpx.Response = httpx.Response(
+                200,
+                json={
+                    "id": "upload-1",
+                    "url": "https://images.ayrshare.com/frame.png",
+                    "fileName": "frame.png",
+                },
+            )
+
+            return upload_response
+
+        post_response: httpx.Response = httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "errors": [],
+                "postIds": [
+                    {
+                        "status": "success",
+                        "platform": "instagram",
+                        "id": "17878176260289172",
+                        "postUrl": "https://www.instagram.com/p/CP1dI9Hp_WO/",
+                    },
+                ],
+                "id": "RhrbDtYh7hdSMc67zC8H",
+            },
+        )
+
+        return post_response
+
+    http_client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+        "test-ayrshare-api-key",
+        http_client,
+    )
+
+    return adapter, recorded_requests
+
+
+def _ayrshare_post_body(recorded_requests: list[httpx.Request]) -> dict[str, object]:
+    """Return the JSON body of the one post request."""
+
+    post_requests: list[httpx.Request] = [
+        request
+        for request in recorded_requests
+        if str(request.url).endswith("/api/post")
+    ]
+
+    if len(post_requests) != 1:
+        raise AssertionError(f"expected one Ayrshare post, saw {len(post_requests)}")
+
+    decoded_body: object = json.loads(post_requests[0].content.decode("utf-8"))
+
+    if not isinstance(decoded_body, dict):
+        raise AssertionError("Ayrshare post body was not a JSON object")
+
+    return decoded_body
 
 
 def _publish(
