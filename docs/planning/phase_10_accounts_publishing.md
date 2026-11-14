@@ -57,7 +57,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Media
 
-- [ ] **10.2 Upload frame files to Ayrshare before the post**
+- [x] **10.2 Upload frame files to Ayrshare before the post**
 
   Ayrshare has to fetch the images itself. The frame route requires a session cookie, and `/opt/twerva/artifacts` is not on nginx. Do not add an unauthenticated file route. Do not put a public alias in front of `ARTIFACT_STORAGE_DIR`. Do not take the S3 housekeeping item in this phase.
 

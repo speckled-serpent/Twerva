@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 import uuid
 from pathlib import Path
@@ -178,37 +179,38 @@ class PublishAdapterFactoryTests(unittest.TestCase):
         self.assertIsInstance(publish_adapter, AyrsharePublishAdapter)
 
     def test_ayrshare_stub_publish_is_not_wired(self) -> None:
-        """Filesystem paths and no URLs raise before any Ayrshare request."""
+        """A missing frame file raises before any Ayrshare request."""
 
         ayrshare_publish_adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
             "test-key",
         )
-        media_paths: list[Path] = [Path("/tmp/frame.png")]
 
-        with self.assertRaises(PublishError) as raised_publish:
-            ayrshare_publish_adapter.publish(
-                _scheduled_post_job(),
-                _draft_artifact(),
-                _instagram_account(),
-                media_paths,
-            )
+        with tempfile.TemporaryDirectory() as raw_directory:
+            missing_path: Path = Path(raw_directory) / "frame.png"
+
+            with self.assertRaises(PublishError) as raised_publish:
+                ayrshare_publish_adapter.publish(
+                    _scheduled_post_job(),
+                    _draft_artifact(),
+                    _instagram_account(),
+                    [missing_path],
+                )
+
+            with self.assertRaises(PublishError) as raised_media:
+                ayrshare_publish_adapter.publish_media(
+                    FIXED_POST_JOB_ID,
+                    _instagram_account(),
+                    [missing_path],
+                    "",
+                )
 
         self.assertEqual(
             str(raised_publish.exception),
-            "Publish media is not on a public URL yet.",
+            "Ayrshare media upload cannot read frame.png.",
         )
-
-        with self.assertRaises(PublishError) as raised_media:
-            ayrshare_publish_adapter.publish_media(
-                FIXED_POST_JOB_ID,
-                _instagram_account(),
-                media_paths,
-                "",
-            )
-
         self.assertEqual(
             str(raised_media.exception),
-            "Publish media is not on a public URL yet.",
+            "Ayrshare media upload cannot read frame.png.",
         )
 
     def test_factory_unknown_adapter_raises(self) -> None:

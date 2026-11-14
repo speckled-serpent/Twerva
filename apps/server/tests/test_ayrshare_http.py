@@ -3,16 +3,29 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import unittest
 import uuid
+from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+os.environ.setdefault("TWERVA_ENV", "test")
+os.environ.setdefault("SESSION_SECRET", "test-session-secret-not-for-production")
+os.environ.setdefault("SESSION_COOKIE_SECURE", "false")
+
+from app.api.v1.router import api_v1_router
+from app.db import get_our_database_session
 from app.models import Account, Artifact, PostJob
 from app.models.enums import AccountStatus, ArtifactStatus, Platform, PostJobStatus
 from app.publish.adapter import PublishResult
 from app.publish.ayrshare import (
+    AYRSHARE_MEDIA_UPLOAD_ENDPOINT,
     AYRSHARE_POST_ENDPOINT,
     AYRSHARE_PROFILE_KEY_HEADER,
     AYRSHARE_PUBLISH_LOGGER_NAME,
@@ -20,6 +33,7 @@ from app.publish.ayrshare import (
 )
 from app.publish.errors import PublishError
 from app.publish.mock import MockPublishAdapter
+from app.settings import clear_settings_cache
 
 
 AYRSHARE_TEST_API_KEY: str = "test-ayrshare-api-key"
@@ -228,7 +242,7 @@ class AyrshareHttpTests(unittest.TestCase):
             _post_job(),
             _artifact("Slide name"),
             account,
-            [Path("/tmp/local-frame.png")],
+            [],
             media_urls,
         )
         named_body: dict[str, object] = _request_json(transport.requests[1])
@@ -445,44 +459,287 @@ class AyrshareHttpTests(unittest.TestCase):
         self.assertNotIn(AYRSHARE_TEST_API_KEY, message)
         self.assertNotIn("<html>", message)
 
-    def test_filesystem_paths_without_urls_do_not_call_http(self) -> None:
-        """Local frames raise the public-URL detail and send no request."""
+    def test_two_png_paths_upload_then_post_in_frame_order(self) -> None:
+        """Two local frames become two uploads and one post, in that order."""
 
-        transport: _RecordingTransport = _RecordingTransport(
-            httpx.Response(200, json=_instagram_success_body()),
+        upload_urls: list[str] = [
+            "https://images.ayrshare.com/frames/zero.png",
+            "https://images.ayrshare.com/frames/one.png",
+        ]
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(upload_urls)
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_two_frames(Path(raw_directory))
+
+            with self.assertLogs(AYRSHARE_PUBLISH_LOGGER_NAME, level="INFO") as log_context:
+                publish_result: PublishResult = adapter.publish_media(
+                    FIXED_POST_ID,
+                    _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
+                    media_paths,
+                    "Harbor",
+                )
+
+        joined_log: str = "\n".join(log_context.output)
+        post_request: httpx.Request = transport.requests[2]
+        post_body: dict[str, object] = _request_json(post_request)
+
+        self.assertEqual(len(transport.requests), 3)
+        self.assertEqual(str(transport.requests[0].url), AYRSHARE_MEDIA_UPLOAD_ENDPOINT)
+        self.assertEqual(str(transport.requests[1].url), AYRSHARE_MEDIA_UPLOAD_ENDPOINT)
+        self.assertEqual(str(post_request.url), AYRSHARE_POST_ENDPOINT)
+        self.assertIn(b"frame-zero-bytes", transport.requests[0].content)
+        self.assertIn(b"frame-one-bytes", transport.requests[1].content)
+        self.assertIn(b'name="file"', transport.requests[0].content)
+        self.assertIn(b'name="fileName"', transport.requests[0].content)
+        self.assertIn(b"frame-0.png", transport.requests[0].content)
+        self.assertIn(b"frame-1.png", transport.requests[1].content)
+        self.assertTrue(
+            transport.requests[0].headers["content-type"].startswith("multipart/form-data"),
+        )
+        self.assertEqual(
+            transport.requests[0].headers["Authorization"],
+            f"Bearer {AYRSHARE_TEST_API_KEY}",
+        )
+        self.assertEqual(
+            transport.requests[0].headers[AYRSHARE_PROFILE_KEY_HEADER],
+            AYRSHARE_TEST_PROFILE_KEY,
+        )
+        self.assertEqual(post_body["mediaUrls"], upload_urls)
+        self.assertEqual(post_body["post"], "Harbor")
+        self.assertEqual(post_body["platforms"], ["instagram"])
+        self.assertEqual(publish_result.platform_post_id, PLATFORM_POST_ID)
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, joined_log)
+        self.assertNotIn(AYRSHARE_TEST_PROFILE_KEY, joined_log)
+
+    def test_publish_uploads_slide_files_before_the_post(self) -> None:
+        """The post-job path uploads the same way as a campaign post."""
+
+        upload_urls: list[str] = [
+            "https://images.ayrshare.com/slides/zero.png",
+            "https://images.ayrshare.com/slides/one.png",
+        ]
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(upload_urls)
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_two_frames(Path(raw_directory))
+            adapter.publish(
+                _post_job(),
+                _artifact("Slide name"),
+                _account(Platform.INSTAGRAM, None),
+                media_paths,
+            )
+
+        post_body: dict[str, object] = _request_json(transport.requests[2])
+
+        self.assertEqual(len(transport.requests), 3)
+        self.assertEqual(post_body["post"], "Slide name")
+        self.assertEqual(post_body["mediaUrls"], upload_urls)
+        self.assertNotIn(
+            AYRSHARE_PROFILE_KEY_HEADER.lower(),
+            _header_names(transport.requests[0]),
+        )
+
+    def test_failed_upload_does_not_post(self) -> None:
+        """A refused upload raises and the post endpoint is not called."""
+
+        vendor_message: str = f"Upload refused for {AYRSHARE_TEST_API_KEY}."
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(
+            ["https://images.ayrshare.com/frames/zero.png"],
+            fail_at_index=0,
+            failure=httpx.Response(
+                400,
+                json={
+                    "action": "request",
+                    "status": "error",
+                    "code": 101,
+                    "message": vendor_message,
+                },
+            ),
         )
         adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
             AYRSHARE_TEST_API_KEY,
             transport.client(),
         )
-        media_paths: list[Path] = [Path("/tmp/frame-one.png"), Path("/tmp/frame-two.png")]
 
-        with self.assertRaises(PublishError) as raised_media:
-            adapter.publish_media(
-                FIXED_POST_ID,
-                _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
-                media_paths,
-                "Harbor",
-            )
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_two_frames(Path(raw_directory))
 
-        with self.assertRaises(PublishError) as raised_publish:
-            adapter.publish(
-                _post_job(),
-                _artifact("Harbor"),
-                _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
-                media_paths,
-            )
+            with self.assertRaises(PublishError) as raised:
+                adapter.publish_media(
+                    FIXED_POST_ID,
+                    _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
+                    media_paths,
+                    "Harbor",
+                )
+
+        post_requests: list[httpx.Request] = [
+            request
+            for request in transport.requests
+            if str(request.url) == AYRSHARE_POST_ENDPOINT
+        ]
+        message: str = str(raised.exception)
+
+        self.assertEqual(post_requests, [])
+        self.assertEqual(len(transport.requests), 1)
+        self.assertEqual(str(transport.requests[0].url), AYRSHARE_MEDIA_UPLOAD_ENDPOINT)
+        self.assertIn("400", message)
+        self.assertIn("Upload refused", message)
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, message)
+        self.assertNotIn(AYRSHARE_TEST_PROFILE_KEY, message)
+
+    def test_second_upload_failure_does_not_post(self) -> None:
+        """A later frame failure still skips the post."""
+
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(
+            [
+                "https://images.ayrshare.com/frames/zero.png",
+                "https://images.ayrshare.com/frames/one.png",
+            ],
+            fail_at_index=1,
+            failure=httpx.ConnectError("connection refused"),
+        )
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_two_frames(Path(raw_directory))
+
+            with self.assertRaises(PublishError) as raised:
+                adapter.publish_media(
+                    FIXED_POST_ID,
+                    _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
+                    media_paths,
+                    "Harbor",
+                )
+
+        post_requests: list[httpx.Request] = [
+            request
+            for request in transport.requests
+            if str(request.url) == AYRSHARE_POST_ENDPOINT
+        ]
+
+        self.assertEqual(len(transport.requests), 2)
+        self.assertEqual(post_requests, [])
+        self.assertIn("transport error", str(raised.exception))
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, str(raised.exception))
+
+    def test_upload_without_a_url_does_not_post(self) -> None:
+        """A 200 upload body with no url field is a failure."""
+
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(
+            ["https://images.ayrshare.com/frames/zero.png"],
+            fail_at_index=0,
+            failure=httpx.Response(200, json={"id": "upload-id-only"}),
+        )
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_two_frames(Path(raw_directory))
+
+            with self.assertRaises(PublishError) as raised:
+                adapter.publish_media(
+                    FIXED_POST_ID,
+                    _account(Platform.INSTAGRAM, None),
+                    media_paths[:1],
+                    "Harbor",
+                )
+
+        self.assertEqual(len(transport.requests), 1)
+        self.assertIn("no url", str(raised.exception))
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, str(raised.exception))
+
+    def test_file_over_the_documented_cap_does_not_upload(self) -> None:
+        """30 MB is the documented cap. A larger file never opens HTTP."""
+
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(
+            ["https://images.ayrshare.com/frames/zero.png"],
+        )
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_path: Path = Path(raw_directory) / "frame-0.png"
+            media_path.write_bytes(b"12345")
+
+            with patch("app.publish.ayrshare.AYRSHARE_MEDIA_UPLOAD_MAX_BYTES", 4):
+                with self.assertRaises(PublishError) as raised:
+                    adapter.publish_media(
+                        FIXED_POST_ID,
+                        _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
+                        [media_path],
+                        "Harbor",
+                    )
+
+        message: str = str(raised.exception)
 
         self.assertEqual(transport.requests, [])
-        self.assertEqual(
-            str(raised_media.exception),
-            "Publish media is not on a public URL yet.",
+        self.assertIn("30 MB", message)
+        self.assertIn("5 bytes", message)
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, message)
+
+    def test_frame_file_route_requires_a_session(self) -> None:
+        """GET of a frame PNG without a session cookie is 401."""
+
+        previous_environment: str | None = os.environ.get("TWERVA_ENV")
+        previous_secret: str | None = os.environ.get("SESSION_SECRET")
+        previous_secure: str | None = os.environ.get("SESSION_COOKIE_SECURE")
+        os.environ["TWERVA_ENV"] = "test"
+        os.environ["SESSION_SECRET"] = "test-session-secret-not-for-production"
+        os.environ["SESSION_COOKIE_SECURE"] = "false"
+        clear_settings_cache()
+        application: FastAPI = FastAPI()
+        application.include_router(api_v1_router)
+
+        def override_session() -> Generator[None, None, None]:
+
+            yield None
+
+        application.dependency_overrides[get_our_database_session] = override_session
+        client: TestClient = TestClient(application)
+        frame_url: str = (
+            "/api/v1/carousels/11111111-1111-1111-1111-111111111111"
+            "/assembly/frames/22222222-2222-2222-2222-222222222222/file"
         )
-        self.assertEqual(
-            str(raised_publish.exception),
-            "Publish media is not on a public URL yet.",
-        )
-        self.assertNotIn(AYRSHARE_TEST_API_KEY, str(raised_media.exception))
+
+        try:
+            frame_response = client.get(frame_url)
+        finally:
+            client.close()
+            application.dependency_overrides.clear()
+
+            if previous_environment is None:
+                os.environ.pop("TWERVA_ENV", None)
+            else:
+                os.environ["TWERVA_ENV"] = previous_environment
+
+            if previous_secret is None:
+                os.environ.pop("SESSION_SECRET", None)
+            else:
+                os.environ["SESSION_SECRET"] = previous_secret
+
+            if previous_secure is None:
+                os.environ.pop("SESSION_COOKIE_SECURE", None)
+            else:
+                os.environ["SESSION_COOKIE_SECURE"] = previous_secure
+
+            clear_settings_cache()
+
+        self.assertEqual(frame_response.status_code, 401)
 
     def test_blank_profile_key_omits_the_header(self) -> None:
         """A whitespace profile key is not sent. Task 10.4 refuses it later."""
@@ -529,6 +786,93 @@ class AyrshareHttpTests(unittest.TestCase):
             publish_result.platform_post_url,
             f"https://example.invalid/instagram/p/{FIXED_POST_ID}",
         )
+
+
+class _UploadThenPostTransport:
+    """Mock transport: upload responses in order, then one post response."""
+
+    def __init__(
+        self,
+        upload_urls: list[str],
+        fail_at_index: int | None = None,
+        failure: httpx.Response | Exception | None = None,
+    ) -> None:
+
+        self.requests: list[httpx.Request] = []
+        self._upload_urls: list[str] = upload_urls
+        self._fail_at_index: int | None = fail_at_index
+        self._failure: httpx.Response | Exception | None = failure
+        self._upload_index: int = 0
+
+    def client(self) -> httpx.Client:
+        """Build a client that cannot open a real socket."""
+
+        recording_transport: _UploadThenPostTransport = self
+
+        def handler(request: httpx.Request) -> httpx.Response:
+
+            recording_transport.requests.append(request)
+            request_url: str = str(request.url)
+
+            if request_url == AYRSHARE_MEDIA_UPLOAD_ENDPOINT:
+                upload_index: int = recording_transport._upload_index
+                recording_transport._upload_index += 1
+
+                if (
+                    recording_transport._fail_at_index is not None
+                    and upload_index == recording_transport._fail_at_index
+                ):
+                    return _fresh_or_raise(recording_transport._failure)
+
+                upload_body: dict[str, object] = {
+                    "id": f"upload-{upload_index}",
+                    "url": recording_transport._upload_urls[upload_index],
+                    "fileName": "frame.png",
+                    "description": "",
+                }
+
+                return httpx.Response(200, json=upload_body)
+
+            if request_url == AYRSHARE_POST_ENDPOINT:
+
+                return httpx.Response(200, json=_instagram_success_body())
+
+            raise AssertionError(f"unexpected Ayrshare URL {request_url}")
+
+        mock_transport: httpx.MockTransport = httpx.MockTransport(handler)
+        http_client: httpx.Client = httpx.Client(transport=mock_transport)
+
+        return http_client
+
+
+def _fresh_or_raise(failure: httpx.Response | Exception | None) -> httpx.Response:
+    """Return a copy of an error response, or raise the stored transport error."""
+
+    if isinstance(failure, Exception):
+        raise failure
+
+    if isinstance(failure, httpx.Response):
+        fresh_response: httpx.Response = httpx.Response(
+            failure.status_code,
+            content=failure.content,
+            headers=failure.headers,
+        )
+
+        return fresh_response
+
+    raise AssertionError("upload failure was not set")
+
+
+def _write_two_frames(directory: Path) -> list[Path]:
+    """Write two distinct PNG payloads in frame order."""
+
+    first_path: Path = directory / "frame-0.png"
+    second_path: Path = directory / "frame-1.png"
+    first_path.write_bytes(b"frame-zero-bytes")
+    second_path.write_bytes(b"frame-one-bytes")
+    media_paths: list[Path] = [first_path, second_path]
+
+    return media_paths
 
 
 def _header_names(request: httpx.Request) -> set[str]:

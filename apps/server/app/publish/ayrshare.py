@@ -1,9 +1,8 @@
 """Ayrshare publish adapter.
 
-``publish`` and ``publish_media`` POST to ``AYRSHARE_POST_ENDPOINT`` when
-the caller supplies public media URLs. Local filesystem paths raise
-``PublishError`` until an upload supplies those URLs. The API key and
-the profile key are request headers and are not written to the log.
+``publish`` and ``publish_media`` upload each local file, then POST the
+returned URLs to ``AYRSHARE_POST_ENDPOINT``. The API key and the profile
+key are request headers and are not written to the log.
 """
 
 from __future__ import annotations
@@ -22,14 +21,24 @@ from app.publish.errors import PublishError
 
 
 AYRSHARE_POST_ENDPOINT: str = "https://api.ayrshare.com/api/post"
+AYRSHARE_MEDIA_UPLOAD_ENDPOINT: str = "https://api.ayrshare.com/api/media/upload"
+AYRSHARE_MEDIA_UPLOAD_FILE_FIELD: str = "file"
+AYRSHARE_MEDIA_UPLOAD_FILE_NAME_FIELD: str = "fileName"
+AYRSHARE_MEDIA_UPLOAD_URL_FIELD: str = "url"
 AYRSHARE_PROFILE_KEY_HEADER: str = "Profile-Key"
 AYRSHARE_HTTP_TIMEOUT_SECONDS: float = 30.0
+# The upload page does not name an HTTP timeout.
+AYRSHARE_MEDIA_UPLOAD_TIMEOUT_SECONDS: float = 60.0
+# Docs say "Maximum file size: 30 MB" and do not give a byte count.
+AYRSHARE_MEDIA_UPLOAD_MAX_BYTES: int = 30 * 1024 * 1024
+AYRSHARE_MEDIA_UPLOAD_MAX_LABEL: str = "30 MB"
 AYRSHARE_SUCCESS_STATUS: str = "success"
 AYRSHARE_PUBLISH_LOGGER_NAME: str = "app.publish.ayrshare"
 AYRSHARE_VENDOR_MESSAGE_LIMIT: int = 200
-PUBLISH_MEDIA_NOT_PUBLIC_DETAIL: str = "Publish media is not on a public URL yet."
 AYRSHARE_TIMEOUT_DETAIL: str = "Ayrshare post failed: timed out."
 AYRSHARE_TRANSPORT_ERROR_DETAIL: str = "Ayrshare post failed: transport error."
+AYRSHARE_UPLOAD_TIMEOUT_DETAIL: str = "Ayrshare media upload failed: timed out."
+AYRSHARE_UPLOAD_TRANSPORT_ERROR_DETAIL: str = "Ayrshare media upload failed: transport error."
 
 
 @dataclass(frozen=True)
@@ -71,6 +80,38 @@ def build_ayrshare_post_request(
         "platforms": [platform_name],
         "mediaUrls": copied_media_urls,
     }
+    request_headers: dict[str, str] = build_ayrshare_auth_headers(
+        api_key,
+        external_account_id,
+    )
+    post_request: AyrsharePostRequest = AyrsharePostRequest(
+        body=request_body,
+        headers=request_headers,
+    )
+
+    return post_request
+
+
+def build_ayrshare_auth_headers(
+    api_key: str,
+    external_account_id: str | None,
+) -> dict[str, str]:
+    """Bearer key, plus Profile-Key when the account has one.
+
+    The post page documents ``Profile-Key``. The media upload page
+    documents ``Authorization`` only and does not name ``Profile-Key``.
+    A user-profile call still sends it, the same header as the post, so
+    the upload and the post name the same profile.
+
+    Args:
+        api_key: ``AYRSHARE_API_KEY``.
+        external_account_id: Profile key. Blank omits the header.
+
+    Returns:
+        Headers for one Ayrshare request. No ``Content-Type``; the
+        caller sets JSON or lets httpx set the multipart boundary.
+    """
+
     request_headers: dict[str, str] = {
         "Authorization": f"Bearer {api_key}",
     }
@@ -79,12 +120,7 @@ def build_ayrshare_post_request(
     if profile_key != "":
         request_headers[AYRSHARE_PROFILE_KEY_HEADER] = profile_key
 
-    post_request: AyrsharePostRequest = AyrsharePostRequest(
-        body=request_body,
-        headers=request_headers,
-    )
-
-    return post_request
+    return request_headers
 
 
 class AyrsharePublishAdapter(PublishAdapter):
@@ -115,21 +151,21 @@ class AyrsharePublishAdapter(PublishAdapter):
     ) -> PublishResult:
         """Post one post job. The caption is the artifact caption.
 
-        A null caption is sent as an empty string. Filesystem paths are
-        not turned into URLs.
+        A null caption is sent as an empty string. Each local file is
+        uploaded first. ``media_urls`` is used only when there are no paths.
 
         Args:
             post_job: Job being published.
             artifact: Supplies the caption.
             account: Target platform and optional profile key.
-            media_paths: Local slide files. Unused when URLs are passed.
-            media_urls: Public URLs in slide order, when the caller has them.
+            media_paths: Local slide files, uploaded in order.
+            media_urls: Public URLs when the caller already has them.
 
         Returns:
             The platform post id and permalink.
 
         Raises:
-            PublishError: The media is still local, or Ayrshare refused.
+            PublishError: An upload or the post was refused.
         """
 
         caption_text: str = _caption_or_empty(artifact.caption)
@@ -153,20 +189,20 @@ class AyrsharePublishAdapter(PublishAdapter):
     ) -> PublishResult:
         """Post one campaign post. The caption is the argument.
 
-        Filesystem paths are not turned into URLs.
+        Each local frame is uploaded first, in position order.
 
         Args:
             post_id: Campaign post being published.
             account: Target platform and optional profile key.
-            media_paths: Local frame files, in position order.
+            media_paths: Local frame files, uploaded in position order.
             caption: Caption sent as Ayrshare's ``post`` field.
-            media_urls: Public URLs in frame order, when the caller has them.
+            media_urls: Public URLs when the caller already has them.
 
         Returns:
             The platform post id and permalink.
 
         Raises:
-            PublishError: The media is still local, or Ayrshare refused.
+            PublishError: An upload or the post was refused.
         """
 
         publish_result: PublishResult = self._publish_with_public_urls(
@@ -187,22 +223,161 @@ class AyrsharePublishAdapter(PublishAdapter):
         caption: str,
         media_urls: list[str] | None,
     ) -> PublishResult:
-        """POST once when URLs were supplied. Paths alone never open HTTP."""
+        """Upload local files, then POST once. One upload failure skips the post."""
 
-        resolved_media_urls: list[str] = _media_urls_or_refuse(media_paths, media_urls)
+        http_client: httpx.Client
+        close_after_request: bool
+        http_client, close_after_request = self._http_client_for_request()
+
+        try:
+            resolved_media_urls: list[str] = self._media_urls_for_publish(
+                http_client,
+                post_id,
+                account,
+                media_paths,
+                media_urls,
+            )
+            publish_result: PublishResult = self._post_to_ayrshare(
+                http_client,
+                post_id,
+                account,
+                caption,
+                resolved_media_urls,
+            )
+        finally:
+
+            if close_after_request:
+                http_client.close()
+
+        return publish_result
+
+    def _media_urls_for_publish(
+        self,
+        http_client: httpx.Client,
+        post_id: uuid.UUID,
+        account: Account,
+        media_paths: list[Path],
+        media_urls: list[str] | None,
+    ) -> list[str]:
+        """Upload path bytes, or use URLs the caller already supplied."""
+
+        if len(media_paths) > 0:
+            uploaded_urls: list[str] = self._upload_frame_files(
+                http_client,
+                post_id,
+                account,
+                media_paths,
+            )
+
+            return uploaded_urls
+
+        if media_urls is None:
+
+            return []
+
+        copied_media_urls: list[str] = list(media_urls)
+
+        return copied_media_urls
+
+    def _upload_frame_files(
+        self,
+        http_client: httpx.Client,
+        post_id: uuid.UUID,
+        account: Account,
+        media_paths: list[Path],
+    ) -> list[str]:
+        """Upload each file in order. Stop before the post on the first failure."""
+
+        uploaded_urls: list[str] = []
+
+        for media_index, media_path in enumerate(media_paths):
+            uploaded_url: str = self._upload_one_file(
+                http_client,
+                post_id,
+                account,
+                media_path,
+                media_index,
+            )
+            uploaded_urls.append(uploaded_url)
+
+        return uploaded_urls
+
+    def _upload_one_file(
+        self,
+        http_client: httpx.Client,
+        post_id: uuid.UUID,
+        account: Account,
+        media_path: Path,
+        media_index: int,
+    ) -> str:
+        """POST one file as multipart field ``file`` and return its URL."""
+
+        _require_uploadable_file(media_path)
+        file_name: str = media_path.name
+        file_bytes: bytes = media_path.read_bytes()
+        content_type: str = _media_content_type(media_path)
+        file_payload: tuple[str, bytes, str] = (file_name, file_bytes, content_type)
+        request_headers: dict[str, str] = build_ayrshare_auth_headers(
+            self._api_key,
+            account.external_account_id,
+        )
+        form_fields: dict[str, str] = {
+            AYRSHARE_MEDIA_UPLOAD_FILE_NAME_FIELD: file_name,
+        }
+        files: dict[str, tuple[str, bytes, str]] = {
+            AYRSHARE_MEDIA_UPLOAD_FILE_FIELD: file_payload,
+        }
+        post_identifier: str = str(post_id)
+        response: httpx.Response
+
+        try:
+            response = http_client.post(
+                AYRSHARE_MEDIA_UPLOAD_ENDPOINT,
+                headers=request_headers,
+                data=form_fields,
+                files=files,
+                timeout=AYRSHARE_MEDIA_UPLOAD_TIMEOUT_SECONDS,
+            )
+        except httpx.TimeoutException as timeout_error:
+            self._log_upload(post_identifier, media_index, "none")
+
+            raise PublishError(AYRSHARE_UPLOAD_TIMEOUT_DETAIL) from timeout_error
+        except httpx.HTTPError as transport_error:
+            self._log_upload(post_identifier, media_index, "none")
+
+            raise PublishError(AYRSHARE_UPLOAD_TRANSPORT_ERROR_DETAIL) from transport_error
+
+        http_status: str = str(response.status_code)
+        self._log_upload(post_identifier, media_index, http_status)
+        profile_key: str = _stripped_profile_key(account.external_account_id)
+        uploaded_url: str = _upload_url_from_response(
+            response,
+            self._api_key,
+            profile_key,
+        )
+
+        return uploaded_url
+
+    def _post_to_ayrshare(
+        self,
+        http_client: httpx.Client,
+        post_id: uuid.UUID,
+        account: Account,
+        caption: str,
+        media_urls: list[str],
+    ) -> PublishResult:
+        """POST the caption and the uploaded URLs. Does not close the client."""
+
         platform_name: str = account.platform.value
         post_request: AyrsharePostRequest = build_ayrshare_post_request(
             self._api_key,
             caption,
             platform_name,
-            resolved_media_urls,
+            media_urls,
             account.external_account_id,
         )
-        http_client: httpx.Client
-        close_after_request: bool
-        http_client, close_after_request = self._http_client_for_request()
         post_identifier: str = str(post_id)
-        media_count: int = len(resolved_media_urls)
+        media_count: int = len(media_urls)
         response: httpx.Response
 
         try:
@@ -220,10 +395,6 @@ class AyrsharePublishAdapter(PublishAdapter):
             self._log_attempt(post_identifier, platform_name, "none", media_count)
 
             raise PublishError(AYRSHARE_TRANSPORT_ERROR_DETAIL) from transport_error
-        finally:
-
-            if close_after_request:
-                http_client.close()
 
         http_status: str = str(response.status_code)
         self._log_attempt(post_identifier, platform_name, http_status, media_count)
@@ -244,7 +415,9 @@ class AyrsharePublishAdapter(PublishAdapter):
 
             return self._http_client, False
 
-        owned_client: httpx.Client = httpx.Client(timeout=AYRSHARE_HTTP_TIMEOUT_SECONDS)
+        owned_client: httpx.Client = httpx.Client(
+            timeout=AYRSHARE_MEDIA_UPLOAD_TIMEOUT_SECONDS,
+        )
 
         return owned_client, True
 
@@ -263,6 +436,16 @@ class AyrsharePublishAdapter(PublishAdapter):
             platform_name,
             http_status,
             media_count,
+        )
+
+    def _log_upload(self, post_identifier: str, media_index: int, http_status: str) -> None:
+        """Log one upload. The line has no API key, profile key, or file bytes."""
+
+        self._logger.info(
+            "AyrsharePublishAdapter upload post=%s index=%s http_status=%s",
+            post_identifier,
+            media_index,
+            http_status,
         )
 
 
@@ -286,25 +469,96 @@ def _stripped_profile_key(external_account_id: str | None) -> str:
     return external_account_id.strip()
 
 
-def _media_urls_or_refuse(
-    media_paths: list[Path],
-    media_urls: list[str] | None,
-) -> list[str]:
-    """Return the caller URLs. Local paths with no URLs refuse before HTTP."""
+def _require_uploadable_file(media_path: Path) -> None:
+    """Refuse a missing file or one over the documented 30 MB cap.
 
-    has_filesystem_paths: bool = len(media_paths) > 0
-    has_media_urls: bool = media_urls is not None and len(media_urls) > 0
+    Uploaded files stay fetchable for 90 days. That retention is not
+    checked here. This phase posts immediately and does not schedule.
+    """
 
-    if has_filesystem_paths and not has_media_urls:
-        raise PublishError(PUBLISH_MEDIA_NOT_PUBLIC_DETAIL)
+    if not media_path.is_file():
+        raise PublishError(f"Ayrshare media upload cannot read {media_path.name}.")
 
-    if media_urls is None:
+    file_size: int = media_path.stat().st_size
 
-        return []
+    if file_size > AYRSHARE_MEDIA_UPLOAD_MAX_BYTES:
+        raise PublishError(
+            (
+                "Ayrshare media upload accepts at most "
+                f"{AYRSHARE_MEDIA_UPLOAD_MAX_LABEL} "
+                f"({AYRSHARE_MEDIA_UPLOAD_MAX_BYTES} bytes). "
+                f"{media_path.name} is {file_size} bytes."
+            ),
+        )
 
-    copied_media_urls: list[str] = list(media_urls)
 
-    return copied_media_urls
+def _media_content_type(media_path: Path) -> str:
+    """Return a part type for the multipart file. Frames are PNG."""
+
+    suffix: str = media_path.suffix.lower()
+
+    if suffix == ".png":
+
+        return "image/png"
+
+    if suffix == ".jpg" or suffix == ".jpeg":
+
+        return "image/jpeg"
+
+    return "application/octet-stream"
+
+
+def _upload_url_from_response(
+    response: httpx.Response,
+    api_key: str,
+    profile_key: str,
+) -> str:
+    """Read the documented ``url`` field, or raise PublishError."""
+
+    parsed_body: object | None = _parsed_json_body(response)
+    vendor_message: str | None = None
+
+    if parsed_body is not None:
+        vendor_message = _first_vendor_message(parsed_body)
+    elif response.status_code >= 400:
+        vendor_message = "response was not JSON"
+
+    if response.status_code >= 400:
+        raise PublishError(
+            _http_failure_message(
+                response.status_code,
+                vendor_message,
+                api_key,
+                profile_key,
+                "media upload",
+            ),
+        )
+
+    if not isinstance(parsed_body, dict):
+        raise PublishError(
+            _http_failure_message(
+                response.status_code,
+                "response has no url",
+                api_key,
+                profile_key,
+                "media upload",
+            ),
+        )
+
+    raw_url: object = parsed_body.get(AYRSHARE_MEDIA_UPLOAD_URL_FIELD)
+
+    if not isinstance(raw_url, str) or raw_url.strip() == "":
+        raise PublishError(
+            _http_failure_message(
+                response.status_code,
+                "response has no url",
+                api_key,
+                profile_key,
+                "media upload",
+            ),
+        )
+
+    return raw_url
 
 
 def _publish_result_from_response(
@@ -550,15 +804,16 @@ def _http_failure_message(
     detail: str | None,
     api_key: str,
     profile_key: str,
+    action: str = "post",
 ) -> str:
     """HTTP status plus a short detail. Secrets are removed."""
 
     if detail is None or detail.strip() == "":
-        message: str = f"Ayrshare post failed with HTTP {http_status}."
+        message: str = f"Ayrshare {action} failed with HTTP {http_status}."
     else:
         redacted_detail: str = _redact_secrets(detail, api_key, profile_key)
         short_detail: str = _short_detail(redacted_detail)
-        message = f"Ayrshare post failed with HTTP {http_status}: {short_detail}"
+        message = f"Ayrshare {action} failed with HTTP {http_status}: {short_detail}"
 
     redacted_message: str = _redact_secrets(message, api_key, profile_key)
 
