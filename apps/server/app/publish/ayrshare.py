@@ -43,6 +43,16 @@ AYRSHARE_PROFILE_KEY_REQUIRED_DETAIL: str = (
     "This account has no Ayrshare profile key. "
     "Set external_account_id before publishing."
 )
+# Instagram carousel: up to 10 images or videos.
+# https://www.ayrshare.com/docs/apis/post/social-networks/instagram
+AYRSHARE_INSTAGRAM_MEDIA_CAP: int = 10
+# TikTok photo post: up to 35 images. No extra cap is invented beyond that.
+# https://www.ayrshare.com/docs/apis/post/social-networks/tiktok
+AYRSHARE_TIKTOK_MEDIA_CAP: int = 35
+# Post docs name this body field. The value is the Twerva post id.
+AYRSHARE_IDEMPOTENCY_KEY_FIELD: str = "idempotencyKey"
+# TikTok's async id. The field is postIds[].id. postUrl is often absent.
+AYRSHARE_TIKTOK_PENDING_ID: str = "pending"
 
 
 @dataclass(frozen=True)
@@ -64,6 +74,7 @@ def build_ayrshare_post_request(
     platform_name: str,
     media_urls: list[str],
     external_account_id: str | None,
+    idempotency_key: str,
 ) -> AyrsharePostRequest:
     """Build the post body and headers. This function does not send HTTP.
 
@@ -73,6 +84,8 @@ def build_ayrshare_post_request(
         platform_name: One platform, ``instagram`` or ``tiktok``.
         media_urls: Public media URLs, in caller order.
         external_account_id: Ayrshare profile key. Blank omits the header.
+        idempotency_key: Stable id for this post. Ayrshare names the field
+            ``idempotencyKey``.
 
     Returns:
         The JSON body and the headers for one POST.
@@ -83,6 +96,7 @@ def build_ayrshare_post_request(
         "post": caption,
         "platforms": [platform_name],
         "mediaUrls": copied_media_urls,
+        AYRSHARE_IDEMPOTENCY_KEY_FIELD: idempotency_key,
     }
     request_headers: dict[str, str] = build_ayrshare_auth_headers(
         api_key,
@@ -234,6 +248,16 @@ class AyrsharePublishAdapter(PublishAdapter):
         if profile_key == "":
             raise PublishError(AYRSHARE_PROFILE_KEY_REQUIRED_DETAIL)
 
+        media_count_for_cap: int = len(media_paths)
+
+        if media_count_for_cap == 0 and media_urls is not None:
+            media_count_for_cap = len(media_urls)
+
+        _raise_if_media_count_exceeds_platform_cap(
+            account.platform.value,
+            media_count_for_cap,
+        )
+
         http_client: httpx.Client
         close_after_request: bool
         http_client, close_after_request = self._http_client_for_request()
@@ -384,6 +408,7 @@ class AyrsharePublishAdapter(PublishAdapter):
             platform_name,
             media_urls,
             account.external_account_id,
+            str(post_id),
         )
         post_identifier: str = str(post_id)
         media_count: int = len(media_urls)
@@ -456,6 +481,35 @@ class AyrsharePublishAdapter(PublishAdapter):
             media_index,
             http_status,
         )
+
+
+def _raise_if_media_count_exceeds_platform_cap(
+    platform_name: str,
+    media_count: int,
+) -> None:
+    """Refuse before HTTP when the documented image cap is exceeded.
+
+    Frames are not dropped to fit the cap. TikTok's documented photo
+    cap is 35. A count at or under the cap continues.
+    """
+
+    media_cap: int | None = None
+
+    if platform_name == "instagram":
+        media_cap = AYRSHARE_INSTAGRAM_MEDIA_CAP
+    elif platform_name == "tiktok":
+        media_cap = AYRSHARE_TIKTOK_MEDIA_CAP
+
+    if media_cap is None or media_count <= media_cap:
+
+        return
+
+    raise PublishError(
+        (
+            f"Ayrshare accepts at most {media_cap} {platform_name} files. "
+            f"This post has {media_count}."
+        ),
+    )
 
 
 def _caption_or_empty(caption: str | None) -> str:
@@ -606,6 +660,16 @@ def _publish_result_from_response(
             ),
         )
 
+    if isinstance(parsed_body, dict) and parsed_body.get("status") == "error":
+        raise PublishError(
+            _http_failure_message(
+                response.status_code,
+                vendor_message,
+                api_key,
+                profile_key,
+            ),
+        )
+
     success_entry: dict[str, object] | None = _platform_success_entry(
         parsed_body,
         platform_name,
@@ -629,10 +693,8 @@ def _publish_result_from_response(
     platform_post_id: str | None = _entry_identifier(success_entry)
     platform_post_url: str | None = _entry_post_url(success_entry)
 
-    if platform_post_id is None or platform_post_url is None:
-        incomplete_detail: str = (
-            f"{platform_name} success entry is missing id or postUrl"
-        )
+    if platform_post_id is None:
+        incomplete_detail: str = f"{platform_name} success entry is missing id"
 
         raise PublishError(
             _http_failure_message(

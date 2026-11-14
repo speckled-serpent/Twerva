@@ -109,7 +109,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Platform limits
 
-- [ ] **10.6 Enforce the Instagram image cap, and store a TikTok pending id**
+- [x] **10.6 Enforce the Instagram image cap, and store a TikTok pending id**
 
   Before upload, when the account platform is `instagram` and the media list has more than 10 files, raise `PublishError` with a detail that states the cap and the actual count. Do not upload, do not POST, and do not drop frames to make ten. The constant lives next to the adapter. The spike says 10. Verify the current cap against Ayrshare's docs and change the constant if the docs disagree. Do not invent a TikTok cap. If the docs name one, apply it the same way, as a refuse, not a truncate. Otherwise TikTok has no local count check in this task.
 

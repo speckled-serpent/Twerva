@@ -880,6 +880,180 @@ class CampaignPostPlacementTests(unittest.TestCase):
 
             clear_settings_cache()
 
+    def test_a_tiktok_pending_id_is_stored_as_posted(self) -> None:
+        """A pending TikTok id with no URL is posted. The id is stored as pending."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        adapter, _recorded_requests = _ayrshare_adapter_with_post_body(
+            {
+                "status": "success",
+                "errors": [],
+                "postIds": [
+                    {
+                        "status": "success",
+                        "id": "pending",
+                        "platform": "tiktok",
+                    },
+                ],
+                "id": "ayrshare-own-id",
+            },
+        )
+
+        try:
+            source_campaign: Campaign | None = self.session.get(
+                Campaign,
+                self.world.campaign_id,
+            )
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(source_campaign)
+            self.assertIsNotNone(open_account)
+            assert source_campaign is not None
+            assert open_account is not None
+            tiktok_account = create_account(
+                AccountCreateRequest(
+                    cluster_id=open_account.cluster_id,
+                    platform=Platform.TIKTOK,
+                    handle=f"tt_{uuid.uuid4().hex[:8]}",
+                    external_account_id="profile-key-tiktok",
+                ),
+                self.session,
+            )
+            created_campaign = create_campaign(
+                CampaignCreateRequest(
+                    name=f"TikTok {uuid.uuid4().hex[:6]}",
+                    campaign_type=CampaignType.SPOTMU_TEST,
+                    skeleton_id=source_campaign.skeleton_id,
+                    carousel_id=source_campaign.carousel_id,
+                    platforms=[Platform.TIKTOK],
+                    account_ids=[tiktok_account.id],
+                ),
+                self.session,
+                None,
+            )
+            placed = _place(
+                self.session,
+                created_campaign.id,
+                _fresh_assembled(self.session, "Harbor"),
+                tiktok_account.id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=adapter,
+            ):
+                posted = _publish(self.session, created_campaign.id, placed.id)
+
+            self.assertEqual(posted.status, "posted")
+            self.assertEqual(posted.platform_post_id, "pending")
+            self.assertIsNone(posted.platform_post_url)
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+    def test_a_vendor_error_does_not_store_pending(self) -> None:
+        """An Ayrshare error body leaves the row failed and does not store pending."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        adapter, _recorded_requests = _ayrshare_adapter_with_post_body(
+            {
+                "status": "error",
+                "errors": [
+                    {
+                        "status": "error",
+                        "code": 156,
+                        "message": "TikTok rejected the post.",
+                        "platform": "tiktok",
+                    },
+                ],
+                "postIds": [
+                    {
+                        "status": "error",
+                        "id": "pending",
+                        "platform": "tiktok",
+                    },
+                ],
+                "id": "ayrshare-own-id",
+            },
+        )
+
+        try:
+            source_campaign: Campaign | None = self.session.get(
+                Campaign,
+                self.world.campaign_id,
+            )
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(source_campaign)
+            self.assertIsNotNone(open_account)
+            assert source_campaign is not None
+            assert open_account is not None
+            tiktok_account = create_account(
+                AccountCreateRequest(
+                    cluster_id=open_account.cluster_id,
+                    platform=Platform.TIKTOK,
+                    handle=f"tt_err_{uuid.uuid4().hex[:8]}",
+                    external_account_id="profile-key-tiktok",
+                ),
+                self.session,
+            )
+            created_campaign = create_campaign(
+                CampaignCreateRequest(
+                    name=f"TikTok err {uuid.uuid4().hex[:6]}",
+                    campaign_type=CampaignType.SPOTMU_TEST,
+                    skeleton_id=source_campaign.skeleton_id,
+                    carousel_id=source_campaign.carousel_id,
+                    platforms=[Platform.TIKTOK],
+                    account_ids=[tiktok_account.id],
+                ),
+                self.session,
+                None,
+            )
+            placed = _place(
+                self.session,
+                created_campaign.id,
+                _fresh_assembled(self.session, "Harbor"),
+                tiktok_account.id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=adapter,
+            ):
+                failed = _publish(self.session, created_campaign.id, placed.id)
+
+            self.assertEqual(failed.status, "failed")
+            self.assertNotEqual(failed.platform_post_id, "pending")
+            self.assertIsNone(failed.platform_post_id)
+            self.assertIn("TikTok rejected the post.", failed.last_error or "")
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
     def test_an_adapter_exception_leaves_the_post_failed(self) -> None:
         """A raising adapter stores failed and does not mark the post up."""
 
@@ -1586,6 +1760,42 @@ def _recording_ayrshare_adapter() -> tuple[AyrsharePublishAdapter, list[httpx.Re
                 "id": "RhrbDtYh7hdSMc67zC8H",
             },
         )
+
+        return post_response
+
+    http_client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+        "test-ayrshare-api-key",
+        http_client,
+    )
+
+    return adapter, recorded_requests
+
+
+def _ayrshare_adapter_with_post_body(
+    post_body: dict[str, object],
+) -> tuple[AyrsharePublishAdapter, list[httpx.Request]]:
+    """Upload succeeds. The post response is the given JSON."""
+
+    recorded_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+
+        recorded_requests.append(request)
+
+        if str(request.url).endswith("/api/media/upload"):
+            upload_response: httpx.Response = httpx.Response(
+                200,
+                json={
+                    "id": "upload-1",
+                    "url": "https://images.ayrshare.com/frame.png",
+                    "fileName": "frame.png",
+                },
+            )
+
+            return upload_response
+
+        post_response: httpx.Response = httpx.Response(200, json=post_body)
 
         return post_response
 

@@ -494,8 +494,8 @@ class AyrshareHttpTests(unittest.TestCase):
         self.assertEqual(str(transport.requests[0].url), AYRSHARE_MEDIA_UPLOAD_ENDPOINT)
         self.assertEqual(str(transport.requests[1].url), AYRSHARE_MEDIA_UPLOAD_ENDPOINT)
         self.assertEqual(str(post_request.url), AYRSHARE_POST_ENDPOINT)
-        self.assertIn(b"frame-zero-bytes", transport.requests[0].content)
-        self.assertIn(b"frame-one-bytes", transport.requests[1].content)
+        self.assertIn(b"payload-0", transport.requests[0].content)
+        self.assertIn(b"payload-1", transport.requests[1].content)
         self.assertIn(b'name="file"', transport.requests[0].content)
         self.assertIn(b'name="fileName"', transport.requests[0].content)
         self.assertIn(b"frame-0.png", transport.requests[0].content)
@@ -784,6 +784,197 @@ class AyrshareHttpTests(unittest.TestCase):
         self.assertEqual(str(raised_missing.exception), expected_detail)
         self.assertNotIn(AYRSHARE_TEST_API_KEY, str(raised_blank.exception))
 
+    def test_eleven_instagram_files_do_not_upload(self) -> None:
+        """More than 10 Instagram files raise before any request."""
+
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(
+            ["https://images.ayrshare.com/frames/unused.png"],
+        )
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_numbered_frames(Path(raw_directory), 11)
+
+            with self.assertRaises(PublishError) as raised:
+                adapter.publish_media(
+                    FIXED_POST_ID,
+                    _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
+                    media_paths,
+                    "Harbor",
+                )
+
+        message: str = str(raised.exception)
+
+        self.assertEqual(transport.requests, [])
+        self.assertIn("10", message)
+        self.assertIn("11", message)
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, message)
+
+    def test_ten_instagram_files_reach_upload(self) -> None:
+        """Ten Instagram files are uploaded, then posted. None are dropped."""
+
+        upload_urls: list[str] = [
+            f"https://images.ayrshare.com/frames/{index}.png" for index in range(10)
+        ]
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(upload_urls)
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_numbered_frames(Path(raw_directory), 10)
+            adapter.publish_media(
+                FIXED_POST_ID,
+                _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
+                media_paths,
+                "Harbor",
+            )
+
+        upload_requests: list[httpx.Request] = [
+            request
+            for request in transport.requests
+            if str(request.url) == AYRSHARE_MEDIA_UPLOAD_ENDPOINT
+        ]
+        post_body: dict[str, object] = _request_json(transport.requests[-1])
+
+        self.assertEqual(len(upload_requests), 10)
+        self.assertEqual(str(transport.requests[-1].url), AYRSHARE_POST_ENDPOINT)
+        self.assertEqual(post_body["mediaUrls"], upload_urls)
+        self.assertEqual(post_body["idempotencyKey"], str(FIXED_POST_ID))
+
+    def test_tiktok_pending_id_without_a_url_is_success(self) -> None:
+        """TikTok id pending and a missing postUrl is a successful publish."""
+
+        recorded_requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+
+            recorded_requests.append(request)
+
+            if str(request.url) == AYRSHARE_POST_ENDPOINT:
+                return httpx.Response(
+                    200,
+                    json={
+                        "status": "success",
+                        "errors": [],
+                        "postIds": [
+                            {
+                                "status": "success",
+                                "id": "pending",
+                                "platform": "tiktok",
+                            },
+                        ],
+                        "id": "ayrshare-own-id",
+                    },
+                )
+
+            return httpx.Response(
+                200,
+                json={
+                    "id": "upload-1",
+                    "url": "https://images.ayrshare.com/frame.png",
+                    "fileName": "frame.png",
+                },
+            )
+
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_numbered_frames(Path(raw_directory), 1)
+            publish_result: PublishResult = adapter.publish_media(
+                FIXED_POST_ID,
+                _account(Platform.TIKTOK, AYRSHARE_TEST_PROFILE_KEY),
+                media_paths,
+                "Harbor",
+            )
+
+        self.assertEqual(publish_result.platform_post_id, "pending")
+        self.assertIsNone(publish_result.platform_post_url)
+        self.assertEqual(len(recorded_requests), 2)
+
+    def test_a_vendor_error_with_a_pending_id_is_not_success(self) -> None:
+        """A body Ayrshare marks as an error is PublishError even with id pending."""
+
+        recorded_requests: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+
+            recorded_requests.append(request)
+
+            return httpx.Response(
+                200,
+                json={
+                    "status": "error",
+                    "errors": [
+                        {
+                            "status": "error",
+                            "message": "TikTok rejected the post.",
+                            "platform": "tiktok",
+                        },
+                    ],
+                    "postIds": [
+                        {
+                            "status": "error",
+                            "id": "pending",
+                            "platform": "tiktok",
+                        },
+                    ],
+                    "id": "ayrshare-own-id",
+                },
+            )
+
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+
+        with self.assertRaises(PublishError) as raised:
+            adapter.publish_media(
+                FIXED_POST_ID,
+                _account(Platform.TIKTOK, AYRSHARE_TEST_PROFILE_KEY),
+                [],
+                "Harbor",
+                [FIRST_MEDIA_URL],
+            )
+
+        self.assertIn("TikTok rejected the post.", str(raised.exception))
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, str(raised.exception))
+
+    def test_thirty_six_tiktok_files_do_not_upload(self) -> None:
+        """TikTok's documented photo cap is 35. More than that never uploads."""
+
+        transport: _UploadThenPostTransport = _UploadThenPostTransport(
+            ["https://images.ayrshare.com/frames/unused.png"],
+        )
+        adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+            AYRSHARE_TEST_API_KEY,
+            transport.client(),
+        )
+
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_numbered_frames(Path(raw_directory), 36)
+
+            with self.assertRaises(PublishError) as raised:
+                adapter.publish_media(
+                    FIXED_POST_ID,
+                    _account(Platform.TIKTOK, AYRSHARE_TEST_PROFILE_KEY),
+                    media_paths,
+                    "Harbor",
+                )
+
+        message: str = str(raised.exception)
+
+        self.assertEqual(transport.requests, [])
+        self.assertIn("35", message)
+        self.assertIn("36", message)
+
     def test_mock_publish_media_ignores_caption_and_opens_no_client(self) -> None:
         """Mock still returns the fake id and does not take an HTTP client."""
 
@@ -884,11 +1075,18 @@ def _fresh_or_raise(failure: httpx.Response | Exception | None) -> httpx.Respons
 def _write_two_frames(directory: Path) -> list[Path]:
     """Write two distinct PNG payloads in frame order."""
 
-    first_path: Path = directory / "frame-0.png"
-    second_path: Path = directory / "frame-1.png"
-    first_path.write_bytes(b"frame-zero-bytes")
-    second_path.write_bytes(b"frame-one-bytes")
-    media_paths: list[Path] = [first_path, second_path]
+    return _write_numbered_frames(directory, 2)
+
+
+def _write_numbered_frames(directory: Path, frame_count: int) -> list[Path]:
+    """Write frame_count tiny files named frame-N.png."""
+
+    media_paths: list[Path] = []
+
+    for frame_index in range(frame_count):
+        frame_path: Path = directory / f"frame-{frame_index}.png"
+        frame_path.write_bytes(f"payload-{frame_index}".encode("utf-8"))
+        media_paths.append(frame_path)
 
     return media_paths
 

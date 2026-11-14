@@ -15,7 +15,7 @@ class PublishResult:
     """Platform identifiers returned by a successful adapter publish."""
 
     platform_post_id: str
-    platform_post_url: str
+    platform_post_url: str | None
 
 
 class PublishAdapter(ABC):
