@@ -3,9 +3,11 @@ import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 import {
   createAccount,
   createCluster,
+  fetchAccountConnection,
   listAccounts,
   listBrands,
   listClusters,
+  patchAccount,
   steerCluster,
 } from "../api/client";
 import type {
@@ -19,6 +21,15 @@ import type {
 import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
+import {
+  AYRSHARE_PROFILE_KEY_LABEL,
+  accountConnectionCheckEnabled,
+  accountConnectionStatusLine,
+  accountCreateRequestFromDraft,
+  accountProfileKeyPatchValue,
+  accountProfileKeySaveEnabled,
+  accountProfileKeyText,
+} from "./accountsPage";
 
 const STEER_ACTIONS: SteerActionName[] = ["kill", "pause", "double_down", "resume"];
 
@@ -45,7 +56,9 @@ export function AccountsPage(): ReactElement {
   const [accountClusterId, setAccountClusterId] = useState<string>("");
   const [accountPlatform, setAccountPlatform] = useState<Platform>("instagram");
   const [accountHandle, setAccountHandle] = useState<string>("");
+  const [accountProfileKey, setAccountProfileKey] = useState<string>("");
   const [cadenceCapText, setCadenceCapText] = useState<string>("");
+  const [profileKeyDrafts, setProfileKeyDrafts] = useState<Record<string, string>>({});
 
   const [steerClusterId, setSteerClusterId] = useState<string>("");
   const [steerReason, setSteerReason] = useState<string>("");
@@ -166,17 +179,67 @@ export function AccountsPage(): ReactElement {
     }
 
     try {
-      const createdAccount: AccountReadResponse = await createAccount({
-        cluster_id: accountClusterId,
-        platform: accountPlatform,
-        handle: accountHandle,
-        cadence_cap_per_day: cadenceCapPerDay,
-      });
+      const createdAccount: AccountReadResponse = await createAccount(
+        accountCreateRequestFromDraft({
+          clusterId: accountClusterId,
+          platform: accountPlatform,
+          handle: accountHandle,
+          cadenceCapPerDay,
+          profileKey: accountProfileKey,
+        }),
+      );
 
       setStatusMessage(`Created account @${createdAccount.handle} (${createdAccount.id})`);
       setAccountHandle("");
+      setAccountProfileKey("");
       setCadenceCapText("");
       await reloadLists();
+    } catch (caughtError: unknown) {
+      setActionError(caughtError);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const profileKeyDraft = (account: AccountReadResponse): string => {
+
+    const draftedValue: string | undefined = profileKeyDrafts[account.id];
+
+    if (draftedValue !== undefined) {
+      return draftedValue;
+    }
+
+    return account.external_account_id ?? "";
+  };
+
+  const handleSaveProfileKey = async (account: AccountReadResponse): Promise<void> => {
+
+    setIsBusy(true);
+    setActionError(null);
+    setStatusMessage("");
+
+    try {
+      await patchAccount(account.id, {
+        external_account_id: accountProfileKeyPatchValue(profileKeyDraft(account)),
+      });
+      setStatusMessage(`Saved the Ayrshare profile key for @${account.handle}.`);
+      await reloadLists();
+    } catch (caughtError: unknown) {
+      setActionError(caughtError);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleCheckConnection = async (account: AccountReadResponse): Promise<void> => {
+
+    setIsBusy(true);
+    setActionError(null);
+    setStatusMessage("");
+
+    try {
+      const connection = await fetchAccountConnection(account.id);
+      setStatusMessage(accountConnectionStatusLine(connection.detail));
     } catch (caughtError: unknown) {
       setActionError(caughtError);
     } finally {
@@ -305,6 +368,7 @@ export function AccountsPage(): ReactElement {
               <th>Platform</th>
               <th>Status</th>
               <th>cadence_cap_per_day</th>
+              <th>Ayrshare profile key</th>
               <th>Cluster</th>
               <th>ID</th>
             </tr>
@@ -316,6 +380,41 @@ export function AccountsPage(): ReactElement {
                 <td>{account.platform}</td>
                 <td>{account.status}</td>
                 <td>{account.cadence_cap_per_day ?? "—"}</td>
+                <td>
+                  <span>{accountProfileKeyText(account.external_account_id)}</span>
+                  <label>
+                    {AYRSHARE_PROFILE_KEY_LABEL}
+                    <input
+                      value={profileKeyDraft(account)}
+                      onChange={(changeEvent): void => {
+                        setProfileKeyDrafts({
+                          ...profileKeyDrafts,
+                          [account.id]: changeEvent.target.value,
+                        });
+                      }}
+                      disabled={!accountProfileKeySaveEnabled(canWrite, isBusy)}
+                    />
+                  </label>
+                  <button
+                    id="check-account-connection"
+                    type="button"
+                    disabled={!accountConnectionCheckEnabled(canWrite, isBusy)}
+                    onClick={(): void => {
+                      void handleCheckConnection(account);
+                    }}
+                  >
+                    Check connection
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!accountProfileKeySaveEnabled(canWrite, isBusy)}
+                    onClick={(): void => {
+                      void handleSaveProfileKey(account);
+                    }}
+                  >
+                    Save
+                  </button>
+                </td>
                 <td className="mono">{account.cluster_id}</td>
                 <td className="mono">{account.id}</td>
               </tr>
@@ -411,6 +510,15 @@ export function AccountsPage(): ReactElement {
               setAccountHandle(changeEvent.target.value);
             }}
             required
+          />
+        </label>
+        <label>
+          {AYRSHARE_PROFILE_KEY_LABEL}
+          <input
+            value={accountProfileKey}
+            onChange={(changeEvent): void => {
+              setAccountProfileKey(changeEvent.target.value);
+            }}
           />
         </label>
         <label>

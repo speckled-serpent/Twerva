@@ -1,7 +1,8 @@
-"""Mock PublishAdapter, factory, and Ayrshare stub (1.6b)."""
+"""Mock PublishAdapter, factory, and Ayrshare adapter."""
 
 from __future__ import annotations
 
+import tempfile
 import unittest
 import uuid
 from pathlib import Path
@@ -11,13 +12,13 @@ from app.models.enums import AccountStatus, ArtifactStatus, Platform, PostJobSta
 from app.publish.adapter import PublishResult
 from app.publish.ayrshare import AyrsharePublishAdapter
 from app.publish.errors import (
-    AyrshareLivePublishNotWiredError,
     PublishAdapterNotConfiguredError,
     PublishAdapterUnknownError,
+    PublishError,
 )
 from app.publish.factory import get_publish_adapter
 from app.publish.mock import MOCK_PUBLISH_LOGGER_NAME, MockPublishAdapter
-from app.settings import Settings
+from app.settings import DEFAULT_PUBLISH_ADAPTER, Settings
 
 
 FIXED_ACCOUNT_ID: uuid.UUID = uuid.UUID("44444444-4444-4444-4444-444444444444")
@@ -121,6 +122,7 @@ class MockPublishAdapterTests(unittest.TestCase):
                 FIXED_POST_JOB_ID,
                 _instagram_account(),
                 media_paths,
+                "caption the mock ignores",
             )
 
         self.assertEqual(
@@ -140,6 +142,7 @@ class PublishAdapterFactoryTests(unittest.TestCase):
     def test_factory_defaults_to_mock_adapter(self) -> None:
         """PUBLISH_ADAPTER=mock returns MockPublishAdapter."""
 
+        self.assertEqual(DEFAULT_PUBLISH_ADAPTER, "mock")
         mock_settings: Settings = Settings(
             database_url="postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva",
             publish_adapter="mock",
@@ -163,8 +166,8 @@ class PublishAdapterFactoryTests(unittest.TestCase):
         self.assertEqual(raised_missing.exception.adapter_name, "ayrshare")
         self.assertEqual(raised_missing.exception.missing_setting_name, "AYRSHARE_API_KEY")
 
-    def test_factory_ayrshare_with_key_returns_stub(self) -> None:
-        """Ayrshare with a key constructs the stub (live HTTP still not sent)."""
+    def test_factory_ayrshare_with_key_returns_adapter(self) -> None:
+        """Ayrshare with a key returns AyrsharePublishAdapter. Default stays mock."""
 
         ayrshare_settings: Settings = Settings(
             database_url="postgresql+psycopg://twerva:twerva@127.0.0.1:5432/twerva",
@@ -176,26 +179,41 @@ class PublishAdapterFactoryTests(unittest.TestCase):
         self.assertIsInstance(publish_adapter, AyrsharePublishAdapter)
 
     def test_ayrshare_stub_publish_is_not_wired(self) -> None:
-        """Calling the stub never hits the network."""
+        """A missing frame file raises before any Ayrshare request."""
 
         ayrshare_publish_adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
             "test-key",
         )
 
-        with self.assertRaises(AyrshareLivePublishNotWiredError):
-            ayrshare_publish_adapter.publish(
-                _scheduled_post_job(),
-                _draft_artifact(),
-                _instagram_account(),
-                [],
-            )
+        with tempfile.TemporaryDirectory() as raw_directory:
+            missing_path: Path = Path(raw_directory) / "frame.png"
+            account: Account = _instagram_account()
+            account.external_account_id = "profile-key"
 
-        with self.assertRaises(AyrshareLivePublishNotWiredError):
-            ayrshare_publish_adapter.publish_media(
-                FIXED_POST_JOB_ID,
-                _instagram_account(),
-                [],
-            )
+            with self.assertRaises(PublishError) as raised_publish:
+                ayrshare_publish_adapter.publish(
+                    _scheduled_post_job(),
+                    _draft_artifact(),
+                    account,
+                    [missing_path],
+                )
+
+            with self.assertRaises(PublishError) as raised_media:
+                ayrshare_publish_adapter.publish_media(
+                    FIXED_POST_JOB_ID,
+                    account,
+                    [missing_path],
+                    "",
+                )
+
+        self.assertEqual(
+            str(raised_publish.exception),
+            "Ayrshare media upload cannot read frame.png.",
+        )
+        self.assertEqual(
+            str(raised_media.exception),
+            "Ayrshare media upload cannot read frame.png.",
+        )
 
     def test_factory_unknown_adapter_raises(self) -> None:
         """Unknown PUBLISH_ADAPTER names fail closed."""

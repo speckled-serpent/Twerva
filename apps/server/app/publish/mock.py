@@ -7,11 +7,12 @@ import uuid
 from pathlib import Path
 
 from app.models import Account, Artifact, PostJob
-from app.publish.adapter import PublishAdapter, PublishResult
+from app.publish.adapter import ConnectionCheck, PublishAdapter, PublishResult
 
 
 MOCK_PUBLISH_LOGGER_NAME: str = "app.publish.mock"
 EXAMPLE_INVALID_HOST: str = "example.invalid"
+MOCK_CONNECTION_DETAIL: str = "The mock adapter does not call Ayrshare."
 
 
 class MockPublishAdapter(PublishAdapter):
@@ -32,6 +33,7 @@ class MockPublishAdapter(PublishAdapter):
         artifact: Artifact,
         account: Account,
         media_paths: list[Path],
+        media_urls: list[str] | None = None,
     ) -> PublishResult:
         """Return fake platform ids and log how many media files were passed.
 
@@ -40,12 +42,14 @@ class MockPublishAdapter(PublishAdapter):
             artifact: Unused beyond the adapter contract (caption stays on the row).
             account: Supplies the platform segment of the fake id/URL.
             media_paths: Resolved slide files; counted in the log line.
+            media_urls: Ignored. Mock does not open a client.
 
         Returns:
             Deterministic `mock-{platform}-{post_job.id}` id and example URL.
         """
 
         _ = artifact
+        _ = media_urls
         media_path_count: int = len(media_paths)
         post_job_identifier: str = str(post_job.id)
         platform_name: str = account.platform.value
@@ -71,6 +75,8 @@ class MockPublishAdapter(PublishAdapter):
         post_id: uuid.UUID,
         account: Account,
         media_paths: list[Path],
+        caption: str,
+        media_urls: list[str] | None = None,
     ) -> PublishResult:
         """Return fake platform ids for a campaign post and log the file count.
 
@@ -78,11 +84,15 @@ class MockPublishAdapter(PublishAdapter):
             post_id: Campaign post being mock-published.
             account: Supplies the platform segment of the fake id and URL.
             media_paths: Resolved frame files. Counted in the log line.
+            caption: Ignored. The fake id does not depend on the caption.
+            media_urls: Ignored. Mock does not open a client.
 
         Returns:
             Deterministic `mock-{platform}-{post_id}` id and example URL.
         """
 
+        _ = caption
+        _ = media_urls
         media_path_count: int = len(media_paths)
         post_identifier: str = str(post_id)
         platform_name: str = account.platform.value
@@ -102,3 +112,22 @@ class MockPublishAdapter(PublishAdapter):
         )
 
         return publish_result
+
+    def check_connection(self, account: Account) -> ConnectionCheck:
+        """Report that mock publish does not call Ayrshare.
+
+        Args:
+            account: Unused. The mock check does not read the profile key.
+
+        Returns:
+            ``adapter`` ``mock``, ``ok`` true, and a sentence that names no secret.
+        """
+
+        _ = account
+        connection_check: ConnectionCheck = ConnectionCheck(
+            adapter="mock",
+            ok=True,
+            detail=MOCK_CONNECTION_DETAIL,
+        )
+
+        return connection_check

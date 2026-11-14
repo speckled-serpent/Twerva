@@ -1,5 +1,7 @@
 import type {
+  AccountConnectionReadResponse,
   AccountCreateRequest,
+  AccountProfileKeyPatchRequest,
   AccountReadResponse,
   ArtifactApproveRequest,
   ArtifactRegenerateRequest,
@@ -224,6 +226,29 @@ export async function createCampaign(
     "POST",
     "/api/v1/campaigns",
     campaignCreateRequest,
+  );
+}
+
+export async function attachCampaignAccount(
+  campaignId: string,
+  accountId: string,
+): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>(
+    "POST",
+    `/api/v1/campaigns/${campaignId}/accounts`,
+    { account_id: accountId },
+  );
+}
+
+export async function detachCampaignAccount(
+  campaignId: string,
+  accountId: string,
+): Promise<CampaignReadResponse> {
+
+  return requestJson<CampaignReadResponse>(
+    "DELETE",
+    `/api/v1/campaigns/${campaignId}/accounts/${accountId}`,
   );
 }
 
@@ -1231,6 +1256,28 @@ export async function createAccount(
     "POST",
     "/api/v1/accounts",
     accountCreateRequest,
+  );
+}
+
+export async function fetchAccountConnection(
+  accountId: string,
+): Promise<AccountConnectionReadResponse> {
+
+  return requestJson<AccountConnectionReadResponse>(
+    "GET",
+    `/api/v1/accounts/${accountId}/connection`,
+  );
+}
+
+export async function patchAccount(
+  accountId: string,
+  accountProfileKeyPatchRequest: AccountProfileKeyPatchRequest,
+): Promise<AccountReadResponse> {
+
+  return requestJson<AccountReadResponse>(
+    "PATCH",
+    `/api/v1/accounts/${accountId}`,
+    accountProfileKeyPatchRequest,
   );
 }
 

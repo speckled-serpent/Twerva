@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 
 from app.models import Account, Artifact, PostJob
 from app.models.enums import AccountStatus, ArtifactStatus, Platform, PostJobStatus
-from app.publish.adapter import PublishAdapter, PublishResult
+from app.publish.adapter import ConnectionCheck, PublishAdapter, PublishResult
 from app.publish.errors import PostJobNotPublishableError
 from app.publish.mock import MockPublishAdapter
 from app.publish.service import publish_post_job
@@ -53,11 +53,21 @@ class FailingPublishAdapter(PublishAdapter):
         post_id: uuid.UUID,
         account: Account,
         media_paths: list[Path],
+        caption: str,
+        media_urls: list[str] | None = None,
     ) -> PublishResult:
 
         _ = post_id
         _ = account
         _ = media_paths
+        _ = caption
+        _ = media_urls
+
+        raise RuntimeError("forced adapter failure")
+
+    def check_connection(self, account: Account) -> ConnectionCheck:
+
+        _ = account
 
         raise RuntimeError("forced adapter failure")
 

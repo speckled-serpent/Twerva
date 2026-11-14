@@ -48,6 +48,8 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/campaigns/{campaign_id}/pause",
         "/api/v1/campaigns/{campaign_id}/resume",
         "/api/v1/campaigns/{campaign_id}/finish",
+        "/api/v1/campaigns/{campaign_id}/accounts",
+        "/api/v1/campaigns/{campaign_id}/accounts/{account_id}",
         "/api/v1/campaigns/{campaign_id}/posts",
         "/api/v1/campaigns/{campaign_id}/posts/{post_id}",
         "/api/v1/campaigns/{campaign_id}/posts/{post_id}/publish",
@@ -66,6 +68,7 @@ EXPECTED_API_V1_PATHS: frozenset[str] = frozenset(
         "/api/v1/clusters/{cluster_id}",
         "/api/v1/accounts",
         "/api/v1/accounts/{account_id}",
+        "/api/v1/accounts/{account_id}/connection",
         "/api/v1/artifacts",
         "/api/v1/artifacts/{artifact_id}",
         "/api/v1/post-jobs",
@@ -324,6 +327,20 @@ class ApiRouteSurfaceTests(unittest.TestCase):
         search_methods: set[str] = methods_by_path["/api/v1/spotmu/interests/search"]
 
         self.assertIn("get", search_methods)
+
+    def test_account_profile_key_patch_is_registered(self) -> None:
+        """PATCH /api/v1/accounts/{account_id} stores the profile key."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        account_item_methods: set[str] = methods_by_path["/api/v1/accounts/{account_id}"]
+
+        self.assertIn("/api/v1/accounts/{account_id}", EXPECTED_API_V1_PATHS)
+        self.assertIn("patch", account_item_methods)
+        self.assertIn("get", account_item_methods)
+        connection_methods: set[str] = methods_by_path[
+            "/api/v1/accounts/{account_id}/connection"
+        ]
+        self.assertIn("get", connection_methods)
 
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""

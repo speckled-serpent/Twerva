@@ -39,7 +39,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Live HTTP
 
-- [ ] **10.1 Post through Ayrshare from both adapter methods**
+- [x] **10.1 Post through Ayrshare from both adapter methods**
 
   Replace the raise in `AyrsharePublishAdapter.publish` and `publish_media` with one HTTP call. Keep `AYRSHARE_POST_ENDPOINT`. The constructor still takes the API key and gains an optional `httpx.Client`. The factory passes no client, so production builds a normal client. Tests pass `httpx.Client(transport=httpx.MockTransport(...))`. Do not add `respx`. A test that forgets the transport must not be able to reach the network: the methods that talk HTTP take the client the constructor stored, and every test in this phase passes a mock transport. No test skips when offline.
 
@@ -57,7 +57,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Media
 
-- [ ] **10.2 Upload frame files to Ayrshare before the post**
+- [x] **10.2 Upload frame files to Ayrshare before the post**
 
   Ayrshare has to fetch the images itself. The frame route requires a session cookie, and `/opt/twerva/artifacts` is not on nginx. Do not add an unauthenticated file route. Do not put a public alias in front of `ARTIFACT_STORAGE_DIR`. Do not take the S3 housekeeping item in this phase.
 
@@ -71,7 +71,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Caption
 
-- [ ] **10.3 Send the assembled caption**
+- [x] **10.3 Send the assembled caption**
 
   `publish_campaign_post` passes `stored_post.assembled_carousel.caption` into `publish_media`. Null becomes `""`. The string is whatever assemble stored. This task does not read `campaigns.hashtag`, does not call `build_carousel_caption`, and does not append `DEFAULT_HASHTAGS`. It does not add a column and does not add an editor on the timeline. The caption line already on the row is the string that is sent.
 
@@ -81,7 +81,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Profile binding
 
-- [ ] **10.4 Set the Ayrshare profile key on the account, and refuse a live publish without it**
+- [x] **10.4 Set the Ayrshare profile key on the account, and refuse a live publish without it**
 
   No migration. `external_account_id` is already on `accounts` and on `AccountReadResponse`. Do not add a token column.
 
@@ -95,7 +95,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Campaign accounts
 
-- [ ] **10.5 Attach and detach an account on an existing campaign**
+- [x] **10.5 Attach and detach an account on an existing campaign**
 
   No migration. `campaign_accounts` is already the join, unique on `(campaign_id, account_id)`, cascade on both deletes.
 
@@ -109,7 +109,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Platform limits
 
-- [ ] **10.6 Enforce the Instagram image cap, and store a TikTok pending id**
+- [x] **10.6 Enforce the Instagram image cap, and store a TikTok pending id**
 
   Before upload, when the account platform is `instagram` and the media list has more than 10 files, raise `PublishError` with a detail that states the cap and the actual count. Do not upload, do not POST, and do not drop frames to make ten. The constant lives next to the adapter. The spike says 10. Verify the current cap against Ayrshare's docs and change the constant if the docs disagree. Do not invent a TikTok cap. If the docs name one, apply it the same way, as a refuse, not a truncate. Otherwise TikTok has no local count check in this task.
 
@@ -121,7 +121,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Connection check
 
-- [ ] **10.7 Check the key and the profile without posting**
+- [x] **10.7 Check the key and the profile without posting**
 
   Add a read on the ayrshare adapter, separate from `publish` and `publish_media`. It sends one GET with the Bearer key and, when the account's `external_account_id` is set, the same profile-key header. It does not send `post` or `mediaUrls`. Verify the path against Ayrshare's docs. The spelling to confirm first is `GET https://api.ayrshare.com/api/user`. If the docs say a profile is read from a different path, use that path. Parse the connected platforms or handles the docs return. A transport error or a non-success status raises `PublishError` with the same rule as task 10.1: status plus a short vendor message, and neither secret in the message.
 
@@ -133,7 +133,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Runbook
 
-- [ ] **10.8 Document the production switch, with mock as the rollback**
+- [x] **10.8 Document the production switch, with mock as the rollback**
 
   Update the Phase 1.6 section of `docs/ops/deploy.md`. That section currently says not to switch the box to `ayrshare`. Replace that warning with the phase 10 order. Do not invent AWS console steps. Do not paste a real key.
 
@@ -145,7 +145,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Dry run
 
-- [ ] **10.9 Dry-run the live path against a mocked Ayrshare, and leave Mu a checklist**
+- [x] **10.9 Dry-run the live path against a mocked Ayrshare, and leave Mu a checklist**
 
   One server test walks the campaign path with `PUBLISH_ADAPTER=ayrshare`, a fake key, and an `httpx.MockTransport` installed on the adapter the route uses. The test creates no real socket. The fixture is a campaign, one linked account with `external_account_id` set, and one upcoming post whose assembled carousel has two frames on disk and a caption. `POST .../publish` returns `posted`. The transport saw one upload per frame and one post. The post body carried the caption, `platforms` of that one account, and the upload URLs. The stored `platform_post_id` and `platform_post_url` are the handler's values. A second case with a blank `external_account_id` returns `failed`, `last_error` set, and no post request. `POST /api/v1/generate/carousel` and `publish_post_job` are not required for this test.
 
@@ -164,7 +164,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Tests
 
-- [ ] **10.10 Run the full server suite, the full ops suite, and the ops build**
+- [x] **10.10 Run the full server suite, the full ops suite, and the ops build**
 
   From `apps/server`, `python -m unittest discover -s tests`. From `apps/ops`, `node --test *.test.ts`, then `npm run build`. This commit adds no product behavior. It fixes failures that this phase's tasks left, and it does not start a new feature. Migration tests that skip because Postgres is down stay skipped, the same way `test_carousel_steps_migration.py` skips. A skip is not a failure. The phase is done when both suites pass aside from those skips, and `npm run build` succeeds.
 

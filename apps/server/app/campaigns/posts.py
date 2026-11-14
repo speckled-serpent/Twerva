@@ -25,6 +25,7 @@ from app.models.carousel import AssembledCarousel, AssembledCarouselFrame, Carou
 from app.models.enums import PostJobStatus
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.post_job import PostJob
+from app.publish.adapter import PublishResult
 from app.publish.errors import PublishMediaMissingError
 from app.publish.factory import get_publish_adapter
 from app.publish.media import resolve_asset_reference_path
@@ -264,12 +265,14 @@ def publish_campaign_post(
     campaign_post_id: uuid.UUID,
     our_database_session: Session,
 ) -> CampaignPost:
-    """Mock-publish an upcoming or failed post through the configured adapter.
+    """Publish an upcoming or failed post through the configured adapter.
 
-    The clock and the campaign status are not consulted. A missing frame
-    file, a path that leaves the store, or an adapter exception stores
-    ``failed`` and ``last_error`` and leaves ``published_at`` null. The
-    caller commits. This does not insert an artifact or a post job.
+    The caption is the assembled carousel's caption. Null is sent as an
+    empty string. The clock and the campaign status are not consulted.
+    A missing frame file, a path that leaves the store, or an adapter
+    exception stores ``failed`` and ``last_error`` and leaves
+    ``published_at`` null. The caller commits. This does not insert an
+    artifact or a post job.
 
     Args:
         campaign: Campaign that must own the post.
@@ -302,10 +305,12 @@ def publish_campaign_post(
 
     try:
         media_paths: list[Path] = _frame_media_paths(stored_post)
-        publish_result = get_publish_adapter().publish_media(
+        caption_text: str = _caption_for_publish(stored_post)
+        publish_result: PublishResult = get_publish_adapter().publish_media(
             stored_post.id,
             linked_account,
             media_paths,
+            caption_text,
         )
     except Exception as publish_error:
         stored_post.status = CAMPAIGN_POST_FAILED_STATUS
@@ -325,6 +330,18 @@ def publish_campaign_post(
     )
 
     return loaded_post
+
+
+def _caption_for_publish(stored_post: CampaignPost) -> str:
+    """Return the caption assemble stored. Null becomes an empty string."""
+
+    stored_caption: str | None = stored_post.assembled_carousel.caption
+
+    if stored_caption is None:
+
+        return ""
+
+    return stored_caption
 
 
 def _frame_media_paths(post: CampaignPost) -> list[Path]:

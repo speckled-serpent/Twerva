@@ -8,9 +8,10 @@ loads `/opt/twerva/database_url.env` into the process environment.
 `/opt/twerva/artifacts`). Local README path is `./data/artifacts`.
 S3 is not used.
 
-`PUBLISH_ADAPTER` selects the 1.6 publish pipe (`mock` default, or
-`ayrshare` when a live key exists). Mock is required for CI. Ayrshare
-live HTTP is not wired in this slice.
+`PUBLISH_ADAPTER` selects the publish pipe (`mock` default, or
+`ayrshare` when `AYRSHARE_API_KEY` is set). Mock is the default and
+the CI path. Ayrshare sends `POST https://api.ayrshare.com/api/post`
+when a publish runs. The key stays in the process environment.
 
 `TEXT_GENERATION_PROVIDER` is `openai` or `fake`. `openai` calls
 api.openai.com when `OPENAI_API_KEY` is set. `OPENAI_MODEL` defaults

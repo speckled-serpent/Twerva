@@ -56,7 +56,7 @@ def get_publish_adapter(settings: Settings | None = None) -> PublishAdapter:
 
 
 def _build_ayrshare_publish_adapter(ayrshare_api_key: str) -> AyrsharePublishAdapter:
-    """Require an API key; still do not send HTTP in 1.6."""
+    """Require an API key. HTTP starts only when publish runs."""
 
     stripped_api_key: str = ayrshare_api_key.strip()
 

@@ -1,8 +1,11 @@
 import { useEffect, useState, type ReactElement } from "react";
 
 import {
+  attachCampaignAccount,
+  detachCampaignAccount,
   fetchCampaignById,
   finishCampaign,
+  listAccounts,
   listCampaigns,
   pauseCampaign,
   resumeCampaign,
@@ -10,6 +13,7 @@ import {
   startCampaign,
 } from "../api/client";
 import type {
+  AccountReadResponse,
   CampaignAccountReadResponse,
   CampaignCarouselRead,
   CampaignCarouselSlideRead,
@@ -20,6 +24,10 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { ReadOnlyNotice } from "../components/ReadOnlyNotice";
 import { useCanWriteOps } from "../session/OpsSessionContext";
 import { CampaignTimeline } from "./CampaignTimeline";
+import {
+  campaignAccountControlsEnabled,
+  campaignAccountsAvailableToAttach,
+} from "./campaignAccounts";
 import {
   CampaignStatusBadge,
   campaignLifecycleActionLabel,
@@ -406,7 +414,12 @@ function CampaignDetailView({
             <dd>{formatCampaignPlatforms(selectedCampaign.platforms)}</dd>
             <dt>Accounts</dt>
             <dd>
-              <CampaignAccountList accounts={selectedCampaign.accounts} />
+              <CampaignAccountList
+                campaign={selectedCampaign}
+                canWrite={canWrite}
+                isBusy={isBusy}
+                onCampaignReplaced={onCampaignReplaced}
+              />
             </dd>
             <dt>Spotmu interests</dt>
             <dd>
@@ -483,7 +496,10 @@ function CampaignDetailView({
 }
 
 interface CampaignAccountListProps {
-  accounts: CampaignAccountReadResponse[];
+  campaign: CampaignReadResponse;
+  canWrite: boolean;
+  isBusy: boolean;
+  onCampaignReplaced: (campaign: CampaignReadResponse) => void;
 }
 
 interface CampaignCarouselListProps {
@@ -512,20 +528,148 @@ function CampaignCarouselList({ carousels }: CampaignCarouselListProps): ReactEl
   );
 }
 
-function CampaignAccountList({ accounts }: CampaignAccountListProps): ReactElement {
+function CampaignAccountList({
+  campaign,
+  canWrite,
+  isBusy,
+  onCampaignReplaced,
+}: CampaignAccountListProps): ReactElement {
 
-  if (accounts.length === 0) {
-    return <span>—</span>;
-  }
+  const [libraryAccounts, setLibraryAccounts] = useState<AccountReadResponse[]>([]);
+  const [chosenAccountId, setChosenAccountId] = useState<string>("");
+  const [localError, setLocalError] = useState<unknown>(null);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const controlsEnabled: boolean = campaignAccountControlsEnabled(
+    canWrite,
+    isBusy || isSaving,
+  );
+  const linkedAccountIds: string[] = campaign.accounts.map(
+    (account: CampaignAccountReadResponse): string => account.id,
+  );
+  const attachChoices: AccountReadResponse[] = campaignAccountsAvailableToAttach(
+    libraryAccounts,
+    campaign.platforms,
+    linkedAccountIds,
+  );
+  const selectedAccountId: string = attachChoices.some(
+    (account: AccountReadResponse): boolean => account.id === chosenAccountId,
+  )
+    ? chosenAccountId
+    : (attachChoices[0]?.id ?? "");
+
+  useEffect((): (() => void) => {
+    let isCancelled: boolean = false;
+
+    const loadAccounts = async (): Promise<void> => {
+
+      try {
+        const loadedAccounts: AccountReadResponse[] = await listAccounts();
+
+        if (isCancelled) {
+          return;
+        }
+
+        setLibraryAccounts(loadedAccounts);
+      } catch (caughtError: unknown) {
+        if (isCancelled) {
+          return;
+        }
+
+        setLocalError(caughtError);
+      }
+    };
+
+    void loadAccounts();
+
+    return (): void => {
+      isCancelled = true;
+    };
+  }, [campaign.id]);
+
+  const handleAttach = async (): Promise<void> => {
+
+    setLocalError(null);
+    setIsSaving(true);
+
+    try {
+      const updatedCampaign: CampaignReadResponse = await attachCampaignAccount(
+        campaign.id,
+        selectedAccountId,
+      );
+      onCampaignReplaced(updatedCampaign);
+    } catch (caughtError: unknown) {
+      setLocalError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDetach = async (accountId: string): Promise<void> => {
+
+    setLocalError(null);
+    setIsSaving(true);
+
+    try {
+      const updatedCampaign: CampaignReadResponse = await detachCampaignAccount(
+        campaign.id,
+        accountId,
+      );
+      onCampaignReplaced(updatedCampaign);
+    } catch (caughtError: unknown) {
+      setLocalError(caughtError);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
-    <ul className="campaign-detail-sublist">
-      {accounts.map((account: CampaignAccountReadResponse): ReactElement => (
-        <li key={account.id}>
-          {account.handle} ({account.platform})
-        </li>
-      ))}
-    </ul>
+    <div>
+      <ErrorBanner error={localError} />
+      {campaign.accounts.length === 0 ? <span>—</span> : (
+        <ul className="campaign-detail-sublist">
+          {campaign.accounts.map((account: CampaignAccountReadResponse): ReactElement => (
+            <li key={account.id}>
+              {account.handle} ({account.platform})
+              <button
+                type="button"
+                disabled={!controlsEnabled}
+                onClick={(): void => {
+                  void handleDetach(account.id);
+                }}
+              >
+                Detach
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <label>
+        Attach account
+        <select
+          value={selectedAccountId}
+          disabled={!controlsEnabled || attachChoices.length === 0}
+          onChange={(changeEvent): void => {
+            setChosenAccountId(changeEvent.target.value);
+          }}
+        >
+          {attachChoices.length === 0 ? <option value="">No matching account</option> : null}
+          {attachChoices.map((account: AccountReadResponse): ReactElement => (
+            <option key={account.id} value={account.id}>
+              {account.handle} ({account.platform})
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        disabled={!controlsEnabled || selectedAccountId === ""}
+        onClick={(): void => {
+          void handleAttach();
+        }}
+      >
+        Attach
+      </button>
+    </div>
   );
 }
 

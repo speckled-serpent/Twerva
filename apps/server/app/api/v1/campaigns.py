@@ -20,6 +20,7 @@ from app.api.v1.schemas import (
     CampaignAccountReadResponse,
     CampaignCarouselRead,
     CampaignCarouselSlideRead,
+    CampaignAccountAttachRequest,
     CampaignCreateRequest,
     CampaignInterestReadResponse,
     CampaignInterestWrite,
@@ -72,6 +73,13 @@ CAMPAIGN_PLATFORMS_REQUIRED_DETAIL: str = "At least one platform is required."
 CAMPAIGN_ACCOUNTS_REQUIRED_DETAIL: str = "At least one account is required."
 DUPLICATE_ACCOUNT_PLATFORM_DETAIL: str = (
     "Account platform is not in the campaign platform list."
+)
+CAMPAIGN_ACCOUNT_ALREADY_LINKED_DETAIL: str = (
+    "That account is already on this campaign."
+)
+CAMPAIGN_ACCOUNT_LINK_MISSING_DETAIL: str = "That account is not on this campaign."
+CAMPAIGN_ACCOUNT_STAYS_DETAIL: str = (
+    "This account stays on the campaign because a post uses it."
 )
 CAROUSEL_SKELETON_MISMATCH_DETAIL: str = "That carousel is not bound to this skeleton."
 CAMPAIGN_RUN_REQUIRES_BINDING_DETAIL: str = (
@@ -222,6 +230,123 @@ def get_campaign_by_id(
     )
     campaign_read_response: CampaignReadResponse = serialize_campaign(
         found_campaign,
+    )
+
+    return campaign_read_response
+
+
+@campaigns_router.post("/{campaign_id}/accounts", response_model=CampaignReadResponse)
+def attach_campaign_account(
+    campaign_id: uuid.UUID,
+    attach_request: CampaignAccountAttachRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
+) -> CampaignReadResponse:
+    """Link an existing account. This does not create a post or publish.
+
+    The account platform has to be on the campaign. A second link for
+    the same pair is refused. Readers cannot call this.
+    """
+
+    _ = current_ops_operator
+    found_campaign: Campaign = fetch_campaign_by_id_or_raise(
+        campaign_id,
+        our_database_session,
+    )
+    found_account: Account = fetch_account_by_id_or_raise(
+        attach_request.account_id,
+        our_database_session,
+    )
+    _raise_if_account_platforms_mismatch(
+        [found_account],
+        list(found_campaign.platforms),
+    )
+    existing_link: CampaignAccount | None = our_database_session.get(
+        CampaignAccount,
+        (campaign_id, found_account.id),
+    )
+
+    if existing_link is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CAMPAIGN_ACCOUNT_ALREADY_LINKED_DETAIL,
+        )
+
+    our_database_session.add(
+        CampaignAccount(
+            campaign_id=campaign_id,
+            account_id=found_account.id,
+        ),
+    )
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail=CAMPAIGN_ACCOUNT_ALREADY_LINKED_DETAIL,
+    )
+    reloaded_campaign: Campaign = _load_campaign_with_joins(
+        campaign_id,
+        our_database_session,
+    )
+    campaign_read_response: CampaignReadResponse = serialize_campaign(
+        reloaded_campaign,
+    )
+
+    return campaign_read_response
+
+
+@campaigns_router.delete(
+    "/{campaign_id}/accounts/{account_id}",
+    response_model=CampaignReadResponse,
+)
+def detach_campaign_account(
+    campaign_id: uuid.UUID,
+    account_id: uuid.UUID,
+    our_database_session: Session = Depends(get_our_database_session),
+    current_ops_operator: OpsUser | None = Depends(require_authenticated_ops_operator),
+) -> CampaignReadResponse:
+    """Remove a campaign account link. The account row stays.
+
+    A missing link is 404. A link that any post on this campaign uses
+    stays, including upcoming, posted, and failed posts. Readers cannot
+    call this.
+    """
+
+    _ = current_ops_operator
+    fetch_campaign_by_id_or_raise(campaign_id, our_database_session)
+    existing_link: CampaignAccount | None = our_database_session.get(
+        CampaignAccount,
+        (campaign_id, account_id),
+    )
+
+    if existing_link is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=CAMPAIGN_ACCOUNT_LINK_MISSING_DETAIL,
+        )
+
+    post_using_account: CampaignPost | None = our_database_session.scalars(
+        select(CampaignPost).where(
+            CampaignPost.campaign_id == campaign_id,
+            CampaignPost.account_id == account_id,
+        ),
+    ).first()
+
+    if post_using_account is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CAMPAIGN_ACCOUNT_STAYS_DETAIL,
+        )
+
+    our_database_session.delete(existing_link)
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Campaign account could not be removed.",
+    )
+    reloaded_campaign: Campaign = _load_campaign_with_joins(
+        campaign_id,
+        our_database_session,
+    )
+    campaign_read_response: CampaignReadResponse = serialize_campaign(
+        reloaded_campaign,
     )
 
     return campaign_read_response

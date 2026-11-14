@@ -1,6 +1,8 @@
 """Place an assembled carousel on a campaign timeline."""
 
+import json
 import os
+import socket
 import tempfile
 import unittest
 import uuid
@@ -9,9 +11,11 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 os.environ.setdefault("TWERVA_ENV", "test")
 
+import httpx
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI, HTTPException
@@ -77,7 +81,9 @@ from app.campaigns.posts import (
 )
 from app.api.v1.campaign_posts import RECORD_RESULTS_AFTER_POST_DETAIL
 from app.db import get_our_database_session
+from app.generate.carousel import DEFAULT_HASHTAGS
 from app.metrics.service import append_metric_snapshot
+from app.models.account import Account
 from app.models.artifact import Artifact
 from app.models.campaign import Campaign, CampaignPost
 from app.models.campaign import CampaignCarousel
@@ -97,7 +103,8 @@ from app.models.enums import (
 from app.models.ops_user import OpsUser
 from app.models.metric_snapshot import MetricSnapshot
 from app.models.post_job import PostJob
-from app.settings import clear_settings_cache
+from app.publish.ayrshare import AyrsharePublishAdapter
+from app.settings import DEFAULT_PUBLISH_ADAPTER, clear_settings_cache
 from tests.test_api_routes import _openapi_methods_by_path
 
 
@@ -704,6 +711,14 @@ class CampaignPostPlacementTests(unittest.TestCase):
                 posted.platform_post_id,
                 f"mock-instagram-{placed.id}",
             )
+            self.assertNotIn(self.world.carousel_name, posted.platform_post_id)
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(open_account)
+            assert open_account is not None
+            self.assertIsNone(open_account.external_account_id)
             self.assertIsNotNone(posted.platform_post_url)
             assert posted.platform_post_url is not None
             self.assertIn("example.invalid", posted.platform_post_url)
@@ -720,6 +735,559 @@ class CampaignPostPlacementTests(unittest.TestCase):
                 raised_http.exception.detail,
                 CAMPAIGN_POST_ALREADY_UP_DETAIL,
             )
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+    def test_publish_sends_the_assembled_caption(self) -> None:
+        """The Ayrshare post field is the assembled caption, with no hashtags added."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        named_adapter, named_requests = _recording_ayrshare_adapter()
+        empty_adapter, empty_requests = _recording_ayrshare_adapter()
+        open_account: Account | None = self.session.get(Account, self.world.open_account_id)
+        self.assertIsNotNone(open_account)
+        assert open_account is not None
+        previous_profile_key: str | None = open_account.external_account_id
+        open_account.external_account_id = "profile-key-for-caption"
+        self.session.commit()
+
+        try:
+            named = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_assembled(self.session, self.world.carousel_name),
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, named.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=named_adapter,
+            ):
+                posted = _publish(self.session, self.world.campaign_id, named.id)
+
+            named_body: dict[str, object] = _ayrshare_post_body(named_requests)
+            campaign: Campaign | None = self.session.get(Campaign, self.world.campaign_id)
+
+            self.assertEqual(posted.status, "posted")
+            self.assertEqual(named_body["post"], self.world.carousel_name)
+            self.assertIsNotNone(campaign)
+            assert campaign is not None
+            self.assertNotIn(campaign.hashtag, str(named_body["post"]))
+
+            for hashtag in DEFAULT_HASHTAGS:
+                self.assertNotIn(hashtag, str(named_body["post"]))
+
+            empty_group_id: uuid.UUID = _fresh_assembled(
+                self.session,
+                self.world.carousel_name,
+            )
+            empty_group: AssembledCarousel | None = self.session.get(
+                AssembledCarousel,
+                empty_group_id,
+            )
+            self.assertIsNotNone(empty_group)
+            assert empty_group is not None
+            empty_group.caption = None
+            self.session.commit()
+            empty = _place(
+                self.session,
+                self.world.campaign_id,
+                empty_group_id,
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, empty.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=empty_adapter,
+            ):
+                empty_posted = _publish(self.session, self.world.campaign_id, empty.id)
+
+            empty_body: dict[str, object] = _ayrshare_post_body(empty_requests)
+
+            self.assertEqual(empty_posted.status, "posted")
+            self.assertEqual(empty_body["post"], "")
+            self.assertEqual(len(empty_requests), 2)
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+            open_account.external_account_id = previous_profile_key
+            self.session.commit()
+
+    def test_a_blank_profile_key_fails_the_ayrshare_publish(self) -> None:
+        """Ayrshare refuses before HTTP and the row stores that sentence."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        adapter, recorded_requests = _recording_ayrshare_adapter()
+
+        try:
+            placed = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_assembled(self.session, self.world.carousel_name),
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(open_account)
+            assert open_account is not None
+            self.assertIsNone(open_account.external_account_id)
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=adapter,
+            ):
+                failed = _publish(self.session, self.world.campaign_id, placed.id)
+
+            self.assertEqual(failed.status, "failed")
+            self.assertEqual(
+                failed.last_error,
+                (
+                    "This account has no Ayrshare profile key. "
+                    "Set external_account_id before publishing."
+                ),
+            )
+            self.assertEqual(recorded_requests, [])
+            self.assertIsNone(failed.published_at)
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+    def test_dry_run_posts_two_frames_and_fails_closed_without_a_profile_key(
+        self,
+    ) -> None:
+        """POST publish through ayrshare with a mock transport, then a blank key.
+
+        The route uses the adapter selected by ``PUBLISH_ADAPTER``. The
+        transport records two uploads and one post. A blank profile key
+        stores ``failed`` and sends no post. No socket to Ayrshare opens.
+        """
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        previous_adapter: str | None = os.environ.get("PUBLISH_ADAPTER")
+        previous_api_key: str | None = os.environ.get("AYRSHARE_API_KEY")
+        fake_api_key: str = "dry-run-fake-ayrshare-key"
+        profile_key: str = "dry-run-profile-key"
+        caption_text: str = "Dry-run caption"
+        upload_urls: tuple[str, str] = (
+            "https://images.ayrshare.com/dry-run-frame-0.png",
+            "https://images.ayrshare.com/dry-run-frame-1.png",
+        )
+        platform_post_id: str = "17878176260289172"
+        platform_post_url: str = "https://www.instagram.com/p/CP1dI9Hp_WO/"
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        os.environ["PUBLISH_ADAPTER"] = "ayrshare"
+        os.environ["AYRSHARE_API_KEY"] = fake_api_key
+        clear_settings_cache()
+        recorded_requests: list[httpx.Request] = []
+        upload_index: list[int] = [0]
+        open_account: Account | None = self.session.get(Account, self.world.open_account_id)
+        self.assertIsNotNone(open_account)
+        assert open_account is not None
+        previous_profile_key: str | None = open_account.external_account_id
+        original_create_connection = socket.create_connection
+
+        def guarded_create_connection(
+            address: object,
+            *args: object,
+            **kwargs: object,
+        ) -> socket.socket:
+            host_name: str = ""
+
+            if isinstance(address, tuple) and len(address) >= 1:
+                address_host: object = address[0]
+
+                if isinstance(address_host, str):
+                    host_name = address_host
+
+            parsed_host: str | None = urlparse(f"//{host_name}").hostname
+            normalized_host: str = ""
+
+            if parsed_host is not None:
+                normalized_host = parsed_host.lower().rstrip(".")
+
+            host_is_ayrshare: bool = (
+                normalized_host == "ayrshare.com"
+                or normalized_host.endswith(".ayrshare.com")
+            )
+
+            if host_is_ayrshare:
+                raise AssertionError("The dry-run test opened a socket to Ayrshare.")
+
+            opened_socket: socket.socket = original_create_connection(
+                address,  # type: ignore[arg-type]
+                *args,  # type: ignore[arg-type]
+                **kwargs,  # type: ignore[arg-type]
+            )
+
+            return opened_socket
+
+        def handle_ayrshare(request: httpx.Request) -> httpx.Response:
+            recorded_requests.append(request)
+            request_url: str = str(request.url)
+
+            if request_url.endswith("/api/media/upload"):
+                current_index: int = upload_index[0]
+                upload_index[0] = current_index + 1
+                uploaded_url: str = upload_urls[current_index]
+                upload_response: httpx.Response = httpx.Response(
+                    200,
+                    json={
+                        "id": f"upload-{current_index}",
+                        "url": uploaded_url,
+                        "fileName": f"frame-{current_index}.png",
+                    },
+                )
+
+                return upload_response
+
+            if request_url.endswith("/api/post"):
+                post_response: httpx.Response = httpx.Response(
+                    200,
+                    json={
+                        "status": "success",
+                        "errors": [],
+                        "postIds": [
+                            {
+                                "status": "success",
+                                "platform": "instagram",
+                                "id": platform_post_id,
+                                "postUrl": platform_post_url,
+                            },
+                        ],
+                        "id": "RhrbDtYh7hdSMc67zC8H",
+                    },
+                )
+
+                return post_response
+
+            raise AssertionError(f"Unexpected Ayrshare request {request_url}")
+
+        real_http_client: type[httpx.Client] = httpx.Client
+
+        def client_with_mock_transport(*args: object, **kwargs: object) -> httpx.Client:
+            _ = args
+            timeout_seconds: float = 60.0
+            raw_timeout: object = kwargs.get("timeout", timeout_seconds)
+
+            if isinstance(raw_timeout, (int, float)):
+                timeout_seconds = float(raw_timeout)
+
+            mocked_client: httpx.Client = real_http_client(
+                transport=httpx.MockTransport(handle_ayrshare),
+                timeout=timeout_seconds,
+            )
+
+            return mocked_client
+
+        try:
+            self.assertEqual(DEFAULT_PUBLISH_ADAPTER, "mock")
+            open_account.external_account_id = profile_key
+            self.session.commit()
+            linked = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_two_frame_assembled(self.session, caption_text),
+                self.world.open_account_id,
+            )
+
+            for frame in linked.frames:
+                _write_frame_file(self.session, frame.id, Path(storage.name))
+
+            self.assertEqual(len(linked.frames), 2)
+            self.assertEqual(linked.status, "upcoming")
+            self.assertEqual(linked.caption, caption_text)
+
+            with patch("socket.create_connection", guarded_create_connection):
+                with patch(
+                    "app.publish.ayrshare.httpx.Client",
+                    client_with_mock_transport,
+                ):
+                    posted = _publish(self.session, self.world.campaign_id, linked.id)
+
+            post_body: dict[str, object] = _ayrshare_post_body(recorded_requests)
+            upload_requests: list[httpx.Request] = [
+                request
+                for request in recorded_requests
+                if str(request.url).endswith("/api/media/upload")
+            ]
+            post_requests: list[httpx.Request] = [
+                request
+                for request in recorded_requests
+                if str(request.url).endswith("/api/post")
+            ]
+
+            self.assertEqual(posted.status, "posted")
+            self.assertEqual(posted.platform_post_id, platform_post_id)
+            self.assertEqual(posted.platform_post_url, platform_post_url)
+            self.assertIsNone(posted.last_error)
+            self.assertEqual(len(upload_requests), 2)
+            self.assertEqual(len(post_requests), 1)
+            self.assertEqual(post_body["post"], caption_text)
+            self.assertEqual(post_body["platforms"], ["instagram"])
+            self.assertEqual(post_body["mediaUrls"], list(upload_urls))
+            self.assertNotIn(fake_api_key, json.dumps(post_body))
+
+            for request in recorded_requests:
+                self.assertEqual(request.url.host, "api.ayrshare.com")
+                self.assertEqual(request.method, "POST")
+
+            requests_after_success: int = len(recorded_requests)
+            open_account.external_account_id = None
+            self.session.commit()
+            blank = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_two_frame_assembled(self.session, caption_text),
+                self.world.open_account_id,
+            )
+
+            for frame in blank.frames:
+                _write_frame_file(self.session, frame.id, Path(storage.name))
+
+            with patch("socket.create_connection", guarded_create_connection):
+                with patch(
+                    "app.publish.ayrshare.httpx.Client",
+                    client_with_mock_transport,
+                ):
+                    failed = _publish(self.session, self.world.campaign_id, blank.id)
+
+            post_requests_after_blank: list[httpx.Request] = [
+                request
+                for request in recorded_requests
+                if str(request.url).endswith("/api/post")
+            ]
+
+            self.assertEqual(failed.status, "failed")
+            self.assertEqual(
+                failed.last_error,
+                (
+                    "This account has no Ayrshare profile key. "
+                    "Set external_account_id before publishing."
+                ),
+            )
+            self.assertIsNone(failed.published_at)
+            self.assertIsNone(failed.platform_post_id)
+            self.assertEqual(len(recorded_requests), requests_after_success)
+            self.assertEqual(len(post_requests_after_blank), 1)
+            self.assertNotIn(fake_api_key, failed.last_error or "")
+            self.assertEqual(DEFAULT_PUBLISH_ADAPTER, "mock")
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            if previous_adapter is None:
+                os.environ.pop("PUBLISH_ADAPTER", None)
+            else:
+                os.environ["PUBLISH_ADAPTER"] = previous_adapter
+
+            if previous_api_key is None:
+                os.environ.pop("AYRSHARE_API_KEY", None)
+            else:
+                os.environ["AYRSHARE_API_KEY"] = previous_api_key
+
+            clear_settings_cache()
+            open_account.external_account_id = previous_profile_key
+            self.session.commit()
+
+    def test_a_tiktok_pending_id_is_stored_as_posted(self) -> None:
+        """A pending TikTok id with no URL is posted. The id is stored as pending."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        adapter, _recorded_requests = _ayrshare_adapter_with_post_body(
+            {
+                "status": "success",
+                "errors": [],
+                "postIds": [
+                    {
+                        "status": "success",
+                        "id": "pending",
+                        "platform": "tiktok",
+                    },
+                ],
+                "id": "ayrshare-own-id",
+            },
+        )
+
+        try:
+            source_campaign: Campaign | None = self.session.get(
+                Campaign,
+                self.world.campaign_id,
+            )
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(source_campaign)
+            self.assertIsNotNone(open_account)
+            assert source_campaign is not None
+            assert open_account is not None
+            tiktok_account = create_account(
+                AccountCreateRequest(
+                    cluster_id=open_account.cluster_id,
+                    platform=Platform.TIKTOK,
+                    handle=f"tt_{uuid.uuid4().hex[:8]}",
+                    external_account_id="profile-key-tiktok",
+                ),
+                self.session,
+            )
+            created_campaign = create_campaign(
+                CampaignCreateRequest(
+                    name=f"TikTok {uuid.uuid4().hex[:6]}",
+                    campaign_type=CampaignType.SPOTMU_TEST,
+                    skeleton_id=source_campaign.skeleton_id,
+                    carousel_id=source_campaign.carousel_id,
+                    platforms=[Platform.TIKTOK],
+                    account_ids=[tiktok_account.id],
+                ),
+                self.session,
+                None,
+            )
+            placed = _place(
+                self.session,
+                created_campaign.id,
+                _fresh_assembled(self.session, "Harbor"),
+                tiktok_account.id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=adapter,
+            ):
+                posted = _publish(self.session, created_campaign.id, placed.id)
+
+            self.assertEqual(posted.status, "posted")
+            self.assertEqual(posted.platform_post_id, "pending")
+            self.assertIsNone(posted.platform_post_url)
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+
+    def test_a_vendor_error_does_not_store_pending(self) -> None:
+        """An Ayrshare error body leaves the row failed and does not store pending."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        adapter, _recorded_requests = _ayrshare_adapter_with_post_body(
+            {
+                "status": "error",
+                "errors": [
+                    {
+                        "status": "error",
+                        "code": 156,
+                        "message": "TikTok rejected the post.",
+                        "platform": "tiktok",
+                    },
+                ],
+                "postIds": [
+                    {
+                        "status": "error",
+                        "id": "pending",
+                        "platform": "tiktok",
+                    },
+                ],
+                "id": "ayrshare-own-id",
+            },
+        )
+
+        try:
+            source_campaign: Campaign | None = self.session.get(
+                Campaign,
+                self.world.campaign_id,
+            )
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(source_campaign)
+            self.assertIsNotNone(open_account)
+            assert source_campaign is not None
+            assert open_account is not None
+            tiktok_account = create_account(
+                AccountCreateRequest(
+                    cluster_id=open_account.cluster_id,
+                    platform=Platform.TIKTOK,
+                    handle=f"tt_err_{uuid.uuid4().hex[:8]}",
+                    external_account_id="profile-key-tiktok",
+                ),
+                self.session,
+            )
+            created_campaign = create_campaign(
+                CampaignCreateRequest(
+                    name=f"TikTok err {uuid.uuid4().hex[:6]}",
+                    campaign_type=CampaignType.SPOTMU_TEST,
+                    skeleton_id=source_campaign.skeleton_id,
+                    carousel_id=source_campaign.carousel_id,
+                    platforms=[Platform.TIKTOK],
+                    account_ids=[tiktok_account.id],
+                ),
+                self.session,
+                None,
+            )
+            placed = _place(
+                self.session,
+                created_campaign.id,
+                _fresh_assembled(self.session, "Harbor"),
+                tiktok_account.id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=adapter,
+            ):
+                failed = _publish(self.session, created_campaign.id, placed.id)
+
+            self.assertEqual(failed.status, "failed")
+            self.assertNotEqual(failed.platform_post_id, "pending")
+            self.assertIsNone(failed.platform_post_id)
+            self.assertIn("TikTok rejected the post.", failed.last_error or "")
         finally:
             storage.cleanup()
 
@@ -1121,11 +1689,15 @@ class _RaisingPublishAdapter:
         post_id: uuid.UUID,
         account: object,
         media_paths: list[Path],
+        caption: str = "",
+        media_urls: list[str] | None = None,
     ) -> None:
 
         _ = post_id
         _ = account
         _ = media_paths
+        _ = caption
+        _ = media_urls
 
         raise RuntimeError("adapter broke")
 
@@ -1395,6 +1967,111 @@ def _snapshot_count(session: Session, post_id: uuid.UUID) -> int:
     return snapshot_count
 
 
+def _recording_ayrshare_adapter() -> tuple[AyrsharePublishAdapter, list[httpx.Request]]:
+    """An Ayrshare adapter whose HTTP client never leaves the process."""
+
+    recorded_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+
+        recorded_requests.append(request)
+
+        if str(request.url).endswith("/api/media/upload"):
+            upload_response: httpx.Response = httpx.Response(
+                200,
+                json={
+                    "id": "upload-1",
+                    "url": "https://images.ayrshare.com/frame.png",
+                    "fileName": "frame.png",
+                },
+            )
+
+            return upload_response
+
+        post_response: httpx.Response = httpx.Response(
+            200,
+            json={
+                "status": "success",
+                "errors": [],
+                "postIds": [
+                    {
+                        "status": "success",
+                        "platform": "instagram",
+                        "id": "17878176260289172",
+                        "postUrl": "https://www.instagram.com/p/CP1dI9Hp_WO/",
+                    },
+                ],
+                "id": "RhrbDtYh7hdSMc67zC8H",
+            },
+        )
+
+        return post_response
+
+    http_client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+        "test-ayrshare-api-key",
+        http_client,
+    )
+
+    return adapter, recorded_requests
+
+
+def _ayrshare_adapter_with_post_body(
+    post_body: dict[str, object],
+) -> tuple[AyrsharePublishAdapter, list[httpx.Request]]:
+    """Upload succeeds. The post response is the given JSON."""
+
+    recorded_requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+
+        recorded_requests.append(request)
+
+        if str(request.url).endswith("/api/media/upload"):
+            upload_response: httpx.Response = httpx.Response(
+                200,
+                json={
+                    "id": "upload-1",
+                    "url": "https://images.ayrshare.com/frame.png",
+                    "fileName": "frame.png",
+                },
+            )
+
+            return upload_response
+
+        post_response: httpx.Response = httpx.Response(200, json=post_body)
+
+        return post_response
+
+    http_client: httpx.Client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter: AyrsharePublishAdapter = AyrsharePublishAdapter(
+        "test-ayrshare-api-key",
+        http_client,
+    )
+
+    return adapter, recorded_requests
+
+
+def _ayrshare_post_body(recorded_requests: list[httpx.Request]) -> dict[str, object]:
+    """Return the JSON body of the one post request."""
+
+    post_requests: list[httpx.Request] = [
+        request
+        for request in recorded_requests
+        if str(request.url).endswith("/api/post")
+    ]
+
+    if len(post_requests) != 1:
+        raise AssertionError(f"expected one Ayrshare post, saw {len(post_requests)}")
+
+    decoded_body: object = json.loads(post_requests[0].content.decode("utf-8"))
+
+    if not isinstance(decoded_body, dict):
+        raise AssertionError("Ayrshare post body was not a JSON object")
+
+    return decoded_body
+
+
 def _publish(
     session: Session,
     campaign_id: uuid.UUID,
@@ -1430,6 +2107,35 @@ def _write_frame_file(
     frame_path: Path = storage_directory / stored_frame.asset_ref
     frame_path.parent.mkdir(parents=True, exist_ok=True)
     frame_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+
+def _fresh_two_frame_assembled(session: Session, caption: str) -> uuid.UUID:
+    """Add one assembled carousel with two frames and the given caption."""
+
+    seeded: AssembledCarousel | None = session.get(
+        AssembledCarousel,
+        CampaignPostPlacementTests.world.happy_assembled_id,
+    )
+
+    if seeded is None:
+        raise AssertionError("Assembly group was not stored.")
+
+    position: int = CampaignPostPlacementTests.next_position
+    CampaignPostPlacementTests.next_position = position + 1
+    early_frame_id: uuid.UUID = uuid.uuid4()
+    late_frame_id: uuid.UUID = uuid.uuid4()
+    assembled_id: uuid.UUID = _store_group(
+        session,
+        seeded.assembly_id,
+        position,
+        caption,
+        [
+            (early_frame_id, 0, False),
+            (late_frame_id, 1, False),
+        ],
+    )
+
+    return assembled_id
 
 
 def _fresh_assembled(session: Session, caption: str) -> uuid.UUID:

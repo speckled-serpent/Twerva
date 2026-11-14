@@ -69,6 +69,14 @@ class CampaignCreateRequest(BaseModel):
     interests: list[CampaignInterestWrite] = Field(default_factory=list)
 
 
+class CampaignAccountAttachRequest(BaseModel):
+    """Body for `POST /api/v1/campaigns/{campaign_id}/accounts`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: uuid.UUID
+
+
 class CampaignInterestReadResponse(BaseModel):
     """Serialized campaign interest snapshot."""
 
@@ -707,6 +715,26 @@ class AccountCreateRequest(BaseModel):
     external_account_id: str | None = None
     status: AccountStatus = AccountStatus.ACTIVE
     cadence_cap_per_day: int | None = None
+
+
+class AccountProfileKeyPatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/accounts/{account_id}`.
+
+    Only the Ayrshare profile key. Platform, handle, cluster, and the
+    cadence cap stay as they are. This is not an OAuth token.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    external_account_id: str | None
+
+
+class AccountConnectionReadResponse(BaseModel):
+    """Result of checking an account without posting."""
+
+    adapter: str
+    ok: bool
+    detail: str
 
 
 class AccountReadResponse(BaseModel):
