@@ -145,7 +145,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Dry run
 
-- [ ] **10.9 Dry-run the live path against a mocked Ayrshare, and leave Mu a checklist**
+- [x] **10.9 Dry-run the live path against a mocked Ayrshare, and leave Mu a checklist**
 
   One server test walks the campaign path with `PUBLISH_ADAPTER=ayrshare`, a fake key, and an `httpx.MockTransport` installed on the adapter the route uses. The test creates no real socket. The fixture is a campaign, one linked account with `external_account_id` set, and one upcoming post whose assembled carousel has two frames on disk and a caption. `POST .../publish` returns `posted`. The transport saw one upload per frame and one post. The post body carried the caption, `platforms` of that one account, and the upload URLs. The stored `platform_post_id` and `platform_post_url` are the handler's values. A second case with a blank `external_account_id` returns `failed`, `last_error` set, and no post request. `POST /api/v1/generate/carousel` and `publish_post_job` are not required for this test.
 
@@ -164,7 +164,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Tests
 
-- [ ] **10.10 Run the full server suite, the full ops suite, and the ops build**
+- [x] **10.10 Run the full server suite, the full ops suite, and the ops build**
 
   From `apps/server`, `python -m unittest discover -s tests`. From `apps/ops`, `node --test *.test.ts`, then `npm run build`. This commit adds no product behavior. It fixes failures that this phase's tasks left, and it does not start a new feature. Migration tests that skip because Postgres is down stay skipped, the same way `test_carousel_steps_migration.py` skips. A skip is not a failure. The phase is done when both suites pass aside from those skips, and `npm run build` succeeds.
 

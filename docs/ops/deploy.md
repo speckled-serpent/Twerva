@@ -322,6 +322,32 @@ Sync the app tree when shipping code. Optional loopback smoke:
 publish; no Spotmu, no vendor signup). Smokes need ops login env as
 above.
 
+### Phase 10 (live test on the box)
+
+The switch above is the production order. `PUBLISH_ADAPTER` stays
+`mock` until that second restart, and mock is the rollback. This
+checklist is for Mu, on `twerva-server`, after the items in "What Mu
+must do himself" in
+[`docs/planning/phase_10_accounts_publishing.md`](../planning/phase_10_accounts_publishing.md).
+Do not print the env file. This checklist does not post from the repo
+and does not change the default adapter.
+
+1. `PUBLISH_ADAPTER` is still `mock`. Check connection on Brendan's
+   account row and read a failure or a mock detail, not a live post.
+2. Set the API key, restart, leave the adapter on `mock`, and run
+   Check connection again only after the switch to `ayrshare` above.
+   The detail names the platform he connected. It does not print the
+   key.
+3. Create a Spotmu campaign, attach Brendan's account if it was not
+   linked at create, assemble a carousel of at most 10 frames, add it
+   to the timeline, and press Publish once.
+4. The row reads `posted`, the platform URL opens the carousel, and
+   the caption is the carousel name. A `failed` row shows `last_error`.
+5. Before pressing Publish again on a timeout, look at the Instagram
+   or TikTok account so a second press does not double-post.
+6. Rollback is `PUBLISH_ADAPTER=mock` and a restart. The next Publish
+   on a new post stays on `example.invalid`.
+
 ### Phase 1.7 (measure & steer)
 
 No new host deps, env vars, or Alembic revision. Sync the app tree and
