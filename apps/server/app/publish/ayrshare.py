@@ -39,6 +39,10 @@ AYRSHARE_TIMEOUT_DETAIL: str = "Ayrshare post failed: timed out."
 AYRSHARE_TRANSPORT_ERROR_DETAIL: str = "Ayrshare post failed: transport error."
 AYRSHARE_UPLOAD_TIMEOUT_DETAIL: str = "Ayrshare media upload failed: timed out."
 AYRSHARE_UPLOAD_TRANSPORT_ERROR_DETAIL: str = "Ayrshare media upload failed: transport error."
+AYRSHARE_PROFILE_KEY_REQUIRED_DETAIL: str = (
+    "This account has no Ayrshare profile key. "
+    "Set external_account_id before publishing."
+)
 
 
 @dataclass(frozen=True)
@@ -224,6 +228,11 @@ class AyrsharePublishAdapter(PublishAdapter):
         media_urls: list[str] | None,
     ) -> PublishResult:
         """Upload local files, then POST once. One upload failure skips the post."""
+
+        profile_key: str = _stripped_profile_key(account.external_account_id)
+
+        if profile_key == "":
+            raise PublishError(AYRSHARE_PROFILE_KEY_REQUIRED_DETAIL)
 
         http_client: httpx.Client
         close_after_request: bool

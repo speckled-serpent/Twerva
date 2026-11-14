@@ -224,7 +224,7 @@ class AyrshareHttpTests(unittest.TestCase):
             transport.client(),
         )
         media_urls: list[str] = [FIRST_MEDIA_URL]
-        account: Account = _account(Platform.INSTAGRAM, None)
+        account: Account = _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY)
 
         adapter.publish(
             _post_job(),
@@ -236,7 +236,10 @@ class AyrshareHttpTests(unittest.TestCase):
         empty_body: dict[str, object] = _request_json(transport.requests[0])
 
         self.assertEqual(empty_body["post"], "")
-        self.assertNotIn(AYRSHARE_PROFILE_KEY_HEADER.lower(), _header_names(transport.requests[0]))
+        self.assertEqual(
+            transport.requests[0].headers[AYRSHARE_PROFILE_KEY_HEADER],
+            AYRSHARE_TEST_PROFILE_KEY,
+        )
 
         adapter.publish(
             _post_job(),
@@ -446,7 +449,7 @@ class AyrshareHttpTests(unittest.TestCase):
         with self.assertRaises(PublishError) as raised:
             adapter.publish_media(
                 FIXED_POST_ID,
-                _account(Platform.INSTAGRAM, None),
+                _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
                 [],
                 "Harbor",
                 [FIRST_MEDIA_URL],
@@ -533,7 +536,7 @@ class AyrshareHttpTests(unittest.TestCase):
             adapter.publish(
                 _post_job(),
                 _artifact("Slide name"),
-                _account(Platform.INSTAGRAM, None),
+                _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
                 media_paths,
             )
 
@@ -542,9 +545,9 @@ class AyrshareHttpTests(unittest.TestCase):
         self.assertEqual(len(transport.requests), 3)
         self.assertEqual(post_body["post"], "Slide name")
         self.assertEqual(post_body["mediaUrls"], upload_urls)
-        self.assertNotIn(
-            AYRSHARE_PROFILE_KEY_HEADER.lower(),
-            _header_names(transport.requests[0]),
+        self.assertEqual(
+            transport.requests[0].headers[AYRSHARE_PROFILE_KEY_HEADER],
+            AYRSHARE_TEST_PROFILE_KEY,
         )
 
     def test_failed_upload_does_not_post(self) -> None:
@@ -652,7 +655,7 @@ class AyrshareHttpTests(unittest.TestCase):
             with self.assertRaises(PublishError) as raised:
                 adapter.publish_media(
                     FIXED_POST_ID,
-                    _account(Platform.INSTAGRAM, None),
+                    _account(Platform.INSTAGRAM, AYRSHARE_TEST_PROFILE_KEY),
                     media_paths[:1],
                     "Harbor",
                 )
@@ -741,8 +744,8 @@ class AyrshareHttpTests(unittest.TestCase):
 
         self.assertEqual(frame_response.status_code, 401)
 
-    def test_blank_profile_key_omits_the_header(self) -> None:
-        """A whitespace profile key is not sent. Task 10.4 refuses it later."""
+    def test_blank_profile_key_refuses_before_any_request(self) -> None:
+        """A blank profile key raises before upload and before the post."""
 
         transport: _RecordingTransport = _RecordingTransport(
             httpx.Response(200, json=_instagram_success_body()),
@@ -751,20 +754,35 @@ class AyrshareHttpTests(unittest.TestCase):
             AYRSHARE_TEST_API_KEY,
             transport.client(),
         )
-
-        adapter.publish_media(
-            FIXED_POST_ID,
-            _account(Platform.INSTAGRAM, "   "),
-            [],
-            "",
-            [FIRST_MEDIA_URL],
+        expected_detail: str = (
+            "This account has no Ayrshare profile key. "
+            "Set external_account_id before publishing."
         )
-        header_names: set[str] = _header_names(transport.requests[0])
-        request_body: dict[str, object] = _request_json(transport.requests[0])
 
-        self.assertNotIn(AYRSHARE_PROFILE_KEY_HEADER.lower(), header_names)
-        self.assertEqual(request_body["post"], "")
-        self.assertEqual(request_body["platforms"], ["instagram"])
+        with tempfile.TemporaryDirectory() as raw_directory:
+            media_paths: list[Path] = _write_two_frames(Path(raw_directory))
+
+            with self.assertRaises(PublishError) as raised_blank:
+                adapter.publish_media(
+                    FIXED_POST_ID,
+                    _account(Platform.INSTAGRAM, "   "),
+                    media_paths,
+                    "Harbor",
+                    [FIRST_MEDIA_URL],
+                )
+
+            with self.assertRaises(PublishError) as raised_missing:
+                adapter.publish(
+                    _post_job(),
+                    _artifact("Harbor"),
+                    _account(Platform.INSTAGRAM, None),
+                    media_paths,
+                )
+
+        self.assertEqual(transport.requests, [])
+        self.assertEqual(str(raised_blank.exception), expected_detail)
+        self.assertEqual(str(raised_missing.exception), expected_detail)
+        self.assertNotIn(AYRSHARE_TEST_API_KEY, str(raised_blank.exception))
 
     def test_mock_publish_media_ignores_caption_and_opens_no_client(self) -> None:
         """Mock still returns the fake id and does not take an HTTP client."""

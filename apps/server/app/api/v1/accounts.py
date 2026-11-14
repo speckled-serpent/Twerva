@@ -1,4 +1,4 @@
-"""Account create/list/get routes. No OAuth token fields."""
+"""Account create/list/get/patch routes. No OAuth token fields."""
 
 import uuid
 
@@ -8,7 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.api.v1.lookups import fetch_account_by_id_or_raise, fetch_cluster_by_id_or_raise
 from app.api.v1.persist import commit_database_session_or_raise_conflict
-from app.api.v1.schemas import AccountCreateRequest, AccountReadResponse
+from app.api.v1.schemas import (
+    AccountCreateRequest,
+    AccountProfileKeyPatchRequest,
+    AccountReadResponse,
+)
 from app.db import get_our_database_session
 from app.models import Account
 
@@ -51,6 +55,53 @@ def create_account(
     )
 
     return account_read_response
+
+
+@accounts_router.patch("/{account_id}", response_model=AccountReadResponse)
+def patch_account_profile_key(
+    account_id: uuid.UUID,
+    profile_key_patch_request: AccountProfileKeyPatchRequest,
+    our_database_session: Session = Depends(get_our_database_session),
+) -> AccountReadResponse:
+    """Store the Ayrshare profile key. This route does not call Ayrshare.
+
+    Null, or a string that strips to empty, stores null. Any other
+    string stores the stripped value. The API key is not accepted.
+    """
+
+    found_account: Account = fetch_account_by_id_or_raise(
+        account_id,
+        our_database_session,
+    )
+    found_account.external_account_id = _stored_profile_key(
+        profile_key_patch_request.external_account_id,
+    )
+    commit_database_session_or_raise_conflict(
+        our_database_session,
+        conflict_detail="Account profile key could not be saved.",
+    )
+    our_database_session.refresh(found_account)
+    account_read_response: AccountReadResponse = AccountReadResponse.model_validate(
+        found_account,
+    )
+
+    return account_read_response
+
+
+def _stored_profile_key(raw_profile_key: str | None) -> str | None:
+    """Return the stripped profile key, or null when it is blank."""
+
+    if raw_profile_key is None:
+
+        return None
+
+    stripped_profile_key: str = raw_profile_key.strip()
+
+    if stripped_profile_key == "":
+
+        return None
+
+    return stripped_profile_key
 
 
 @accounts_router.get("", response_model=list[AccountReadResponse])

@@ -85,6 +85,10 @@ export interface AccountCreateRequest {
   cadence_cap_per_day?: number | null;
 }
 
+export interface AccountProfileKeyPatchRequest {
+  external_account_id: string | null;
+}
+
 export interface AccountReadResponse {
   id: string;
   cluster_id: string;

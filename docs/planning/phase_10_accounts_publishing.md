@@ -81,7 +81,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Profile binding
 
-- [ ] **10.4 Set the Ayrshare profile key on the account, and refuse a live publish without it**
+- [x] **10.4 Set the Ayrshare profile key on the account, and refuse a live publish without it**
 
   No migration. `external_account_id` is already on `accounts` and on `AccountReadResponse`. Do not add a token column.
 

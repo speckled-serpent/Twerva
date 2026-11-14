@@ -187,19 +187,21 @@ class PublishAdapterFactoryTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as raw_directory:
             missing_path: Path = Path(raw_directory) / "frame.png"
+            account: Account = _instagram_account()
+            account.external_account_id = "profile-key"
 
             with self.assertRaises(PublishError) as raised_publish:
                 ayrshare_publish_adapter.publish(
                     _scheduled_post_job(),
                     _draft_artifact(),
-                    _instagram_account(),
+                    account,
                     [missing_path],
                 )
 
             with self.assertRaises(PublishError) as raised_media:
                 ayrshare_publish_adapter.publish_media(
                     FIXED_POST_JOB_ID,
-                    _instagram_account(),
+                    account,
                     [missing_path],
                     "",
                 )

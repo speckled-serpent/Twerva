@@ -325,6 +325,16 @@ class ApiRouteSurfaceTests(unittest.TestCase):
 
         self.assertIn("get", search_methods)
 
+    def test_account_profile_key_patch_is_registered(self) -> None:
+        """PATCH /api/v1/accounts/{account_id} stores the profile key."""
+
+        methods_by_path: dict[str, set[str]] = _openapi_methods_by_path(api_v1_router)
+        account_item_methods: set[str] = methods_by_path["/api/v1/accounts/{account_id}"]
+
+        self.assertIn("/api/v1/accounts/{account_id}", EXPECTED_API_V1_PATHS)
+        self.assertIn("patch", account_item_methods)
+        self.assertIn("get", account_item_methods)
+
     def test_item_routes_accept_get(self) -> None:
         """By-id paths support GET."""
 

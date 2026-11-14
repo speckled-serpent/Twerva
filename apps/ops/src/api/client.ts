@@ -1,5 +1,6 @@
 import type {
   AccountCreateRequest,
+  AccountProfileKeyPatchRequest,
   AccountReadResponse,
   ArtifactApproveRequest,
   ArtifactRegenerateRequest,
@@ -1231,6 +1232,18 @@ export async function createAccount(
     "POST",
     "/api/v1/accounts",
     accountCreateRequest,
+  );
+}
+
+export async function patchAccount(
+  accountId: string,
+  accountProfileKeyPatchRequest: AccountProfileKeyPatchRequest,
+): Promise<AccountReadResponse> {
+
+  return requestJson<AccountReadResponse>(
+    "PATCH",
+    `/api/v1/accounts/${accountId}`,
+    accountProfileKeyPatchRequest,
   );
 }
 

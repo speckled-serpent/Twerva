@@ -709,6 +709,18 @@ class AccountCreateRequest(BaseModel):
     cadence_cap_per_day: int | None = None
 
 
+class AccountProfileKeyPatchRequest(BaseModel):
+    """Body for `PATCH /api/v1/accounts/{account_id}`.
+
+    Only the Ayrshare profile key. Platform, handle, cluster, and the
+    cadence cap stay as they are. This is not an OAuth token.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    external_account_id: str | None
+
+
 class AccountReadResponse(BaseModel):
     """Serialized Account row."""
 

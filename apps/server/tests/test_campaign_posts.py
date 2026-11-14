@@ -81,6 +81,7 @@ from app.api.v1.campaign_posts import RECORD_RESULTS_AFTER_POST_DETAIL
 from app.db import get_our_database_session
 from app.generate.carousel import DEFAULT_HASHTAGS
 from app.metrics.service import append_metric_snapshot
+from app.models.account import Account
 from app.models.artifact import Artifact
 from app.models.campaign import Campaign, CampaignPost
 from app.models.campaign import CampaignCarousel
@@ -709,6 +710,13 @@ class CampaignPostPlacementTests(unittest.TestCase):
                 f"mock-instagram-{placed.id}",
             )
             self.assertNotIn(self.world.carousel_name, posted.platform_post_id)
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(open_account)
+            assert open_account is not None
+            self.assertIsNone(open_account.external_account_id)
             self.assertIsNotNone(posted.platform_post_url)
             assert posted.platform_post_url is not None
             self.assertIn("example.invalid", posted.platform_post_url)
@@ -744,6 +752,12 @@ class CampaignPostPlacementTests(unittest.TestCase):
         clear_settings_cache()
         named_adapter, named_requests = _recording_ayrshare_adapter()
         empty_adapter, empty_requests = _recording_ayrshare_adapter()
+        open_account: Account | None = self.session.get(Account, self.world.open_account_id)
+        self.assertIsNotNone(open_account)
+        assert open_account is not None
+        previous_profile_key: str | None = open_account.external_account_id
+        open_account.external_account_id = "profile-key-for-caption"
+        self.session.commit()
 
         try:
             named = _place(
@@ -803,6 +817,59 @@ class CampaignPostPlacementTests(unittest.TestCase):
             self.assertEqual(empty_posted.status, "posted")
             self.assertEqual(empty_body["post"], "")
             self.assertEqual(len(empty_requests), 2)
+        finally:
+            storage.cleanup()
+
+            if previous_storage is None:
+                os.environ.pop("ARTIFACT_STORAGE_DIR", None)
+            else:
+                os.environ["ARTIFACT_STORAGE_DIR"] = previous_storage
+
+            clear_settings_cache()
+            open_account.external_account_id = previous_profile_key
+            self.session.commit()
+
+    def test_a_blank_profile_key_fails_the_ayrshare_publish(self) -> None:
+        """Ayrshare refuses before HTTP and the row stores that sentence."""
+
+        storage: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
+        previous_storage: str | None = os.environ.get("ARTIFACT_STORAGE_DIR")
+        os.environ["ARTIFACT_STORAGE_DIR"] = storage.name
+        clear_settings_cache()
+        adapter, recorded_requests = _recording_ayrshare_adapter()
+
+        try:
+            placed = _place(
+                self.session,
+                self.world.campaign_id,
+                _fresh_assembled(self.session, self.world.carousel_name),
+                self.world.open_account_id,
+            )
+            _write_frame_file(self.session, placed.frames[0].id, Path(storage.name))
+            open_account: Account | None = self.session.get(
+                Account,
+                self.world.open_account_id,
+            )
+            self.assertIsNotNone(open_account)
+            assert open_account is not None
+            self.assertIsNone(open_account.external_account_id)
+
+            with patch(
+                "app.campaigns.posts.get_publish_adapter",
+                return_value=adapter,
+            ):
+                failed = _publish(self.session, self.world.campaign_id, placed.id)
+
+            self.assertEqual(failed.status, "failed")
+            self.assertEqual(
+                failed.last_error,
+                (
+                    "This account has no Ayrshare profile key. "
+                    "Set external_account_id before publishing."
+                ),
+            )
+            self.assertEqual(recorded_requests, [])
+            self.assertIsNone(failed.published_at)
         finally:
             storage.cleanup()
 
