@@ -69,6 +69,14 @@ class CampaignCreateRequest(BaseModel):
     interests: list[CampaignInterestWrite] = Field(default_factory=list)
 
 
+class CampaignAccountAttachRequest(BaseModel):
+    """Body for `POST /api/v1/campaigns/{campaign_id}/accounts`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: uuid.UUID
+
+
 class CampaignInterestReadResponse(BaseModel):
     """Serialized campaign interest snapshot."""
 

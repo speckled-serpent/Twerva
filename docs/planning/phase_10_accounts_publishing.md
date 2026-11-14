@@ -95,7 +95,7 @@ The spike in `docs/reports/task_1_6_publish_spike.md` locks Ayrshare as the firs
 
 ### Campaign accounts
 
-- [ ] **10.5 Attach and detach an account on an existing campaign**
+- [x] **10.5 Attach and detach an account on an existing campaign**
 
   No migration. `campaign_accounts` is already the join, unique on `(campaign_id, account_id)`, cascade on both deletes.
 
